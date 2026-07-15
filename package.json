@@ -1,0 +1,54 @@
+{
+  "name": "trading-agent-ts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "trading-agent": "./bin/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --experimental-vm-modules node_modules/.bin/jest",
+    "start": "node dist/tui/index.js",
+    "dev": "tsx src/tui/index.ts",
+    "benchmark": "tsx src/benchmark/cli.ts",
+    "lint": "eslint src tests --ext .ts,.tsx",
+    "format:check": "prettier --check src tests"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^20.14.0",
+    "@types/react": "^18.3.31",
+    "@types/ws": "^8.18.1",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "eslint": "^8.57.1",
+    "ink-testing-library": "^4.0.0",
+    "jest": "^30.4.2",
+    "prettier": "^3.9.4",
+    "ts-jest": "^29.2.0",
+    "tsx": "^4.22.5",
+    "typescript": "^5.5.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "better-sqlite3": "^12.11.1",
+    "boxen": "^5.1.2",
+    "chalk": "^4.1.2",
+    "dotenv": "^17.4.2",
+    "ink": "^5.2.1",
+    "marked": "^4.3.0",
+    "marked-terminal": "^5.2.0",
+    "ora": "^5.4.1",
+    "playwright": "^1.61.1",
+    "react": "^18.3.1",
+    "vscode-languageserver-protocol": "^3.18.2",
+    "vscode-languageserver-types": "^3.18.0",
+    "vscode-uri": "^3.1.0",
+    "ws": "^8.21.1"
+  }
+}

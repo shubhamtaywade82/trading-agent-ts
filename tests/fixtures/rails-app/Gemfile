@@ -1,0 +1,13 @@
+source "https://rubygems.org"
+
+ruby "3.3.0"
+
+gem "rails", "~> 7.1.0"
+gem "pg"
+gem "puma"
+gem "sidekiq"
+gem "pundit"
+
+group :development, :test do
+  gem "rspec-rails"
+end

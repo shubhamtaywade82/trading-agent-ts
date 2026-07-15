@@ -1,0 +1,205 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`layout snapshots same structure, density-only changes at 80x24 1`] = `
+"DevAgent │ ollama-agent │ qwen3:30b │ ⎇ main │ ctx68% │ Code │ IDLE │ Git:2m
+─ 1 Conversation ──────────────────────────────────────────────────────────────
+> create filesystem tool
+
+  Analyzing project structure and existing patterns...
+    • Reading package.json
+    • Found TypeScript project
+
+
+
+
+
+
+
+
+
+
+
+
+───────────────────────────────────────────────────────────────────────────────
+Chat· │ Plan· │ Exec▶ │ Tasks2 │ Git2 │ Logs· │ Mem· │ Mdl· │ MCP· │ Skl· │
+───────────────────────────────────────────────────────────────────────────────
+>
+Mode:Code │ Model:qwen3:30b │ Workspace:ollama-agent │ Ctrl+P Palette"
+`;
+
+exports[`layout snapshots same structure, density-only changes at 100x30 1`] = `
+"DevAgent │ ollama-agent │ qwen3:30b │ ⎇ main │ ctx68% │ Code │ IDLE │ Git:2m │ 10:42
+─ 1 Conversation ──────────────────────────────────────────────────────────────────────────────────
+> create filesystem tool
+
+  Analyzing project structure and existing patterns...
+    • Reading package.json
+    • Found TypeScript project
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+───────────────────────────────────────────────────────────────────────────────────────────────────
+Chat· │ Plan· │ Exec▶ │ Tasks2 │ Git2 │ Logs· │ Mem· │ Mdl· │ MCP· │ Skl· │ LSP· │ Tok48k/71k
+───────────────────────────────────────────────────────────────────────────────────────────────────
+>
+Mode:Code │ Model:qwen3:30b │ Workspace:ollama-agent │ Ctrl+P Palette"
+`;
+
+exports[`layout snapshots same structure, density-only changes at 120x30 1`] = `
+"DevAgent │ ollama-agent │ qwen3:30b │ ⎇ main │ ctx68% │ Code │ IDLE │ Git:2m │ 10:42
+─ 1 Conversation ──────────────────────────────────────────────────────────────────────────────────────────────────────
+> create filesystem tool
+
+  Analyzing project structure and existing patterns...
+    • Reading package.json
+    • Found TypeScript project
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+Chat· │ Plan· │ Exec▶ │ Tasks2 │ Git2 │ Logs· │ Mem· │ Mdl· │ MCP· │ Skl· │ LSP· │ Tok48k/71k
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+>
+Mode:Code │ Model:qwen3:30b │ Workspace:ollama-agent │ Ctrl+P Palette"
+`;
+
+exports[`layout snapshots same structure, density-only changes at 160x45 1`] = `
+"DevAgent │ ollama-agent │ qwen3:30b │ ⎇ main │ ctx68% │ Code │ IDLE │ Git:2m │ 10:42
+─ 1 Conversation ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+> create filesystem tool
+
+  Analyzing project structure and existing patterns...
+    • Reading package.json
+    • Found TypeScript project
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+Chat· │ Plan· │ Exec▶ │ Tasks2 │ Git2 │ Logs· │ Mem· │ Mdl· │ MCP· │ Skl· │ LSP· │ Tok48k/71k
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+>
+Mode:Code │ Model:qwen3:30b │ Workspace:ollama-agent │ Ctrl+P Palette"
+`;
+
+exports[`layout snapshots same structure, density-only changes at 220x60 1`] = `
+"DevAgent │ ollama-agent │ qwen3:30b │ ⎇ main │ ctx68% │ Code │ IDLE │ Git:2m │ 10:42
+─ 1 Conversation ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+> create filesystem tool
+
+  Analyzing project structure and existing patterns...
+    • Reading package.json
+    • Found TypeScript project
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+Chat· │ Plan· │ Exec▶ │ Tasks2 │ Git2 │ Logs· │ Mem· │ Mdl· │ MCP· │ Skl· │ LSP· │ Tok48k/71k
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+>
+Mode:Code │ Model:qwen3:30b │ Workspace:ollama-agent │ Ctrl+P Palette"
+`;

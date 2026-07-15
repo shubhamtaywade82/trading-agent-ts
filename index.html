@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flappy Bird Clone</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="game-container">
+        <canvas id="gameCanvas"></canvas>
+        
+        <!-- Start Screen -->
+        <div id="startScreen" class="screen active">
+            <h1>FLAPPY BIRD CLONE</h1>
+            <p class="hint">Press SPACE or CLICK to jump!</p>
+            <button id="startBtn">START GAME</button>
+            <p class="score-display">Best: <span id="bestScore">0</span></p>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="gameOverScreen" class="screen">
+            <h1>GAME OVER</h1>
+            <div class="final-score">Score: <span id="finalScoreDisplay">0</span></div>
+            <p class="hint">Press SPACE or CLICK to restart!</p>
+        </div>
+
+        <!-- Score Display (during game) -->
+        <div id="scoreDisplay" class="screen hidden"></div>
+
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
