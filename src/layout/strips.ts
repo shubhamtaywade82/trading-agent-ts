@@ -19,7 +19,6 @@ const ACTOR_LABELS: Record<ActorId, string> = {
   models: "Mdl",
   mcp: "MCP",
   skills: "Skl",
-  lsp: "LSP",
 };
 
 /** Priority order for actor tokens when width shrinks. */
@@ -34,7 +33,6 @@ const ACTOR_PRIORITY: Record<ActorId, number> = {
   memory: 8,
   mcp: 9,
   skills: 10,
-  lsp: 11,
 };
 
 export function activityStripTokens(state: RuntimeState): StatusToken[] {
@@ -164,7 +162,7 @@ const MODE_LABELS: Record<RuntimeState["mode"], string> = {
 
 /** Header zone: product, workspace, model, branch, context usage, mode, state, clock. */
 export function headerTokens(state: RuntimeState, now: number = Date.now()): StatusToken[] {
-  const tokens: StatusToken[] = [{ text: "DevAgent", priority: 1, color: semanticColor("thinking") }];
+  const tokens: StatusToken[] = [{ text: "TradingAgent", priority: 1, color: semanticColor("thinking") }];
   if (state.session.workspace) tokens.push({ text: state.session.workspace, priority: 3 });
   if (state.model.name) tokens.push({ text: state.model.name, priority: 2, color: semanticColor("active") });
   if (state.model.provider === "cloud") {
@@ -188,19 +186,6 @@ export function headerTokens(state: RuntimeState, now: number = Date.now()): Sta
   // Memory status
   if (state.memory.length > 0) {
     tokens.push({ text: `Mem:${state.memory.length}`, priority: 8, color: semanticColor("healthy") });
-  }
-  // LSP status
-  const runningLsp = state.lspServers.filter((s) => s.status === "running");
-  if (runningLsp.length > 0) {
-    tokens.push({
-      text: `LSP:${runningLsp.map((s) => s.language.slice(0, 2)).join(",")}`,
-      priority: 9,
-      color: semanticColor("healthy"),
-    });
-  }
-  // Rails status
-  if (state.rails && state.rails.status !== "disabled") {
-    tokens.push({ text: `Rails:${state.rails.status}`, priority: 10, color: semanticColor(state.rails.status === "ready" ? "healthy" : "thinking") });
   }
   // Skills
   const activeSkills = state.skills.filter((s) => s.active).length;

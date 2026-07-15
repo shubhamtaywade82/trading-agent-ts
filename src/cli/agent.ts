@@ -116,12 +116,12 @@ export class Agent {
     this.binanceStream = new BinanceStreamManager();
     this.tools.registerBinanceStreamTools(this.binanceStream);
 
-    const devagentDir = join(cfg.workspaceRoot, ".devagent");
-    mkdirSync(devagentDir, { recursive: true });
+    const tradingagentDir = join(cfg.workspaceRoot, ".trading-agent");
+    mkdirSync(tradingagentDir, { recursive: true });
 
-    this.memory = new MemoryStore(join(devagentDir, "memory.db"));
-    this.planCheckpoint = new CheckpointStore(join(devagentDir, "checkpoint.json"));
-    this.sessionStore = new SessionStore(join(devagentDir, "session.json"));
+    this.memory = new MemoryStore(join(tradingagentDir, "memory.db"));
+    this.planCheckpoint = new CheckpointStore(join(tradingagentDir, "checkpoint.json"));
+    this.sessionStore = new SessionStore(join(tradingagentDir, "session.json"));
 
     this.learning = new AgentLearning({
       workspaceRoot: cfg.workspaceRoot,

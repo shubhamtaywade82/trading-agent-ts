@@ -84,7 +84,7 @@ describe("App shell", () => {
   it("renders all five permanent zones", () => {
     const { lastFrame, unmount } = renderApp();
     const frame = stripAnsi(lastFrame() ?? "");
-    expect(frame).toContain("DevAgent"); // header
+    expect(frame).toContain("TradingAgent"); // header
     expect(frame).toContain("No conversation yet"); // conversation area
     expect(frame).toContain("Chat"); // activity strip
     expect(frame).toContain(">"); // prompt
@@ -147,7 +147,7 @@ describe("App shell", () => {
     const { stdin, lastFrame, unmount } = renderApp();
     await tick();
     // Some terminals send these on scroll/click while the app is in raw mode,
-    // even though DevAgent never enables mouse tracking.
+    // even though TradingAgent never enables mouse tracking.
     stdin.write("\x1b[<65;80;34M\x1b[<64;80;34M");
     await tick();
     const frame = stripAnsi(lastFrame() ?? "");
@@ -366,7 +366,7 @@ describe("App shell", () => {
     // Some terminals deliver a multi-line paste as one "data" event PER
     // LINE, each ending in a lone \r that Ink reads as a real Enter keypress
     // — without burst detection every line would get submitted individually.
-    const lines = ["# DevAgent TS", "", "second line", "third line"];
+    const lines = ["# TradingAgent TS", "", "second line", "third line"];
     for (const line of lines) {
       stdin.write(line);
       stdin.write("\r");
@@ -382,7 +382,7 @@ describe("App shell", () => {
     await tick();
     // The placeholder label is display-only — the actual message sent to the
     // model must not contain it, just the real pasted content.
-    expect(agent.calls).toEqual(["# DevAgent TS\n\nsecond line\nthird line"]);
+    expect(agent.calls).toEqual(["# TradingAgent TS\n\nsecond line\nthird line"]);
     unmount();
   });
 
@@ -398,7 +398,7 @@ describe("App shell", () => {
     const r = render(<App bus={world.bus} store={world.store} agent={world.agent} columns={100} rows={24} now={NOW} />);
     await tick();
 
-    const raw = "# DevAgent TS\r\rA TypeScript developer agent framework...\r\r## Architecture\r\r```\rsrc/\r```\r";
+    const raw = "# TradingAgent TS\r\rA TypeScript developer agent framework...\r\r## Architecture\r\r```\rsrc/\r```\r";
     process.stdin.emit("data", Buffer.from(`\x1b[200~${raw}\x1b[201~`));
     await tick();
 
@@ -407,7 +407,7 @@ describe("App shell", () => {
 
     r.stdin.write("\r");
     await tick();
-    expect(world.agent.calls[0]).toContain("# DevAgent TS");
+    expect(world.agent.calls[0]).toContain("# TradingAgent TS");
     expect(world.agent.calls[0]).toContain("## Architecture");
 
     r.unmount();
@@ -429,12 +429,12 @@ describe("App shell", () => {
     unmount();
   });
 
-  it("persists command history to .devagent/history.json and loads from it", async () => {
+  it("persists command history to .trading-agent/history.json and loads from it", async () => {
     const tempDir = join(__dirname, "temp-history-test");
     // Clean slate: remove any leftover from interrupted runs
     rmSync(tempDir, { recursive: true, force: true });
     mkdirSync(tempDir, { recursive: true });
-    const historyDir = join(tempDir, ".devagent");
+    const historyDir = join(tempDir, ".trading-agent");
     const historyFile = join(historyDir, "history.json");
 
     // Initial run - add a command to history
@@ -494,7 +494,7 @@ describe("resize safety (regression)", () => {
       expect(line.length).toBeLessThanOrEqual(columns);
     }
     // Every zone still present.
-    expect(frame).toContain("DevAgent");
+    expect(frame).toContain("TradingAgent");
     expect(frame).toContain("Conversation");
     expect(frame).toContain("Chat");
     expect(frame).toContain(">");

@@ -53,11 +53,11 @@ function loadGlobalConfig(): ConfigFile {
 }
 
 // Matches how Claude Code/Cursor/most editor tooling resolve a project root:
-// walk up from cwd to the nearest `.git` (a real repo needs no prior devagent
+// walk up from cwd to the nearest `.git` (a real repo needs no prior tradingagent
 // session to be "found" — no chicken-and-egg where the first run in a new
-// project, or a run from a subdirectory that hasn't had `.devagent` created
+// project, or a run from a subdirectory that hasn't had `.trading-agent` created
 // yet, silently falls back to cwd and starts a disconnected history/config).
-// `.devagent` presence is kept as a fallback signal for non-git workspaces.
+// `.trading-agent` presence is kept as a fallback signal for non-git workspaces.
 function findWorkspaceRoot(cwd: string): string {
   if (process.env.TRADINGAGENT_WORKSPACE) return process.env.TRADINGAGENT_WORKSPACE;
   const home = homedir();

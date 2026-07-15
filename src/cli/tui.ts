@@ -51,7 +51,7 @@ export async function startTui(opts?: { config?: Partial<CliConfig> }): Promise<
   let runState = { isStreaming: false, isThinking: false, lastToolName: "", lastToolArgs: {} as Record<string, any> };
 
   // Model accessibility cache: true = free/accessible, false = requires subscription
-  const modelCachePath = path.join(cfg.workspaceRoot, ".devagent", "models.json");
+  const modelCachePath = path.join(cfg.workspaceRoot, ".trading-agent", "models.json");
   const modelAccess = new Map<string, boolean>();
 
   function loadModelCache(): void {
@@ -132,7 +132,7 @@ export async function startTui(opts?: { config?: Partial<CliConfig> }): Promise<
       const s = runState;
       if (spinner.isSpinning) spinner.stop();
       if (s.isThinking) { process.stdout.write("\n"); s.isThinking = false; }
-      if (!s.isStreaming) { s.isStreaming = true; process.stdout.write(chalk.magenta.bold(" DevAgent: ")); }
+      if (!s.isStreaming) { s.isStreaming = true; process.stdout.write(chalk.magenta.bold(" TradingAgent: ")); }
       process.stdout.write(chunk);
     })
     .on("onToolCall", (name: string, args: Record<string, unknown>) => {
@@ -185,7 +185,7 @@ export async function startTui(opts?: { config?: Partial<CliConfig> }): Promise<
 
   // Render a high-fidelity startup banner
   const bannerText = [
-    chalk.bold.magenta("⚡ DevAgent TS Ecosystem CLI ⚡"),
+    chalk.bold.magenta("⚡ TradingAgent TS Ecosystem CLI ⚡"),
     "",
     `${chalk.bold("Model:")}      ${chalk.cyan(agent.currentModel)}`,
     `${chalk.bold("Workspace:")}  ${chalk.gray(cfg.workspaceRoot)}`,
@@ -203,7 +203,7 @@ export async function startTui(opts?: { config?: Partial<CliConfig> }): Promise<
       margin: { top: 1, bottom: 1, left: 0, right: 0 },
       borderColor: "magenta",
       borderStyle: "double",
-      title: "DevAgent",
+      title: "TradingAgent",
       titleAlignment: "center",
     })
   );
@@ -222,7 +222,7 @@ export async function startTui(opts?: { config?: Partial<CliConfig> }): Promise<
     return [hits.length ? hits : completions, line];
   };
 
-  const historyPath = path.join(cfg.workspaceRoot, ".devagent_history");
+  const historyPath = path.join(cfg.workspaceRoot, ".trading-agent_history");
   let initialHistory: string[] = [];
   try {
     if (fs.existsSync(historyPath)) {
@@ -270,7 +270,7 @@ export async function startTui(opts?: { config?: Partial<CliConfig> }): Promise<
 
   const updatePrompt = () => {
     rl.setPrompt(
-      chalk.magenta.bold("devagent-ts") +
+      chalk.magenta.bold("trading-agent-ts") +
         " " +
         chalk.cyan(`(${agent.currentModel})`) +
         chalk.green.bold(" ❯ ")
@@ -304,8 +304,8 @@ export async function startTui(opts?: { config?: Partial<CliConfig> }): Promise<
           `${chalk.cyan("/models")}        List available models tagged Free/Subscription`,
           `${chalk.cyan("/clear")}         Clear the terminal screen`,
           `${chalk.cyan("/reset")}         Reset conversation history`,
-          `${chalk.cyan("/exit")}          Exit DevAgent`,
-          `${chalk.cyan("/quit")}          Exit DevAgent`,
+          `${chalk.cyan("/exit")}          Exit TradingAgent`,
+          `${chalk.cyan("/quit")}          Exit TradingAgent`,
         ].join("\n");
         console.log(
           boxen(helpText, {

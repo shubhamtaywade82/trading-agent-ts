@@ -16,7 +16,7 @@ export interface ShellToolOptions {
 export class ShellTool extends Tool {
   static readonly MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
   static readonly DEFAULT_TIMEOUT_SEC = 30;
-  static readonly DEFAULT_IMAGE = "devagent-sandbox:latest";
+  static readonly DEFAULT_IMAGE = "tradingagent-sandbox:latest";
   static readonly KILL_POLL_INTERVAL_MS = 300;
   static readonly KILL_ESCALATION_MS = 3000;
 
@@ -97,7 +97,7 @@ export class ShellTool extends Tool {
       };
     }
 
-    const container = `devagent-${randomBytes(4).toString("hex")}`;
+    const container = `tradingagent-${randomBytes(4).toString("hex")}`;
 
     return new Promise((resolvePromise) => {
       const child = spawn("docker", this.dockerArgs(container, command, timeoutSec));

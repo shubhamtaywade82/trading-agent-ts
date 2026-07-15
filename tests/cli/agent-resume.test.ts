@@ -60,8 +60,8 @@ describe("Agent plan checkpoint/resume", () => {
   it("resumes a plan left behind by a crashed process, skipping the completed step", async () => {
     // Simulate a prior process that finished "a" and crashed mid-"b" — write
     // the checkpoint a real crashed run would have left, without running one.
-    const checkpointPath = join(tempDir, ".devagent", "checkpoint.json");
-    await mkdir(join(tempDir, ".devagent"), { recursive: true });
+    const checkpointPath = join(tempDir, ".trading-agent", "checkpoint.json");
+    await mkdir(join(tempDir, ".trading-agent"), { recursive: true });
     await writeFile(
       checkpointPath,
       JSON.stringify({

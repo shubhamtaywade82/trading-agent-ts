@@ -59,7 +59,18 @@ export function runBacktest(candles: Candle[], config: StrategyConfig): Backtest
     const rawReturn = config.direction === "long" ? (exitPrice - entryPrice) / entryPrice : (entryPrice - exitPrice) / entryPrice;
     const returnPct = rawReturn - feeFraction;
 
-    trades.push({ entryIndex, exitIndex, entryPrice, exitPrice, direction: config.direction, returnPct, exitReason });
+    trades.push({
+      entryIndex,
+      exitIndex,
+      entryPrice,
+      exitPrice,
+      direction: config.direction,
+      returnPct,
+      exitReason,
+      entryTime: candles[entryIndex]?.openTime,
+      exitTime: candles[exitIndex]?.openTime,
+      symbol: config.symbol,
+    });
     i = exitIndex + 1;
   }
 
@@ -77,8 +88,28 @@ export function computeEquityCurve(trades: Trade[]): number[] {
 }
 
 export function computeMetrics(trades: Trade[]): BacktestMetrics {
+  const zeroMetrics: BacktestMetrics = {
+    totalTrades: 0,
+    winRate: 0,
+    avgWinPct: 0,
+    avgLossPct: 0,
+    expectancyPct: 0,
+    profitFactor: 0,
+    totalReturnPct: 0,
+    maxDrawdownPct: 0,
+    avgDurationBars: 0,
+    avgDurationMs: 0,
+    sharpeRatio: 0,
+    sortinoRatio: 0,
+    calmarRatio: 0,
+    maxConsecutiveWins: 0,
+    maxConsecutiveLosses: 0,
+    profitToLossRatio: 0,
+    winRateByHour: {},
+  };
+
   if (trades.length === 0) {
-    return { totalTrades: 0, winRate: 0, avgWinPct: 0, avgLossPct: 0, expectancyPct: 0, profitFactor: 0, totalReturnPct: 0, maxDrawdownPct: 0 };
+    return zeroMetrics;
   }
 
   const wins = trades.filter((t) => t.returnPct > 0);
@@ -103,5 +134,83 @@ export function computeMetrics(trades: Trade[]): BacktestMetrics {
     if (drawdown > maxDrawdownPct) maxDrawdownPct = drawdown;
   }
 
-  return { totalTrades: trades.length, winRate, avgWinPct, avgLossPct, expectancyPct, profitFactor, totalReturnPct, maxDrawdownPct };
+  // Intraday & Swing specific metrics:
+  const totalBars = trades.reduce((sum, t) => sum + (t.exitIndex - t.entryIndex), 0);
+  const avgDurationBars = totalBars / trades.length;
+
+  const validTimedTrades = trades.filter((t) => t.entryTime !== undefined && t.exitTime !== undefined);
+  const avgDurationMs = validTimedTrades.length > 0
+    ? validTimedTrades.reduce((sum, t) => sum + (t.exitTime! - t.entryTime!), 0) / validTimedTrades.length
+    : 0;
+
+  const returns = trades.map((t) => t.returnPct);
+  const meanReturn = returns.reduce((s, r) => s + r, 0) / returns.length;
+  const variance = returns.reduce((s, r) => s + (r - meanReturn) ** 2, 0) / returns.length;
+  const stdDev = Math.sqrt(variance);
+  const sharpeRatio = stdDev > 0 ? meanReturn / stdDev : 0;
+
+  const downsideReturns = returns.map((r) => Math.min(0, r));
+  const downsideVariance = downsideReturns.reduce((s, r) => s + r ** 2, 0) / returns.length;
+  const downsideDev = Math.sqrt(downsideVariance);
+  const sortinoRatio = downsideDev > 0 ? meanReturn / downsideDev : 0;
+
+  const calmarRatio = maxDrawdownPct > 0 ? totalReturnPct / maxDrawdownPct : 0;
+
+  let maxConsecutiveWins = 0;
+  let maxConsecutiveLosses = 0;
+  let curWins = 0;
+  let curLosses = 0;
+  for (const t of trades) {
+    if (t.returnPct > 0) {
+      curWins++;
+      curLosses = 0;
+      if (curWins > maxConsecutiveWins) maxConsecutiveWins = curWins;
+    } else {
+      curLosses++;
+      curWins = 0;
+      if (curLosses > maxConsecutiveLosses) maxConsecutiveLosses = curLosses;
+    }
+  }
+
+  const profitToLossRatio = avgLossPct !== 0 ? avgWinPct / Math.abs(avgLossPct) : avgWinPct > 0 ? Infinity : 0;
+
+  const hourlyTrades: Record<number, { trades: number; wins: number }> = {};
+  for (const t of trades) {
+    if (t.entryTime !== undefined) {
+      const hour = new Date(t.entryTime).getUTCHours();
+      if (!hourlyTrades[hour]) {
+        hourlyTrades[hour] = { trades: 0, wins: 0 };
+      }
+      hourlyTrades[hour].trades++;
+      if (t.returnPct > 0) {
+        hourlyTrades[hour].wins++;
+      }
+    }
+  }
+  const winRateByHour: Record<number, number> = {};
+  for (const hourStr of Object.keys(hourlyTrades)) {
+    const hour = Number(hourStr);
+    const stats = hourlyTrades[hour];
+    winRateByHour[hour] = stats.trades > 0 ? stats.wins / stats.trades : 0;
+  }
+
+  return {
+    totalTrades: trades.length,
+    winRate,
+    avgWinPct,
+    avgLossPct,
+    expectancyPct,
+    profitFactor,
+    totalReturnPct,
+    maxDrawdownPct,
+    avgDurationBars,
+    avgDurationMs,
+    sharpeRatio,
+    sortinoRatio,
+    calmarRatio,
+    maxConsecutiveWins,
+    maxConsecutiveLosses,
+    profitToLossRatio,
+    winRateByHour,
+  };
 }

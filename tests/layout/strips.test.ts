@@ -103,6 +103,6 @@ describe("headerTokens", () => {
   it("shows product, model, workspace, branch, mode, and clock", () => {
     const now = new Date(2026, 0, 1, 10, 42, 11).getTime();
     const texts = headerTokens(fresh(), now).map((t) => t.text);
-    expect(texts).toEqual(["DevAgent", "ollama-agent", "qwen3:30b", "⎇ main", "Code", "IDLE", "10:42"]);
+    expect(texts).toEqual(["TradingAgent", "ollama-agent", "qwen3:30b", "⎇ main", "Code", "IDLE", "10:42"]);
   });
 });

@@ -3,7 +3,7 @@
  * draft the user was typing before they started browsing history.
  *
  * Persisted to disk so history survives restarts. The file path is
- * resolved relative to `historyFile` if given, or `.devagent/history.json`
+ * resolved relative to `historyFile` if given, or `.trading-agent/history.json`
  * inside the runtime cwd.
  */
 

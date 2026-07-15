@@ -53,24 +53,10 @@ export function SettingsView({ state, width, rows }: ViewProps): JSX.Element {
       </Box>
       <Box height={1}>
         <Text>
-          <Text bold>LSP: </Text>
-          <Text color="gray">{state.lspServers.map((s) => `${s.language} (${s.status})`).join(", ") || "none"}</Text>
-        </Text>
-      </Box>
-      <Box height={1}>
-        <Text>
           <Text bold>Workspace: </Text>
           <Text color="gray">{state.session.workspace || "(none)"}</Text>
         </Text>
       </Box>
-      {state.rails && (
-        <Box height={1}>
-          <Text>
-            <Text bold>Rails: </Text>
-            <Text color="gray">Status: {state.rails.status} — {state.rails.entityCount} entities</Text>
-          </Text>
-        </Box>
-      )}
       <Box marginTop={1}>
         <Text color="gray" dimColor>Use Ctrl+P for quick actions, /mode to change agent mode</Text>
       </Box>

@@ -24,11 +24,8 @@ import { LogsView } from "./views/LogsView.js";
 import { MemoryView } from "./views/MemoryView.js";
 import { ModelsView } from "./views/ModelsView.js";
 import { McpView } from "./views/McpView.js";
-import { LspView } from "./views/LspView.js";
 import { FileExplorerView } from "./views/FileExplorerView.js";
 import { SettingsView } from "./views/SettingsView.js";
-import { ContextInspectorView } from "./views/ContextInspectorView.js";
-import { RailsView } from "./views/RailsView.js";
 import { ToolTimelineView } from "./views/ToolTimelineView.js";
 import { CommandPalette } from "./overlays/CommandPalette.js";
 import { HelpOverlay } from "./overlays/HelpOverlay.js";
@@ -76,11 +73,8 @@ const VIEWS: Record<ViewId, (props: ViewProps) => JSX.Element> = {
   memory: MemoryView,
   models: ModelsView,
   mcp: McpView,
-  lsp: LspView,
   files: FileExplorerView,
   settings: SettingsView,
-  context: ContextInspectorView,
-  rails: RailsView,
   timeline: ToolTimelineView,
 };
 
@@ -93,11 +87,8 @@ const VIEW_LABELS: Record<ViewId, string> = {
   memory: "Memory",
   models: "Models",
   mcp: "MCP",
-  lsp: "LSP",
   files: "Files",
   settings: "Settings",
-  context: "Context",
-  rails: "Rails",
   timeline: "Timeline",
 };
 
@@ -165,7 +156,7 @@ function useRuntimeState(store: Store): RuntimeState {
 }
 
 // SGR mouse reporting (scroll wheel, click) — some terminals send these
-// whenever the app is in raw mode, even though DevAgent never requests mouse
+// whenever the app is in raw mode, even though TradingAgent never requests mouse
 // tracking. Format: ESC [ < button ; col ; row (M press or m release). Without
 // this filter the raw escape sequence gets typed into the prompt literally.
 const MOUSE_SGR_PATTERN = /\x1b?\[<\d+;\d+;\d+[Mm]/;
@@ -180,9 +171,9 @@ export function App({ bus, store, agent, registry, columns, rows, now, workspace
   const [completionIndex, setCompletionIndex] = useState(0);
   const [history] = useState(() => {
     const root = workspaceRoot ?? process.cwd();
-    const historyFile = join(root, ".devagent", "history.json");
+    const historyFile = join(root, ".trading-agent", "history.json");
     // Also load legacy flat file for backwards compat
-    const legacyPath = join(root, ".devagent_history");
+    const legacyPath = join(root, ".trading-agent_history");
     let initialHistory: string[] = [];
     try {
       if (existsSync(legacyPath)) {
@@ -278,7 +269,7 @@ export function App({ bus, store, agent, registry, columns, rows, now, workspace
           const parts = buf.split("\x1b[201~");
           pasteBufRef.current += parts[0] ?? "";
           // Some terminals encode pasted line breaks as bare \r (confirmed
-          // via DEVAGENT_DEBUG_STDIN capture) rather than \n. Normalize both
+          // via TRADINGAGENT_DEBUG_STDIN capture) rather than \n. Normalize both
           // \r\n and lone \r to \n so line counting/collapsing sees them —
           // otherwise the raw \r survives into the prompt and, once actually
           // written to a real terminal, repeatedly carriage-returns the
@@ -393,7 +384,7 @@ export function App({ bus, store, agent, registry, columns, rows, now, workspace
         }
         case "init-workspace": {
           const root = workspaceRoot ?? process.cwd();
-          const dir = join(root, ".devagent");
+          const dir = join(root, ".trading-agent");
           mkdirSync(join(dir, "skills"), { recursive: true });
           writeFileSync(
             join(dir, "config.json"),
@@ -407,12 +398,12 @@ export function App({ bus, store, agent, registry, columns, rows, now, workspace
               2,
             ),
           );
-          bus.publish({ type: "notification", kind: "success", text: `.devagent/ created in ${dir}` });
+          bus.publish({ type: "notification", kind: "success", text: `.trading-agent/ created in ${dir}` });
 
           const agentsPath = join(root, "AGENTS.md");
           if (!existsSync(agentsPath) && agent) {
             const initPrompt = [
-              `I just initialized DevAgent in \`${root}\`. Create \`AGENTS.md\` at the project root — this file tells future DevAgent sessions how to work with this codebase.`,
+              `I just initialized TradingAgent in \`${root}\`. Create \`AGENTS.md\` at the project root — this file tells future TradingAgent sessions how to work with this codebase.`,
               "",
               "First explore the project (read key configs, understand the structure, check the tech stack, testing setup, linting rules, build system, etc).",
               "Then write `AGENTS.md` using the write_file tool. Cover:",
@@ -536,7 +527,7 @@ export function App({ bus, store, agent, registry, columns, rows, now, workspace
       history.add(trimmed);
       try {
         const root = workspaceRoot ?? process.cwd();
-        const historyPath = join(root, ".devagent_history");
+        const historyPath = join(root, ".trading-agent_history");
         writeFileSync(historyPath, history.all().join("\n"), "utf-8");
       } catch {
         // ignore

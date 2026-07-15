@@ -17,7 +17,7 @@ export interface DiscoverOptions {
 }
 
 function skillsDir(root: string): string {
-  return join(root, ".devagent", "skills");
+  return join(root, ".trading-agent", "skills");
 }
 
 function listSkillDirs(root: string): string[] {
@@ -73,7 +73,7 @@ export function loadSkillMeta(skillDir: string, scope: SkillScope): SkillMeta | 
 }
 
 /**
- * Scans .devagent/skills/ (workspace) and ~/.devagent/skills/ (global) for
+ * Scans .trading-agent/skills/ (workspace) and ~/.trading-agent/skills/ (global) for
  * skill directories, parsing SKILL.md frontmatter only (cheap). Workspace
  * skills override global skills sharing an id.
  */

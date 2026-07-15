@@ -19,13 +19,13 @@ export class AgentConversation {
     return (
       (config.systemPrompt ?? "") +
       learningsBlock +
-      "\n\nTool contract:\n" +
-      "1) Call exactly one tool per assistant turn when appropriate.\n" +
-      "2) If read_file returns `truncated`, that is a content ceiling, not an instruction to stop.\n" +
-      "3) `PathEscapeError` means the path escaped the workspace root; fix the path and retry.\n" +
-      "4) After tool results, continue toward the user's stated goal with minimal next steps.\n" +
-      "5) Think step by step. Test hypotheses before declaring them done. If you are not sure about something, use analysis tools to confirm rather than guessing.\n" +
-      "6) For market analysis, prefer technical indicators (binance_technical_indicators) and order book data (binance_order_book) over raw klines. Backtest strategies before paper trading them."
+      "\n\nTrading rules:\n" +
+      "1) Call exactly one tool per turn when appropriate. Prefer data-driven, quantitative analysis.\n" +
+      "2) For market analysis, use technical indicators (binance_technical_indicators) and order book data (binance_order_book) over raw klines.\n" +
+      "3) Backtest strategies before paper trading them. Validate assumptions with historical data.\n" +
+      "4) Think step by step. Test hypotheses before declaring them done. If unsure, use analysis tools to confirm.\n" +
+      "5) Monitor positions, track P&L, and manage risk. Set stop-losses for paper trades.\n" +
+      "6) After tool results, continue toward the user's stated goal with minimal next steps."
     );
   }
 

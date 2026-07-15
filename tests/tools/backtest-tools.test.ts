@@ -1,5 +1,6 @@
 import {
   BinanceBacktestTool, BinanceWalkForwardTool, BinanceMonteCarloTool, BinanceParamSweepTool,
+  BinancePortfolioBacktestTool,
 } from "../../src/tools/backtest-tools.js";
 import { StrategyConfig } from "../../src/backtest/types.js";
 
@@ -93,6 +94,28 @@ describe("BinanceParamSweepTool", () => {
     });
     expect(result.combinationsTested).toBe(2);
     expect((result.top as any[]).length).toBeGreaterThan(0);
+  });
+});
+
+describe("BinancePortfolioBacktestTool", () => {
+  const originalFetch = global.fetch;
+  afterEach(() => {
+    (globalThis as any).fetch = originalFetch;
+  });
+
+  it("fetches candles for multiple symbols and runs portfolio backtest", async () => {
+    (globalThis as any).fetch = jest.fn().mockResolvedValue({ ok: true, status: 200, json: async () => fakeKlines(RISING) });
+    const tool = new BinancePortfolioBacktestTool();
+    const result = await tool.call({
+      symbols: ["BTCUSDT", "ETHUSDT"],
+      interval: "1h",
+      strategy: STRATEGY,
+      initialCapital: 10000,
+      maxConcurrentPositions: 2,
+    });
+    expect(result.symbols).toEqual(["BTCUSDT", "ETHUSDT"]);
+    expect(result.totalTradesExecuted).toBeGreaterThan(0);
+    expect(result.finalCapital).toBeGreaterThan(10000);
   });
 });
 

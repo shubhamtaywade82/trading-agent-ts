@@ -125,13 +125,13 @@ export function builtinCommands(): SlashCommandRegistry {
   registry.register({
     name: "init",
     aliases: ["setup"],
-    description: "Create .devagent/ workspace config with defaults",
+    description: "Create .trading-agent/ workspace config with defaults",
     execute: () => ({ kind: "init-workspace" }),
   });
   registry.register({
     name: "quit",
     aliases: ["exit"],
-    description: "Quit DevAgent",
+    description: "Quit TradingAgent",
     execute: () => ({ kind: "quit" }),
   });
   registry.register(viewCommand("conversation", "conversation", "Focus the Conversation view"));
@@ -148,8 +148,6 @@ export function builtinCommands(): SlashCommandRegistry {
   registry.register(viewCommand("explorer", "files", "Focus the File Explorer view"));
   registry.register(viewCommand("settings", "settings", "Focus the Settings view"));
   registry.register(viewCommand("config", "settings", "Focus the Settings view"));
-  registry.register(viewCommand("context", "context", "Focus the Context Inspector view"));
-  registry.register(viewCommand("rails", "rails", "Focus the Rails project view"));
   registry.register(viewCommand("timeline", "timeline", "Focus the Tool Timeline view"));
   registry.register({
     name: "mode",

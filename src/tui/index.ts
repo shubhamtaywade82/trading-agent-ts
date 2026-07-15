@@ -10,8 +10,6 @@ import { EventBus } from "../runtime/events.js";
 import { initialRuntimeState, Store } from "../runtime/store.js";
 import { wireAgentBridge, BridgeableAgent } from "./agent-bridge.js";
 import { App } from "./App.js";
-import { validateAsl, generateAslGraph } from "../asl/commands.js";
-
 function enableTerminalFeatures(): () => void {
   if (!process.stdin.isTTY) return () => {};
   process.stdout.write("\x1b[?1000h\x1b[?1002h\x1b[?1006h\x1b[?2004h");
@@ -45,22 +43,6 @@ if (process.env.TRADINGAGENT_DEBUG_STDIN === "1" && process.stdin.isTTY) {
 const cfg = loadConfig();
 
 (async () => {
-  const args = process.argv.slice(2);
-  if (args[0] === "asl") {
-    const cmd = args[1];
-    if (cmd === "validate") {
-      const ok = await validateAsl(cfg.workspaceRoot);
-      process.exit(ok ? 0 : 1);
-    } else if (cmd === "graph") {
-      await generateAslGraph(cfg.workspaceRoot);
-      process.exit(0);
-    } else {
-      console.error(`Unknown ASL command: ${cmd}`);
-      console.error("Usage: trading-agent asl [validate|graph]");
-      process.exit(1);
-    }
-  }
-
   const bus = new EventBus();
   const store = new Store(
     initialRuntimeState({

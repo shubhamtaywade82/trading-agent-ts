@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { SkillsRegistry } from "../../src/skills/registry.js";
 
 function writeSkill(root: string, id: string, frontmatter: string, body = "Body text"): void {
-  const dir = join(root, ".devagent", "skills", id);
+  const dir = join(root, ".trading-agent", "skills", id);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "SKILL.md"), `---\n${frontmatter}\n---\n\n${body}`);
 }

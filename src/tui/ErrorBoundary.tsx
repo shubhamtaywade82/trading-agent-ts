@@ -17,7 +17,7 @@ export class ErrorBoundary extends React.Component<React.PropsWithChildren, Erro
       return (
         <Box borderStyle="double" borderColor="red" flexDirection="column">
           <Text bold color="red">
-            DevAgent TUI crashed
+            TradingAgent TUI crashed
           </Text>
           <Text color="red">{this.state.error.message}</Text>
         </Box>

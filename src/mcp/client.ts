@@ -5,7 +5,7 @@ import { McpToolAdapter } from "./mcp-tool-adapter.js";
 
 export async function connectMcpServer(command: string, args: string[] = []): Promise<Tool[]> {
   const transport = new StdioClientTransport({ command, args });
-  const client = new Client({ name: "devagent", version: "0.1.0" }, { capabilities: {} });
+  const client = new Client({ name: "tradingagent", version: "0.1.0" }, { capabilities: {} });
   await client.connect(transport);
 
   const { tools } = await client.listTools();

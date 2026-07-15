@@ -5,7 +5,6 @@
  */
 
 import { EventBus } from "../runtime/events.js";
-import { LspServerState } from "../lsp/protocol.js";
 import { SkillMeta } from "../skills/types.js";
 
 export interface BridgeableAgent {
@@ -77,8 +76,5 @@ export function wireAgentBridge(agent: BridgeableAgent, bus: EventBus): void {
       type: "skills.changed",
       skills: allSkills.map((s) => ({ id: s.id, name: s.name, tags: s.tags, active: activeIds.has(s.id) })),
     });
-  });
-  agent.on("onLspStateChange", (servers: LspServerState[]) => {
-    bus.publish({ type: "lsp.changed", servers });
   });
 }

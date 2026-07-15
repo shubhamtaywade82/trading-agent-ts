@@ -1,5 +1,5 @@
 /**
- * Core domain model for the DevAgent runtime.
+ * Core domain model for the TradingAgent runtime.
  *
  * The UI is a pure reflection of this state: actors are always alive,
  * views only change what is observed, never what is running.
@@ -7,7 +7,7 @@
 
 /** The always-alive actors. Every subsystem is one of these. */
 export type ActorId =
-  "conversation" | "planner" | "executor" | "tasks" | "git" | "logs" | "memory" | "models" | "mcp" | "skills" | "lsp";
+  "conversation" | "planner" | "executor" | "tasks" | "git" | "logs" | "memory" | "models" | "mcp" | "skills";
 
 export const ACTOR_IDS: readonly ActorId[] = [
   "conversation",
@@ -20,7 +20,6 @@ export const ACTOR_IDS: readonly ActorId[] = [
   "models",
   "mcp",
   "skills",
-  "lsp",
 ];
 
 /** Semantic health of an actor, mapped 1:1 to theme colors. */
@@ -34,7 +33,7 @@ export interface ActorState {
 }
 
 /** The focusable views of the Active View zone. Focus never stops actors. */
-export type ViewId = "conversation" | "execution" | "tasks" | "git" | "logs" | "memory" | "models" | "mcp" | "lsp" | "files" | "settings" | "context" | "rails" | "timeline";
+export type ViewId = "conversation" | "execution" | "tasks" | "git" | "logs" | "memory" | "models" | "mcp" | "files" | "settings" | "timeline";
 
 export const VIEW_ORDER: readonly ViewId[] = [
   "conversation",
@@ -45,11 +44,8 @@ export const VIEW_ORDER: readonly ViewId[] = [
   "memory",
   "models",
   "mcp",
-  "lsp",
   "files",
   "settings",
-  "context",
-  "rails",
   "timeline",
 ];
 
@@ -150,13 +146,6 @@ export interface SkillState {
   active: boolean;
 }
 
-export interface LspServerState {
-  language: string;
-  status: "starting" | "running" | "idle" | "stopped" | "error";
-  documentsCount: number;
-  errorCount: number;
-}
-
 export interface ApprovalRequest {
   id: string;
   title: string;
@@ -231,17 +220,6 @@ export interface Notification {
 }
 
 /** The complete runtime state. Rendering maps this to terminal output. */
-export interface RailsIndexState {
-  status: "building" | "ready" | "updated" | "disabled" | "error";
-  entityCount: number;
-  edgeCount: number;
-  scannerErrors: string[];
-  railsVersion?: string;
-  rubyVersion?: string;
-  testFramework?: string;
-  byType?: Record<string, number>;
-}
-
 export interface RuntimeState {
   session: SessionState;
   mode: RuntimeMode;
@@ -258,8 +236,6 @@ export interface RuntimeState {
   git: GitState;
   model: ModelState;
   mcpServers: McpServerState[];
-  lspServers: LspServerState[];
-  rails?: RailsIndexState;
   skills: SkillState[];
   approval: ApprovalRequest | null;
   notifications: Notification[];

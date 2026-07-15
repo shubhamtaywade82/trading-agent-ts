@@ -3,7 +3,7 @@
  *
  * Pipeline: EpisodeRecorder → Grader → Reflector → LessonStore → SkillSynthesizer.
  * Learned knowledge is materialized as normal workspace skills under
- * .devagent/skills/learned-<topic>/SKILL.md so the existing SkillsRegistry,
+ * .trading-agent/skills/learned-<topic>/SKILL.md so the existing SkillsRegistry,
  * resolver, and skill_usage stats close the loop without a separate prompt path.
  */
 

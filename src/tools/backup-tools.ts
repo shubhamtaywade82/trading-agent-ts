@@ -3,7 +3,7 @@ import { resolve, join, relative } from "node:path";
 import { Tool } from "./tool.js";
 import { resolveWorkspacePath } from "./path-utils.js";
 
-const BACKUP_DIR = ".devagent/backups";
+const BACKUP_DIR = ".trading-agent/backups";
 
 export class SnapshotBackupTool extends Tool {
   constructor(private readonly root: string) { super(); }

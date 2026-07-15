@@ -42,6 +42,7 @@ export interface StrategyConfig {
   risk: RiskModel;
   feeBps?: number; // round-trip fee, basis points of notional (default 10 = 0.1%)
   maxHoldBars?: number; // force-exit after N candles if neither stop nor target hit (default 200)
+  symbol?: string; // symbol name
 }
 
 export interface Trade {
@@ -52,6 +53,11 @@ export interface Trade {
   direction: "long" | "short";
   returnPct: number; // net of fees
   exitReason: "stop" | "target" | "timeout" | "end-of-data";
+  entryTime?: number; // millisecond timestamp
+  exitTime?: number;  // millisecond timestamp
+  symbol?: string;    // symbol traded
+  allocatedCapital?: number; // capital allocated in portfolio context
+  realizedProfit?: number; // realized profit in currency in portfolio context
 }
 
 export interface BacktestMetrics {
@@ -63,6 +69,18 @@ export interface BacktestMetrics {
   profitFactor: number;
   totalReturnPct: number;
   maxDrawdownPct: number;
+  
+  // Intraday & Swing specific metrics
+  avgDurationBars?: number;           // average hold time in bars
+  avgDurationMs?: number;             // average hold time in milliseconds
+  sharpeRatio?: number;              // Sharpe Ratio (trade-based)
+  sortinoRatio?: number;             // Sortino Ratio (trade-based)
+  calmarRatio?: number;              // Calmar Ratio (trade-based)
+  maxConsecutiveWins?: number;
+  maxConsecutiveLosses?: number;
+  profitToLossRatio?: number;        // avg win / avg loss
+  winRateByHour?: Record<number, number>; // hourly win rate distribution
+  totalPnlUsd?: number;              // PnL in USD (optional)
 }
 
 export interface BacktestResult {

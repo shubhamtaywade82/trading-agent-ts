@@ -7,7 +7,7 @@ describe("resolveKey", () => {
     expect(resolveKey("1", {}, base)).toEqual({ type: "focus-view", view: "conversation" });
     expect(resolveKey("2", {}, base)).toEqual({ type: "focus-view", view: "execution" });
     expect(resolveKey("8", {}, base)).toEqual({ type: "focus-view", view: "mcp" });
-    expect(resolveKey("9", {}, base)).toEqual({ type: "focus-view", view: "lsp" });
+    expect(resolveKey("9", {}, base)).toEqual({ type: "focus-view", view: "files" });
   });
 
   it("digits type into a non-empty prompt instead", () => {

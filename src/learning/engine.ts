@@ -33,7 +33,7 @@ export class LearningEngine {
   private inFlight: Promise<void> = Promise.resolve();
 
   constructor(private readonly opts: LearningEngineOptions) {
-    const dbPath = join(opts.workspaceRoot, ".devagent", "lessons.db");
+    const dbPath = join(opts.workspaceRoot, ".trading-agent", "lessons.db");
     mkdirSync(dirname(dbPath), { recursive: true });
     this.lessons = new LessonStore(dbPath);
     this.synthesizer = new SkillSynthesizer(opts.workspaceRoot, this.lessons, opts.logger);

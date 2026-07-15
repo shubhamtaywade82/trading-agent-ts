@@ -12,11 +12,10 @@ import { SkillContent, SkillMeta } from "./types.js";
 export class SkillsRegistry {
   private constructor(
     private readonly catalog: SkillMeta[],
-    readonly projectLanguage?: string,
   ) {}
 
-  static discover(opts: DiscoverOptions, projectLanguage?: string): SkillsRegistry {
-    return new SkillsRegistry(discoverSkills(opts), projectLanguage);
+  static discover(opts: DiscoverOptions): SkillsRegistry {
+    return new SkillsRegistry(discoverSkills(opts));
   }
 
   list(): SkillMeta[] {
@@ -29,7 +28,7 @@ export class SkillsRegistry {
 
   /** Resolve + lazily load content for the top matches for a given user prompt. */
   resolveForPrompt(prompt: string, opts?: ResolveOptions): SkillContent[] {
-    return resolveSkills(prompt, this.catalog, { ...opts, projectLanguage: this.projectLanguage }).map((score) =>
+    return resolveSkills(prompt, this.catalog, opts).map((score) =>
       loadSkillContent(score.meta),
     );
   }

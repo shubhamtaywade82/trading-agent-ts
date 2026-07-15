@@ -2,7 +2,7 @@
 node_modules/
 dist/
 .env
-.devagent_history
-.devagent/*
-!.devagent/skills/
+.trading-agent_history
+.trading-agent/*
+!.trading-agent/skills/
 __pycache__

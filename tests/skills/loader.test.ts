@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { discoverSkills, loadSkillContent, loadSkillMeta } from "../../src/skills/loader.js";
 
 function writeSkill(root: string, id: string, frontmatter: string, body = "# Body\n\ncontent"): string {
-  const dir = join(root, ".devagent", "skills", id);
+  const dir = join(root, ".trading-agent", "skills", id);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "SKILL.md"), `---\n${frontmatter}\n---\n\n${body}`);
   return dir;
@@ -48,7 +48,7 @@ describe("loadSkillMeta / discoverSkills", () => {
   });
 
   it("returns null for a missing SKILL.md", () => {
-    const dir = join(workspaceRoot, ".devagent", "skills", "ghost");
+    const dir = join(workspaceRoot, ".trading-agent", "skills", "ghost");
     mkdirSync(dir, { recursive: true });
     expect(loadSkillMeta(dir, "workspace")).toBeNull();
   });
@@ -67,7 +67,7 @@ describe("loadSkillMeta / discoverSkills", () => {
   });
 
   it("skips a directory with no SKILL.md rather than throwing", () => {
-    mkdirSync(join(workspaceRoot, ".devagent", "skills", "empty-dir"), { recursive: true });
+    mkdirSync(join(workspaceRoot, ".trading-agent", "skills", "empty-dir"), { recursive: true });
     writeSkill(workspaceRoot, "valid", "name: Valid");
     expect(() => discoverSkills({ workspaceRoot, homeDir })).not.toThrow();
     expect(discoverSkills({ workspaceRoot, homeDir }).map((s) => s.id)).toEqual(["valid"]);
