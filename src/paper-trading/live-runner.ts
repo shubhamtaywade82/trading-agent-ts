@@ -123,7 +123,7 @@ export class LivePaperRunner {
         winRate: st.trades > 0 ? st.wins / st.trades : null,
         openPosition: st.position ? {
           entryPrice: st.position.entryPrice, entryTime: new Date(st.position.entryTime).toISOString(),
-          qty: st.position.qty, notional: st.position.notional,
+          qty: st.position.qty, notional: st.position.notional, margin: st.position.margin,
           stopPrice: st.position.stopPrice, targetPrice: st.position.targetPrice,
         } : null,
       };
@@ -132,6 +132,34 @@ export class LivePaperRunner {
 
   getSymbols(): string[] {
     return [...new Set(this.strategies.map(s => s.symbol))];
+  }
+
+  // Portfolio-level rollup across every strategy's isolated capital bucket —
+  // each strategy still trades its own $10k slice (see class comment above),
+  // this just sums them into the account-level numbers a broker UI shows.
+  getPortfolio() {
+    let totalCapital = 0, usedMargin = 0;
+    let openCount = 0;
+    for (const s of this.strategies) {
+      const st = this.state[s.id];
+      totalCapital += st.capital;
+      if (st.position) { usedMargin += st.position.margin; openCount++; }
+    }
+    const totalInitial = this.strategies.length * this.cfg.initialCapitalPerStrategy;
+    const totalRealizedPnl = totalCapital - totalInitial;
+    return {
+      totalInitialCapital: totalInitial,
+      totalRealizedPnl,
+      usedMargin,
+      availableBalance: totalCapital - usedMargin,
+      openPositions: openCount,
+      strategyCount: this.strategies.length,
+      leverage: this.cfg.leverage,
+      marginPerTradePct: this.cfg.marginPerTradePct,
+      // totalEquity intentionally excludes unrealized PnL — caller adds it in
+      // (unrealized requires live prices, which this class doesn't track).
+      totalCapitalNoUnrealized: totalCapital,
+    };
   }
 
   // Display-only mark-to-market — NOT used by any trading decision. Actual

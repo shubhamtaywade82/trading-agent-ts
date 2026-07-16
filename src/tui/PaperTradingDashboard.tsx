@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useRef } from "react";
-import { Box, Text, useApp, useInput } from "ink";
+import { Box, Text, useApp, useInput, useStdout, measureElement, DOMElement } from "ink";
 import { readFileSync, existsSync } from "fs";
 import { LivePaperRunner } from "../paper-trading/live-runner.js";
 import { BinanceStreamManager } from "../exchange/binance-stream.js";
+import { TradeAnalyst } from "../paper-trading/trade-analyst.js";
 
 interface RowStatus {
   id: string; symbol: string; tf: string; direction: "long" | "short";
@@ -44,8 +45,31 @@ function Panel({ title, borderColor, children }: { title: string; borderColor: s
   );
 }
 
-export function PaperTradingDashboard({ runner, pollMs, journalFile }: { runner: LivePaperRunner; pollMs: number; journalFile: string }): JSX.Element {
+// Fixed-width grid column — guarantees a real gutter between cells
+// regardless of content length, unlike string padStart/padEnd concatenation
+// (which silently loses its gap the moment content reaches the column
+// width). Every table in this dashboard is built from these.
+function Col({ width, align = "left", color, bold, children }: {
+  width: number; align?: "left" | "right"; color?: string; bold?: boolean; children: React.ReactNode;
+}): JSX.Element {
+  return (
+    <Box width={width} marginRight={2} justifyContent={align === "right" ? "flex-end" : "flex-start"}>
+      <Text color={color} bold={bold} wrap="truncate">{children}</Text>
+    </Box>
+  );
+}
+
+export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, onExit }: {
+  runner: LivePaperRunner; pollMs: number; journalFile: string;
+  analyst?: TradeAnalyst | null; onExit?: () => void;
+}): JSX.Element {
   const { exit } = useApp();
+  const { stdout } = useStdout();
+  const [analystSummary, setAnalystSummary] = useState(analyst?.getLatestSummary() ?? null);
+  const [scrollOffset, setScrollOffset] = useState(0);
+  const [contentHeight, setContentHeight] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState((stdout?.rows ?? 40) - 4); // minus header + footer + margins
+  const scrollRef = useRef<DOMElement | null>(null);
   const [rows, setRows] = useState<RowStatus[]>(runner.getStatus() as RowStatus[]);
   const [feed, setFeed] = useState<FeedEvent[]>(readLastJournalEvents(journalFile, 8));
   const [lastEval, setLastEval] = useState<EvalResult[]>([]);
@@ -107,14 +131,59 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile }: { runner:
     return () => clearInterval(t);
   }, []);
 
+  // Terminal resize — keep the scroll viewport matched to actual rows.
+  useEffect(() => {
+    if (!stdout) return;
+    const onResize = () => setViewportHeight((stdout.rows ?? 40) - 4);
+    stdout.on("resize", onResize);
+    return () => { stdout.off("resize", onResize); };
+  }, [stdout]);
+
+  // Remeasure scrollable content height after every render (cheap — Yoga
+  // layout is already computed for paint; measureElement just reads it) so
+  // the scroll clamp always matches what's actually on screen right now.
+  useEffect(() => {
+    if (scrollRef.current) {
+      const { height } = measureElement(scrollRef.current);
+      if (height !== contentHeight) setContentHeight(height);
+    }
+  });
+
+  const maxScroll = Math.max(0, contentHeight - viewportHeight);
+  useEffect(() => {
+    if (scrollOffset > maxScroll) setScrollOffset(maxScroll);
+  }, [maxScroll, scrollOffset]);
+
+  // Read-only LLM analyst — checks its own schedule (min trade count + min
+  // interval, see trade-analyst.ts) and only calls the model when due. This
+  // never touches runner/trading state; it only reads the journal file and
+  // appends to its own log. analystRunning just drives a spinner in the UI.
+  useEffect(() => {
+    if (!analyst) return;
+    let stopped = false;
+    void analyst.start(5 * 60 * 1000, (ran) => {
+      if (stopped || !ran) return;
+      setAnalystSummary(analyst.getLatestSummary());
+    });
+    return () => { stopped = true; analyst.stop(); };
+  }, [analyst]);
+
   if (process.stdin.isTTY) {
     // eslint-disable-next-line react-hooks/rules-of-hooks
     useInput((input, key) => {
       if (input === "q" || key.escape || (key.ctrl && input === "c")) {
         runner.stop();
         exit();
-        process.exit(0);
+        if (onExit) onExit(); else process.exit(0);
+        return;
       }
+      const clamp = (n: number) => Math.max(0, Math.min(maxScroll, n));
+      if (key.downArrow || input === "j") setScrollOffset(s => clamp(s + 1));
+      else if (key.upArrow || input === "k") setScrollOffset(s => clamp(s - 1));
+      else if (key.pageDown) setScrollOffset(s => clamp(s + viewportHeight));
+      else if (key.pageUp) setScrollOffset(s => clamp(s - viewportHeight));
+      else if (input === "g") setScrollOffset(0);
+      else if (input === "G") setScrollOffset(maxScroll);
     });
   }
 
@@ -152,6 +221,7 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile }: { runner:
     return runner.unrealizedPnl(r.id, live.price);
   };
 
+  const portfolio = runner.getPortfolio();
   const totalRealized = rows.reduce((s, r) => s + r.pnl, 0);
   const totalUnrealized = rows.reduce((s, r) => s + (unrealized(r) ?? 0), 0);
   const totalTrades = rows.reduce((s, r) => s + r.trades, 0);
@@ -178,6 +248,11 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile }: { runner:
         <Text color="gray">{clock.toLocaleTimeString()}</Text>
       </Box>
 
+      {/* Scrollable body — fixed-height clip, content shifted up by
+          scrollOffset. Header above and footer below stay pinned. */}
+      <Box height={viewportHeight} overflow="hidden">
+      <Box flexDirection="column" marginTop={-scrollOffset} ref={scrollRef}>
+
       {/* Price ticker strip */}
       <Box marginBottom={1}>
         {runner.getSymbols().map(sym => {
@@ -199,7 +274,26 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile }: { runner:
         })}
       </Box>
 
-      {/* Account summary */}
+      {/* Portfolio — broker-style account balance rollup across all strategy buckets */}
+      <Panel title="PORTFOLIO" borderColor="blueBright">
+        <Box>
+          <Text>
+            Total Equity <Text bold color={pnlColor(totalRealized + totalUnrealized)}>${(portfolio.totalInitialCapital + totalRealized + totalUnrealized).toFixed(2)}</Text>
+            {"   "}Available <Text bold>${portfolio.availableBalance.toFixed(2)}</Text>
+            {"   "}Used Margin <Text bold color={portfolio.usedMargin > 0 ? "yellow" : "gray"}>${portfolio.usedMargin.toFixed(2)}</Text>
+            {"   "}Margin Util <Text bold>{((portfolio.usedMargin / portfolio.totalInitialCapital) * 100).toFixed(1)}%</Text>
+          </Text>
+        </Box>
+        <Box>
+          <Text color="gray">
+            Starting Capital ${portfolio.totalInitialCapital.toLocaleString()} ({portfolio.strategyCount} × $10,000 isolated buckets)
+            {"   "}Leverage {portfolio.leverage}x{"  "}Margin/Trade {(portfolio.marginPerTradePct * 100).toFixed(0)}%
+            {"   "}Open {portfolio.openPositions}/{portfolio.strategyCount}
+          </Text>
+        </Box>
+      </Panel>
+
+      {/* Account P&L summary */}
       <Panel title="ACCOUNT" borderColor="blueBright">
         <Box>
           <Text>
@@ -223,9 +317,13 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile }: { runner:
       {openPositions.length > 0 && (
         <Panel title={`OPEN POSITIONS (${openPositions.length})`} borderColor="yellow">
           <Box>
-            <Text color="gray">
-              {"SIDE".padEnd(7)}{"STRATEGY".padEnd(idW)}{"SYM".padEnd(4)}{"ENTRY".padStart(8)}{"CURRENT".padStart(9)}{"UNREAL".padStart(9)}{"SINCE".padStart(8)}
-            </Text>
+            <Col width={9} color="gray">SIDE</Col>
+            <Col width={idW} color="gray">STRATEGY</Col>
+            <Col width={5} color="gray">SYM</Col>
+            <Col width={10} align="right" color="gray">ENTRY</Col>
+            <Col width={10} align="right" color="gray">CURRENT</Col>
+            <Col width={10} align="right" color="gray">UNREAL</Col>
+            <Col width={10} align="right" color="gray">SINCE</Col>
           </Box>
           {openPositions.map(r => {
             const live = livePrices[r.symbol];
@@ -233,44 +331,58 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile }: { runner:
             const since = r.openPosition ? new Date(r.openPosition.entryTime) : null;
             return (
               <Box key={r.id}>
-                <Text>
-                  <Text color={r.direction === "short" ? "red" : "green"}>{(r.direction === "short" ? DOWN + " SHORT" : UP + " LONG ").padEnd(7)}</Text>
-                  {r.id.padEnd(idW)}
-                  {r.symbol.replace("USDT", "").padEnd(4)}
-                  <Text color="gray">{(r.openPosition?.entryPrice.toFixed(4) ?? "-").padStart(8)}</Text>
-                  <Text bold>{(live ? live.price.toFixed(4) : "-").padStart(9)}</Text>
-                  <Text bold color={pnlColor(u ?? 0)}>{(u !== null ? fmtMoney(u) : "-").padStart(9)}</Text>
-                  <Text color="gray">{(since ? since.toLocaleTimeString() : "-").padStart(8)}</Text>
-                </Text>
+                <Col width={9} color={r.direction === "short" ? "red" : "green"}>
+                  {r.direction === "short" ? `${DOWN} SHORT` : `${UP} LONG`}
+                </Col>
+                <Col width={idW}>{r.id}</Col>
+                <Col width={5}>{r.symbol.replace("USDT", "")}</Col>
+                <Col width={10} align="right" color="gray">{r.openPosition?.entryPrice.toFixed(4) ?? "-"}</Col>
+                <Col width={10} align="right" bold>{live ? live.price.toFixed(4) : "-"}</Col>
+                <Col width={10} align="right" color={pnlColor(u ?? 0)} bold>{u !== null ? fmtMoney(u) : "-"}</Col>
+                <Col width={10} align="right" color="gray">{since ? since.toLocaleTimeString() : "-"}</Col>
               </Box>
             );
           })}
         </Panel>
       )}
 
-      {/* Per-symbol strategy performance */}
-      {[...bySymbol.entries()].map(([symbol, symRows]) => {
-        const symPnl = symRows.reduce((s, r) => s + r.pnl + (unrealized(r) ?? 0), 0);
-        return (
-          <Panel key={symbol} title={`${symbol}  ${fmtMoney(symPnl)}`} borderColor="magenta">
-            {symRows.map(r => (
-              <Box key={r.id}>
-                <Text>
-                  <Text color={r.direction === "short" ? "red" : "green"}>{r.direction === "short" ? DOWN : UP}</Text>
-                  {" "}
-                  {r.id.padEnd(idW)}
-                  <Text color="gray">{r.tf.padStart(3).padEnd(4)}</Text>
-                  <Text color={pnlColor(r.pnl)}>{fmtMoney(r.pnl).padStart(10)}</Text>
-                  {"  "}
-                  <Text color="gray">{String(r.trades).padStart(3)} tr</Text>
-                  {r.winRate !== null && <Text color="gray"> {(r.winRate * 100).toFixed(0)}%WR</Text>}
-                  {r.openPosition && <Text color="yellow"> {BULLET.live} OPEN</Text>}
+      {/* Strategy performance — one merged table (not one panel per symbol,
+          which burns 2 border lines + a title line per symbol for no
+          information gain). Idle strategies (no position, never traded)
+          collapse to a single summary line per symbol so the panel height
+          tracks actual activity instead of always rendering all 17 rows —
+          on a real terminal height, 17 mostly-empty rows push the header
+          off the top of the visible viewport (this is a real report from
+          testing: content taller than the terminal scrolls the top out of
+          view, same as any TUI without pagination). */}
+      <Panel title={`STRATEGIES (${rows.length})`} borderColor="magenta">
+        {[...bySymbol.entries()].map(([symbol, symRows]) => {
+          const symPnl = symRows.reduce((s, r) => s + r.pnl + (unrealized(r) ?? 0), 0);
+          const active = symRows.filter(r => r.openPosition || r.trades > 0);
+          const idle = symRows.filter(r => !r.openPosition && r.trades === 0);
+          return (
+            <Box key={symbol} flexDirection="column" marginBottom={1}>
+              <Text bold color="cyan">{symbol}  <Text color={pnlColor(symPnl)}>{fmtMoney(symPnl)}</Text></Text>
+              {active.map(r => (
+                <Box key={r.id}>
+                  <Col width={2} color={r.direction === "short" ? "red" : "green"}>{r.direction === "short" ? DOWN : UP}</Col>
+                  <Col width={idW}>{r.id}</Col>
+                  <Col width={4} color="gray">{r.tf}</Col>
+                  <Col width={11} align="right" color={pnlColor(r.pnl)}>{fmtMoney(r.pnl)}</Col>
+                  <Col width={7} color="gray">{`${r.trades} tr`}</Col>
+                  <Col width={6} color="gray">{r.winRate !== null ? `${(r.winRate * 100).toFixed(0)}%WR` : ""}</Col>
+                  <Col width={8} color="yellow">{r.openPosition ? `${BULLET.live} OPEN` : ""}</Col>
+                </Box>
+              ))}
+              {idle.length > 0 && (
+                <Text color="gray" dimColor wrap="truncate-end">
+                  {"  "}{idle.length} idle (no signal yet): {idle.map(r => r.id).join(", ")}
                 </Text>
-              </Box>
-            ))}
-          </Panel>
-        );
-      })}
+              )}
+            </Box>
+          );
+        })}
+      </Panel>
 
       {/* Activity feed */}
       {feed.length > 0 && (
@@ -286,6 +398,21 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile }: { runner:
               </Text>
             </Box>
           ))}
+        </Panel>
+      )}
+
+      {/* Read-only LLM analyst — reviews accumulated trade history on its own
+          schedule (see trade-analyst.ts), never places or modifies trades */}
+      {analyst && (
+        <Panel title="AI ANALYST (read-only, no trade access)" borderColor="green">
+          {analystSummary ? (
+            <>
+              <Text color="gray">Last analysis: {new Date(analystSummary.ts).toLocaleString()} · {analystSummary.tradesAnalyzed} trades reviewed</Text>
+              <Text wrap="wrap">{analystSummary.summary}</Text>
+            </>
+          ) : (
+            <Text color="gray">Waiting for enough closed trades to run first analysis (see .trading-agent/paper-trading-insights.md for full history)</Text>
+          )}
         </Panel>
       )}
 
