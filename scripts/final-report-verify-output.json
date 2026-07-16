@@ -1,0 +1,739 @@
+[
+  {
+    "symbol": "XRPUSDT",
+    "label": "ADX-DI Cross Short",
+    "tf": "30m",
+    "entry": [
+      {
+        "type": "adx_di_cross_short",
+        "value": 20
+      }
+    ],
+    "stopPct": 0.02,
+    "targetPct": 0.06,
+    "direction": "short",
+    "claimed": {
+      "trades": 127,
+      "wr": 0.56,
+      "sharpe": 27.2,
+      "oosPnl": 3590,
+      "maxDD": 0.12
+    },
+    "real": {
+      "full": {
+        "trades": 685,
+        "wr": 0.40145985401459855,
+        "sharpe": 1.581275851493609,
+        "pnl": 664.8950600112057,
+        "maxDD": 0.635236458399829
+      },
+      "folds": [
+        {
+          "trades": 118,
+          "pnl": 988,
+          "sharpe": 4
+        },
+        {
+          "trades": 109,
+          "pnl": 1641,
+          "sharpe": 6.1
+        },
+        {
+          "trades": 103,
+          "pnl": 8504,
+          "sharpe": 23.1
+        }
+      ],
+      "posWindows": 3,
+      "totalOOS": 11133,
+      "survived": true
+    }
+  },
+  {
+    "symbol": "XRPUSDT",
+    "label": "Liq Sweep Short",
+    "tf": "2h",
+    "entry": [
+      {
+        "type": "bearish_liq_sweep"
+      }
+    ],
+    "stopPct": 0.02,
+    "targetPct": 0.06,
+    "direction": "short",
+    "claimed": {
+      "trades": 37,
+      "wr": 0.89,
+      "sharpe": 94.7,
+      "oosPnl": 2820,
+      "maxDD": 0.04
+    },
+    "real": {
+      "full": {
+        "trades": 275,
+        "wr": 0.3890909090909091,
+        "sharpe": 14.589183969823816,
+        "pnl": 28671.30542255287,
+        "maxDD": 0.41503083237645827
+      },
+      "folds": [
+        {
+          "trades": 44,
+          "pnl": 8717,
+          "sharpe": 38
+        },
+        {
+          "trades": 45,
+          "pnl": 6388,
+          "sharpe": 29.6
+        },
+        {
+          "trades": 39,
+          "pnl": 5315,
+          "sharpe": 31.3
+        }
+      ],
+      "posWindows": 3,
+      "totalOOS": 20420,
+      "survived": true
+    }
+  },
+  {
+    "symbol": "XRPUSDT",
+    "label": "Liq Sweep Short",
+    "tf": "1h",
+    "entry": [
+      {
+        "type": "bearish_liq_sweep"
+      }
+    ],
+    "stopPct": 0.01,
+    "targetPct": 0.03,
+    "direction": "short",
+    "claimed": {
+      "trades": 70,
+      "wr": 0.69,
+      "sharpe": 58,
+      "oosPnl": 2379,
+      "maxDD": 0.03
+    },
+    "real": {
+      "full": {
+        "trades": 655,
+        "wr": 0.3374045801526718,
+        "sharpe": 10.922759888399982,
+        "pnl": 27988.327202786895,
+        "maxDD": 0.33383696021242076
+      },
+      "folds": [
+        {
+          "trades": 105,
+          "pnl": 5209,
+          "sharpe": 20.2
+        },
+        {
+          "trades": 102,
+          "pnl": 2810,
+          "sharpe": 13
+        },
+        {
+          "trades": 96,
+          "pnl": 5202,
+          "sharpe": 22.1
+        }
+      ],
+      "posWindows": 3,
+      "totalOOS": 13221,
+      "survived": true
+    }
+  },
+  {
+    "symbol": "XRPUSDT",
+    "label": "Bearish FVG Short",
+    "tf": "1h",
+    "entry": [
+      {
+        "type": "bearish_fvg"
+      }
+    ],
+    "stopPct": 0.02,
+    "targetPct": 0.06,
+    "direction": "short",
+    "claimed": {
+      "trades": 200,
+      "wr": 0.52,
+      "sharpe": 16.9,
+      "oosPnl": 2405,
+      "maxDD": 0.21
+    },
+    "real": {
+      "full": {
+        "trades": 495,
+        "wr": 0.42424242424242425,
+        "sharpe": 16.160898099860912,
+        "pnl": 132550.24885379997,
+        "maxDD": 0.44949996199834336
+      },
+      "folds": [
+        {
+          "trades": 78,
+          "pnl": 11772,
+          "sharpe": 28.4
+        },
+        {
+          "trades": 78,
+          "pnl": 13160,
+          "sharpe": 30.6
+        },
+        {
+          "trades": 73,
+          "pnl": 12777,
+          "sharpe": 33.4
+        }
+      ],
+      "posWindows": 3,
+      "totalOOS": 37709,
+      "survived": true
+    }
+  },
+  {
+    "symbol": "XRPUSDT",
+    "label": "Ichimoku Below Cloud Short",
+    "tf": "4h",
+    "entry": [
+      {
+        "type": "ichimoku_below_cloud_short"
+      }
+    ],
+    "stopPct": 0.01,
+    "targetPct": 0.03,
+    "direction": "short",
+    "claimed": {
+      "trades": 188,
+      "wr": 0.45,
+      "sharpe": 19.1,
+      "oosPnl": 1193,
+      "maxDD": 0.25
+    },
+    "real": {
+      "full": {
+        "trades": 569,
+        "wr": 0.27943760984182775,
+        "sharpe": -0.7483307612463833,
+        "pnl": -1819.2030829067653,
+        "maxDD": 0.4483300552271488
+      },
+      "folds": [
+        {
+          "trades": 102,
+          "pnl": -722,
+          "sharpe": -3.1
+        },
+        {
+          "trades": 111,
+          "pnl": 1538,
+          "sharpe": 7.4
+        },
+        {
+          "trades": 101,
+          "pnl": 609,
+          "sharpe": 3.6
+        }
+      ],
+      "posWindows": 2,
+      "totalOOS": 1425,
+      "survived": true
+    }
+  },
+  {
+    "symbol": "XRPUSDT",
+    "label": "SuperTrend Flip Short",
+    "tf": "1d",
+    "entry": [
+      {
+        "type": "supertrend_bearish_flip"
+      }
+    ],
+    "stopPct": 0.05,
+    "targetPct": 0.1,
+    "direction": "short",
+    "claimed": {
+      "trades": 30,
+      "wr": 0.73,
+      "sharpe": 65,
+      "oosPnl": 353,
+      "maxDD": 0.18
+    },
+    "real": {
+      "full": {
+        "trades": 8,
+        "wr": 0.375,
+        "sharpe": -0.036301471199173804,
+        "pnl": -241.1703280082438,
+        "maxDD": 0.2264984817400846
+      },
+      "folds": [
+        {
+          "trades": 1,
+          "pnl": -508,
+          "sharpe": -47.6
+        },
+        {
+          "trades": 2,
+          "pnl": -990,
+          "sharpe": -151456794050981440
+        },
+        {
+          "trades": 1,
+          "pnl": -508,
+          "sharpe": -47.6
+        }
+      ],
+      "posWindows": 0,
+      "totalOOS": -2006,
+      "survived": false
+    }
+  },
+  {
+    "symbol": "XRPUSDT",
+    "label": "Volume Spike Short",
+    "tf": "4h",
+    "entry": [
+      {
+        "type": "volume_spike_short"
+      }
+    ],
+    "stopPct": 0.03,
+    "targetPct": 0.06,
+    "direction": "short",
+    "claimed": {
+      "trades": 16,
+      "wr": 0.63,
+      "sharpe": 48.7,
+      "oosPnl": 106,
+      "maxDD": 0.08
+    },
+    "real": {
+      "full": {
+        "trades": 100,
+        "wr": 0.37,
+        "sharpe": -0.490692549278105,
+        "pnl": -1173.295093498633,
+        "maxDD": 0.3340579485813639
+      },
+      "folds": [
+        {
+          "trades": 18,
+          "pnl": 1612,
+          "sharpe": 18.9
+        },
+        {
+          "trades": 16,
+          "pnl": 1308,
+          "sharpe": 17.6
+        },
+        {
+          "trades": 18,
+          "pnl": -283,
+          "sharpe": -1.5
+        }
+      ],
+      "posWindows": 2,
+      "totalOOS": 2637,
+      "survived": true
+    }
+  },
+  {
+    "symbol": "ETHUSDT",
+    "label": "Volume Spike Short",
+    "tf": "1d",
+    "entry": [
+      {
+        "type": "volume_spike_short"
+      }
+    ],
+    "stopPct": 0.03,
+    "targetPct": 0.05,
+    "direction": "short",
+    "claimed": {
+      "trades": 38,
+      "wr": 0.74,
+      "sharpe": 41.9,
+      "oosPnl": 1846,
+      "maxDD": 0.12
+    },
+    "real": {
+      "full": {
+        "trades": 17,
+        "wr": 0.29411764705882354,
+        "sharpe": -33.878015432269635,
+        "pnl": -2890.774639909281,
+        "maxDD": 0.3010751757233811
+      },
+      "folds": [
+        {
+          "trades": 4,
+          "pnl": -1083,
+          "sharpe": -42.4
+        },
+        {
+          "trades": 1,
+          "pnl": -308,
+          "sharpe": -28.8
+        },
+        {
+          "trades": 4,
+          "pnl": -344,
+          "sharpe": -9.1
+        }
+      ],
+      "posWindows": 0,
+      "totalOOS": -1735,
+      "survived": false
+    }
+  },
+  {
+    "symbol": "ETHUSDT",
+    "label": "SuperTrend Flip Short",
+    "tf": "1d",
+    "entry": [
+      {
+        "type": "supertrend_bearish_flip"
+      }
+    ],
+    "stopPct": 0.01,
+    "targetPct": 0.03,
+    "direction": "short",
+    "claimed": {
+      "trades": 30,
+      "wr": 0.7,
+      "sharpe": 53.1,
+      "oosPnl": 718,
+      "maxDD": 0.03
+    },
+    "real": {
+      "full": {
+        "trades": 9,
+        "wr": 0.1111111111111111,
+        "sharpe": -44.06449870608407,
+        "pnl": -561.8108754043296,
+        "maxDD": 0.05618108754043297
+      },
+      "folds": [
+        {
+          "trades": 2,
+          "pnl": -215,
+          "sharpe": -325830086860135100
+        },
+        {
+          "trades": 2,
+          "pnl": -215,
+          "sharpe": -9540418561930880
+        },
+        {
+          "trades": 1,
+          "pnl": -108,
+          "sharpe": -10.1
+        }
+      ],
+      "posWindows": 0,
+      "totalOOS": -538,
+      "survived": false
+    }
+  },
+  {
+    "symbol": "ETHUSDT",
+    "label": "Liq Sweep Short",
+    "tf": "2h",
+    "entry": [
+      {
+        "type": "bearish_liq_sweep"
+      }
+    ],
+    "stopPct": 0.01,
+    "targetPct": 0.03,
+    "direction": "short",
+    "claimed": {
+      "trades": 44,
+      "wr": 0.59,
+      "sharpe": 45.3,
+      "oosPnl": 679,
+      "maxDD": 0.02
+    },
+    "real": {
+      "full": {
+        "trades": 425,
+        "wr": 0.2988235294117647,
+        "sharpe": 6.221799378831487,
+        "pnl": 5668.483853350695,
+        "maxDD": 0.19163924402466695
+      },
+      "folds": [
+        {
+          "trades": 73,
+          "pnl": 1800,
+          "sharpe": 12
+        },
+        {
+          "trades": 75,
+          "pnl": 79,
+          "sharpe": 1.4
+        },
+        {
+          "trades": 77,
+          "pnl": 518,
+          "sharpe": 4.2
+        }
+      ],
+      "posWindows": 3,
+      "totalOOS": 2397,
+      "survived": true
+    }
+  },
+  {
+    "symbol": "ETHUSDT",
+    "label": "Volume Spike Short",
+    "tf": "4h",
+    "entry": [
+      {
+        "type": "volume_spike_short"
+      }
+    ],
+    "stopPct": 0.01,
+    "targetPct": 0.03,
+    "direction": "short",
+    "claimed": {
+      "trades": 22,
+      "wr": 0.77,
+      "sharpe": 52,
+      "oosPnl": 624,
+      "maxDD": 0.08
+    },
+    "real": {
+      "full": {
+        "trades": 154,
+        "wr": 0.2662337662337662,
+        "sharpe": -0.3822051676039228,
+        "pnl": -347.590808183988,
+        "maxDD": 0.14485544760048827
+      },
+      "folds": [
+        {
+          "trades": 19,
+          "pnl": -67,
+          "sharpe": -1
+        },
+        {
+          "trades": 25,
+          "pnl": 491,
+          "sharpe": 10.2
+        },
+        {
+          "trades": 25,
+          "pnl": 224,
+          "sharpe": 5.3
+        }
+      ],
+      "posWindows": 2,
+      "totalOOS": 648,
+      "survived": true
+    }
+  },
+  {
+    "symbol": "SOLUSDT",
+    "label": "Ichimoku Below Cloud Short",
+    "tf": "4h",
+    "entry": [
+      {
+        "type": "ichimoku_below_cloud_short"
+      }
+    ],
+    "stopPct": 0.03,
+    "targetPct": 0.06,
+    "direction": "short",
+    "claimed": {
+      "trades": 268,
+      "wr": 0.41,
+      "sharpe": 11.3,
+      "oosPnl": 1336,
+      "maxDD": 0.27
+    },
+    "real": {
+      "full": {
+        "trades": 280,
+        "wr": 0.3892857142857143,
+        "sharpe": 4.880689411065253,
+        "pnl": 4580.527422663492,
+        "maxDD": 0.40623467472182967
+      },
+      "folds": [
+        {
+          "trades": 41,
+          "pnl": 4206,
+          "sharpe": 19.9
+        },
+        {
+          "trades": 55,
+          "pnl": 1214,
+          "sharpe": 6.4
+        },
+        {
+          "trades": 40,
+          "pnl": 796,
+          "sharpe": 6.1
+        }
+      ],
+      "posWindows": 3,
+      "totalOOS": 6216,
+      "survived": true
+    }
+  },
+  {
+    "symbol": "SOLUSDT",
+    "label": "ADX-DI Cross Short",
+    "tf": "4h",
+    "entry": [
+      {
+        "type": "adx_di_cross_short",
+        "value": 20
+      }
+    ],
+    "stopPct": 0.03,
+    "targetPct": 0.05,
+    "direction": "short",
+    "claimed": {
+      "trades": 56,
+      "wr": 0.64,
+      "sharpe": 24.2,
+      "oosPnl": 1247,
+      "maxDD": 0.12
+    },
+    "real": {
+      "full": {
+        "trades": 146,
+        "wr": 0.4383561643835616,
+        "sharpe": 9.033024511907605,
+        "pnl": 5607.242385960955,
+        "maxDD": 0.25410354184611417
+      },
+      "folds": [
+        {
+          "trades": 26,
+          "pnl": -926,
+          "sharpe": -7.2
+        },
+        {
+          "trades": 22,
+          "pnl": -184,
+          "sharpe": -0.3
+        },
+        {
+          "trades": 24,
+          "pnl": 791,
+          "sharpe": 9.2
+        }
+      ],
+      "posWindows": 1,
+      "totalOOS": -319,
+      "survived": false
+    }
+  },
+  {
+    "symbol": "SOLUSDT",
+    "label": "Volume Spike Short",
+    "tf": "1d",
+    "entry": [
+      {
+        "type": "volume_spike_short"
+      }
+    ],
+    "stopPct": 0.01,
+    "targetPct": 0.03,
+    "direction": "short",
+    "claimed": {
+      "trades": 33,
+      "wr": 0.64,
+      "sharpe": 56.5,
+      "oosPnl": 906,
+      "maxDD": 0.06
+    },
+    "real": {
+      "full": {
+        "trades": 12,
+        "wr": 0.08333333333333333,
+        "sharpe": -55.42281976883594,
+        "pnl": -2361.8425139379915,
+        "maxDD": 0.25807115239805645
+      },
+      "folds": [
+        {
+          "trades": 3,
+          "pnl": -321,
+          "sharpe": -9564227569162688
+        },
+        {
+          "trades": 1,
+          "pnl": -108,
+          "sharpe": -10.1
+        },
+        {
+          "trades": 2,
+          "pnl": -1053,
+          "sharpe": -83.1
+        }
+      ],
+      "posWindows": 0,
+      "totalOOS": -1482,
+      "survived": false
+    }
+  },
+  {
+    "symbol": "SOLUSDT",
+    "label": "Liq Sweep Short",
+    "tf": "2h",
+    "entry": [
+      {
+        "type": "bearish_liq_sweep"
+      }
+    ],
+    "stopPct": 0.03,
+    "targetPct": 0.05,
+    "direction": "short",
+    "claimed": {
+      "trades": 32,
+      "wr": 0.72,
+      "sharpe": 75.6,
+      "oosPnl": 181,
+      "maxDD": 0.02
+    },
+    "real": {
+      "full": {
+        "trades": 266,
+        "wr": 0.4548872180451128,
+        "sharpe": 10.636927867585888,
+        "pnl": 16089.034968533273,
+        "maxDD": 0.3279734936690004
+      },
+      "folds": [
+        {
+          "trades": 52,
+          "pnl": 5618,
+          "sharpe": 22
+        },
+        {
+          "trades": 54,
+          "pnl": 12,
+          "sharpe": 1.8
+        },
+        {
+          "trades": 42,
+          "pnl": 1773,
+          "sharpe": 11.3
+        }
+      ],
+      "posWindows": 3,
+      "totalOOS": 7403,
+      "survived": true
+    }
+  }
+]

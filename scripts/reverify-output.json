@@ -1,0 +1,613 @@
+{
+  "config": {
+    "initialCapital": 10000,
+    "leverage": 10,
+    "marginPerTradePct": 0.5,
+    "feeBps": 5,
+    "maxHoldBars": 48,
+    "interval": "1h"
+  },
+  "signalTypes": {
+    "rsi_above": "RSI above threshold (simple mean reversion)",
+    "rsi_below": "RSI below threshold (simple mean reversion)",
+    "macd_bearish_cross": "MACD line crosses below signal line",
+    "macd_bullish_cross": "MACD line crosses above signal line",
+    "bollinger_touch_upper": "Price touches upper Bollinger Band",
+    "bollinger_touch_lower": "Price touches lower Bollinger Band",
+    "price_above_ema": "Price above EMA (trend filter)",
+    "price_below_ema": "Price below EMA (trend filter)",
+    "bearish_ob": "Bearish Order Block - last bullish candle before strong bearish break",
+    "bullish_ob": "Bullish Order Block - last bearish candle before strong bullish break",
+    "bearish_bos": "Bearish Break of Structure - price breaks below recent swing low",
+    "bullish_bos": "Bullish Break of Structure - price breaks above recent swing high",
+    "bearish_fvg": "Bearish Fair Value Gap - 3-candle gap down pattern",
+    "bullish_fvg": "Bullish Fair Value Gap - 3-candle gap up pattern",
+    "bearish_liq_sweep": "Liquidity sweep of swing high + reversal down",
+    "bullish_liq_sweep": "Liquidity sweep of swing low + reversal up",
+    "bearish_displacement": "Strong bearish momentum (body > 1.5x avg)",
+    "bullish_displacement": "Strong bullish momentum (body > 1.5x avg)",
+    "bearish_liq_ob": "ICT combo: Liquidity sweep + Order Block (short)",
+    "bullish_liq_ob": "ICT combo: Liquidity sweep + Order Block (long)",
+    "bullish_liq_fvg": "ICT combo: Liquidity sweep + Fair Value Gap (long)",
+    "bearish_liq_fvg": "ICT combo: Liquidity sweep + Fair Value Gap (short)",
+    "bearish_bos_displacement": "BOS confirmed by bearish displacement",
+    "bullish_bos_displacement": "BOS confirmed by bullish displacement",
+    "bearish_htf_trend_short": "HTF downtrend + bearish OB entry",
+    "bullish_htf_trend_long": "HTF uptrend + bullish OB entry"
+  },
+  "symbols": {
+    "XRPUSDT": [
+      {
+        "id": "xrp-rsi-short-mr",
+        "label": "RSI>80 Short MR",
+        "direction": "short",
+        "entry": [
+          {
+            "type": "rsi_above",
+            "period": 14,
+            "value": 80
+          }
+        ],
+        "risk": {
+          "stopPct": 0.02,
+          "targetPct": 0.12
+        },
+        "metrics": {
+          "sharpe": 24.13,
+          "pf": 1.901,
+          "winRate": 0.375,
+          "trades": 24,
+          "pnlUsd": 13259,
+          "maxDDPct": 0.393
+        },
+        "halfSampleCheck": {
+          "h1": {
+            "trades": 14,
+            "pnlUsd": -1109
+          },
+          "h2": {
+            "trades": 10,
+            "pnlUsd": 16159
+          },
+          "bothHalvesPositive": false
+        },
+        "slippageBpsApplied": 3,
+        "verdict": "REGIME_FRAGILE"
+      },
+      {
+        "id": "xrp-macd-bearish-short",
+        "label": "MACD Bearish Cross Short",
+        "direction": "short",
+        "entry": [
+          {
+            "type": "macd_bearish_cross"
+          }
+        ],
+        "risk": {
+          "stopPct": 0.03,
+          "targetPct": 0.12
+        },
+        "metrics": {
+          "sharpe": 8.17,
+          "pf": 1.013,
+          "winRate": 0.476,
+          "trades": 168,
+          "pnlUsd": 1586,
+          "maxDDPct": 0.818
+        },
+        "halfSampleCheck": {
+          "h1": {
+            "trades": 90,
+            "pnlUsd": -6607
+          },
+          "h2": {
+            "trades": 78,
+            "pnlUsd": 19770
+          },
+          "bothHalvesPositive": false
+        },
+        "slippageBpsApplied": 3,
+        "verdict": "REGIME_FRAGILE"
+      },
+      {
+        "id": "xrp-price-below-ema-short",
+        "label": "Price<EMA20 Short",
+        "direction": "short",
+        "entry": [
+          {
+            "type": "price_below_ema",
+            "period": 20
+          }
+        ],
+        "risk": {
+          "stopPct": 0.03,
+          "targetPct": 0.06
+        },
+        "metrics": {
+          "sharpe": 7.9,
+          "pf": 0.996,
+          "winRate": 0.439,
+          "trades": 244,
+          "pnlUsd": -525,
+          "maxDDPct": 0.871
+        },
+        "halfSampleCheck": {
+          "h1": {
+            "trades": 132,
+            "pnlUsd": -8077
+          },
+          "h2": {
+            "trades": 112,
+            "pnlUsd": 32842
+          },
+          "bothHalvesPositive": false
+        },
+        "slippageBpsApplied": 3,
+        "verdict": "REGIME_FRAGILE"
+      },
+      {
+        "id": "xrp-bb-upper-short",
+        "label": "Bollinger Upper Touch Short",
+        "direction": "short",
+        "entry": [
+          {
+            "type": "bollinger_touch_upper"
+          }
+        ],
+        "risk": {
+          "stopPct": 0.02,
+          "targetPct": 0.12
+        },
+        "metrics": {
+          "sharpe": 5.77,
+          "pf": 0.979,
+          "winRate": 0.387,
+          "trades": 168,
+          "pnlUsd": -1768,
+          "maxDDPct": 0.788
+        },
+        "halfSampleCheck": {
+          "h1": {
+            "trades": 91,
+            "pnlUsd": -6773
+          },
+          "h2": {
+            "trades": 77,
+            "pnlUsd": 12590
+          },
+          "bothHalvesPositive": false
+        },
+        "slippageBpsApplied": 3,
+        "verdict": "REGIME_FRAGILE"
+      },
+      {
+        "id": "xrp-ict-liq-ob-short",
+        "label": "Liq Sweep + OB Short (ICT)",
+        "direction": "short",
+        "entry": [
+          {
+            "type": "bearish_liq_ob"
+          }
+        ],
+        "risk": {
+          "stopPct": 0.01,
+          "targetPct": 0.04
+        },
+        "metrics": {
+          "sharpe": 19.7,
+          "pf": 1.489,
+          "winRate": 0.343,
+          "trades": 134,
+          "pnlUsd": 95842,
+          "maxDDPct": 0.606
+        },
+        "halfSampleCheck": {
+          "h1": {
+            "trades": 66,
+            "pnlUsd": 8876
+          },
+          "h2": {
+            "trades": 68,
+            "pnlUsd": 46073
+          },
+          "bothHalvesPositive": true
+        },
+        "slippageBpsApplied": 3,
+        "verdict": "SURVIVES"
+      },
+      {
+        "id": "xrp-ict-liq-fvg-short",
+        "label": "Liq Sweep + FVG Short",
+        "direction": "short",
+        "entry": [
+          {
+            "type": "bearish_liq_fvg"
+          }
+        ],
+        "risk": {
+          "stopPct": 0.01,
+          "targetPct": 0.06
+        },
+        "metrics": {
+          "sharpe": 15.69,
+          "pf": 1.425,
+          "winRate": 0.293,
+          "trades": 123,
+          "pnlUsd": 47930,
+          "maxDDPct": 0.405
+        },
+        "halfSampleCheck": {
+          "h1": {
+            "trades": 60,
+            "pnlUsd": 3501
+          },
+          "h2": {
+            "trades": 63,
+            "pnlUsd": 32908
+          },
+          "bothHalvesPositive": true
+        },
+        "slippageBpsApplied": 3,
+        "verdict": "SURVIVES"
+      },
+      {
+        "id": "xrp-liq-sweep-short",
+        "label": "Liquidity Sweep Short",
+        "direction": "short",
+        "entry": [
+          {
+            "type": "bearish_liq_sweep"
+          }
+        ],
+        "risk": {
+          "stopPct": 0.01,
+          "targetPct": 0.06
+        },
+        "metrics": {
+          "sharpe": 19.53,
+          "pf": 1.416,
+          "winRate": 0.309,
+          "trades": 246,
+          "pnlUsd": 1338352,
+          "maxDDPct": 0.589
+        },
+        "halfSampleCheck": {
+          "h1": {
+            "trades": 131,
+            "pnlUsd": 131080
+          },
+          "h2": {
+            "trades": 115,
+            "pnlUsd": 85574
+          },
+          "bothHalvesPositive": true
+        },
+        "slippageBpsApplied": 3,
+        "verdict": "SURVIVES"
+      },
+      {
+        "id": "xrp-ict-liq-fvg-long",
+        "label": "Liq Sweep + FVG Long",
+        "direction": "long",
+        "entry": [
+          {
+            "type": "bullish_liq_fvg"
+          }
+        ],
+        "risk": {
+          "stopPct": 0.01,
+          "targetPct": 0.02
+        },
+        "metrics": {
+          "sharpe": 12.72,
+          "pf": 1.171,
+          "winRate": 0.424,
+          "trades": 125,
+          "pnlUsd": 15269,
+          "maxDDPct": 0.412
+        },
+        "halfSampleCheck": {
+          "h1": {
+            "trades": 60,
+            "pnlUsd": 12912
+          },
+          "h2": {
+            "trades": 65,
+            "pnlUsd": 1029
+          },
+          "bothHalvesPositive": true
+        },
+        "slippageBpsApplied": 3,
+        "verdict": "SURVIVES"
+      }
+    ],
+    "ETHUSDT": [
+      {
+        "id": "eth-rsi-short-mr",
+        "label": "RSI>80 Short MR",
+        "direction": "short",
+        "entry": [
+          {
+            "type": "rsi_above",
+            "period": 14,
+            "value": 80
+          }
+        ],
+        "risk": {
+          "stopPct": 0.03,
+          "targetPct": 0.12
+        },
+        "metrics": {
+          "sharpe": 24.31,
+          "pf": 1.595,
+          "winRate": 0.586,
+          "trades": 29,
+          "pnlUsd": 15151,
+          "maxDDPct": 0.285
+        },
+        "halfSampleCheck": {
+          "h1": {
+            "trades": 18,
+            "pnlUsd": 7515
+          },
+          "h2": {
+            "trades": 11,
+            "pnlUsd": 3681
+          },
+          "bothHalvesPositive": true
+        },
+        "slippageBpsApplied": 3,
+        "verdict": "SURVIVES"
+      },
+      {
+        "id": "eth-ict-liq-fvg-long",
+        "label": "Liq Sweep + FVG Long (BEST LONG)",
+        "direction": "long",
+        "entry": [
+          {
+            "type": "bullish_liq_fvg"
+          }
+        ],
+        "risk": {
+          "stopPct": 0.01,
+          "targetPct": 0.02
+        },
+        "metrics": {
+          "sharpe": 23.87,
+          "pf": 1.497,
+          "winRate": 0.488,
+          "trades": 129,
+          "pnlUsd": 71810,
+          "maxDDPct": 0.467
+        },
+        "halfSampleCheck": {
+          "h1": {
+            "trades": 62,
+            "pnlUsd": 38315
+          },
+          "h2": {
+            "trades": 67,
+            "pnlUsd": 6933
+          },
+          "bothHalvesPositive": true
+        },
+        "slippageBpsApplied": 3,
+        "verdict": "SURVIVES"
+      },
+      {
+        "id": "eth-bearish-fvg-short",
+        "label": "Bearish FVG Short",
+        "direction": "short",
+        "entry": [
+          {
+            "type": "bearish_fvg"
+          }
+        ],
+        "risk": {
+          "stopPct": 0.03,
+          "targetPct": 0.02
+        },
+        "metrics": {
+          "sharpe": 14.03,
+          "pf": 1.141,
+          "winRate": 0.659,
+          "trades": 328,
+          "pnlUsd": 276237,
+          "maxDDPct": 0.733
+        },
+        "halfSampleCheck": {
+          "h1": {
+            "trades": 167,
+            "pnlUsd": 16990
+          },
+          "h2": {
+            "trades": 161,
+            "pnlUsd": 106518
+          },
+          "bothHalvesPositive": true
+        },
+        "slippageBpsApplied": 3,
+        "verdict": "SURVIVES"
+      },
+      {
+        "id": "eth-liq-sweep-short",
+        "label": "Liq Sweep Short",
+        "direction": "short",
+        "entry": [
+          {
+            "type": "bearish_liq_sweep"
+          }
+        ],
+        "risk": {
+          "stopPct": 0.02,
+          "targetPct": 0.02
+        },
+        "metrics": {
+          "sharpe": 3.14,
+          "pf": 0.991,
+          "winRate": 0.531,
+          "trades": 260,
+          "pnlUsd": -3291,
+          "maxDDPct": 0.922
+        },
+        "halfSampleCheck": {
+          "h1": {
+            "trades": 136,
+            "pnlUsd": 32963
+          },
+          "h2": {
+            "trades": 124,
+            "pnlUsd": -8582
+          },
+          "bothHalvesPositive": false
+        },
+        "slippageBpsApplied": 3,
+        "verdict": "REGIME_FRAGILE"
+      }
+    ],
+    "SOLUSDT": [
+      {
+        "id": "sol-rsi-short-mr",
+        "label": "RSI>75 Short MR",
+        "direction": "short",
+        "entry": [
+          {
+            "type": "rsi_above",
+            "period": 14,
+            "value": 75
+          }
+        ],
+        "risk": {
+          "stopPct": 0.03,
+          "targetPct": 0.12
+        },
+        "metrics": {
+          "sharpe": 5.78,
+          "pf": 0.922,
+          "winRate": 0.5,
+          "trades": 40,
+          "pnlUsd": -1704,
+          "maxDDPct": 0.715
+        },
+        "halfSampleCheck": {
+          "h1": {
+            "trades": 19,
+            "pnlUsd": -4175
+          },
+          "h2": {
+            "trades": 21,
+            "pnlUsd": 4242
+          },
+          "bothHalvesPositive": false
+        },
+        "slippageBpsApplied": 3,
+        "verdict": "REGIME_FRAGILE"
+      },
+      {
+        "id": "sol-htf-trend-ob-short",
+        "label": "HTF Trend + OB Short",
+        "direction": "short",
+        "entry": [
+          {
+            "type": "bearish_htf_trend_short"
+          }
+        ],
+        "risk": {
+          "stopPct": 0.03,
+          "targetPct": 0.04
+        },
+        "metrics": {
+          "sharpe": 1.52,
+          "pf": 0.903,
+          "winRate": 0.445,
+          "trades": 110,
+          "pnlUsd": -6902,
+          "maxDDPct": 0.793
+        },
+        "halfSampleCheck": {
+          "h1": {
+            "trades": 61,
+            "pnlUsd": -6106
+          },
+          "h2": {
+            "trades": 49,
+            "pnlUsd": -2046
+          },
+          "bothHalvesPositive": false
+        },
+        "slippageBpsApplied": 3,
+        "verdict": "REGIME_FRAGILE"
+      },
+      {
+        "id": "sol-displacement-short",
+        "label": "Bearish Displacement Short",
+        "direction": "short",
+        "entry": [
+          {
+            "type": "bearish_displacement"
+          }
+        ],
+        "risk": {
+          "stopPct": 0.03,
+          "targetPct": 0.04
+        },
+        "metrics": {
+          "sharpe": 2.48,
+          "pf": 0.866,
+          "winRate": 0.466,
+          "trades": 277,
+          "pnlUsd": -9124,
+          "maxDDPct": 0.957
+        },
+        "halfSampleCheck": {
+          "h1": {
+            "trades": 152,
+            "pnlUsd": -9592
+          },
+          "h2": {
+            "trades": 125,
+            "pnlUsd": 11901
+          },
+          "bothHalvesPositive": false
+        },
+        "slippageBpsApplied": 3,
+        "verdict": "REGIME_FRAGILE"
+      },
+      {
+        "id": "sol-ict-liq-fvg-long",
+        "label": "Liq Sweep + FVG Long",
+        "direction": "long",
+        "entry": [
+          {
+            "type": "bullish_liq_fvg"
+          }
+        ],
+        "risk": {
+          "stopPct": 0.01,
+          "targetPct": 0.02
+        },
+        "metrics": {
+          "sharpe": 17.57,
+          "pf": 1.375,
+          "winRate": 0.452,
+          "trades": 157,
+          "pnlUsd": 49201,
+          "maxDDPct": 0.38
+        },
+        "halfSampleCheck": {
+          "h1": {
+            "trades": 88,
+            "pnlUsd": 24374
+          },
+          "h2": {
+            "trades": 69,
+            "pnlUsd": 7723
+          },
+          "bothHalvesPositive": true
+        },
+        "slippageBpsApplied": 3,
+        "verdict": "SURVIVES"
+      }
+    ]
+  }
+}

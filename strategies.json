@@ -1,174 +1,91 @@
 {
+  "_verification": {
+    "verifiedOn": "2026-07-16",
+    "method": "Multi-timeframe (15m/30m/1h/4h) stop/target grid sweep via the real shared engine (runFuturesBacktest, src/tools/backtest-tools.ts), reused directly (no duplicate/hand-rolled signal logic). Screen sizing 10x leverage / 50% margin/trade for the robustness pass, then every survivor re-verified at realistic sizing (5x leverage, 5% margin/trade) with a fresh split-sample check (first half of the lookback window vs second half, independently net-positive) and a >=15 trade minimum. Numbers below are the realistic-sizing, split-sample-passing results.",
+    "history": "This file has been rewritten twice this session after finding numbers that no reproducible code path could have produced: (1) an earlier SMC/ICT pass where the engine silently returned 0 trades for those signal types (fixed, wired in, reverified); (2) THIS pass — a competing script (scripts/mega-sweep.ts) had overwritten this file with 'mega-sweep' results claiming up to 95% win rates and Sharpe 137.6. That script imports runFuturesBacktest but never calls it — it reimplements its own liquidity-sweep/Ichimoku/FVG signal detection from scratch (inconsistent with the validated smcBearishLiqSweep/ichimoku_bearish_breakout definitions elsewhere in the codebase), has NO split-sample or out-of-sample check, and picks the best Sharpe out of a large stop/target grid evaluated on the SAME window it reports results for — textbook selection-bias overfitting. Spot-checked its top claim (XRP 'Liq Sweep + Ichimoku 2h': 19 trades/95% WR/Sharpe 137.6) against the real engine with identical entry/risk params: real result was 13 trades/46% WR/Sharpe 18.0 (scripts/megasweep-spotcheck.ts). Discarded all mega-sweep numbers; do not resurrect scripts/mega-sweep.ts's output without rerunning through the real engine with split-sample validation.",
+    "dayTraderMultiTF": "2026-07-16: Swept 10 signal families x 3 symbols x 4 timeframes (15m/30m/1h/4h; 5m and 1d intentionally out of scope this pass) with day-trader-appropriate stop/target grids per timeframe (tighter on 15m/30m, wider on 4h). Split-sample filter applied at both the screen and realistic-sizing stages. Key finding: SOL previously had NO surviving short-side strategy (prior session's 1h-only, fixed-param pass) — the broader timeframe/param search recovered 3 working SOL shorts. Full sweep matrix: scripts/day-trader-sweep-output.json. Realistic-sizing reverification: scripts/day-trader-realistic-verify.ts.",
+    "confluenceEntryTest": "2026-07-16: Tested AND-combined entries (2 signals must fire on the same bar) vs the solo signal, on the real engine. Result: AND-confluence entries made every test WORSE (lower Sharpe, far fewer trades, no WR/PF improvement worth the sample-size cost) — e.g. XRP Liq Sweep alone: 163 trades/Sharpe 25.1 vs +ADX filter: 96 trades/Sharpe 19.3; ETH Bearish FVG alone: 363 trades/Sharpe 17.6 vs +RSI filter: 13 trades (too thin to trust). AND-narrowing entries is not a good confluence mechanism for this signal pool — the fusion tool's OR-entry + additive position-sizing confluence (already implemented, proven net positive: +$117/trade avg with a confluence add vs -$37 without) is the mechanism that actually works here. Full test: scripts/confluence-entry-test.ts.",
+    "rejectedPriorRound": "8 strategies from the previous (1h-only) verified round remain valid and are superseded here only where a better timeframe/param combo was found; ETH RSI>80 Short MR and SOL's original 3 rejected shorts are omitted (SOL now has real working shorts via bearish_fvg/bearish_liq_fvg/bearish_liq_sweep at 1h found in this pass instead).",
+    "trainForward2026": "2026-07-16 final validation: 2.5yr train (2023-07-16 to 2026-01-01) + true 2026-YTD forward holdout (Jan 1 to Jul 16), all 18 pool strategies, exact stated params, realistic sizing, PLUS 5m sub-bar exit resolution on the forward window (engine now supports subBars param — resolves which of stop/target hit first inside a native bar; native resolution assumes stop-first/pessimistic). Results: 14/18 HOLD (positive in both windows). 1 FWD_FAIL: eth-liq-sweep-short-2h ($0 PnL in 2026 — REMOVED from pool). 3 TRAIN_FAIL (net-negative over 2.5yr, profitable only in the recent regime — kept but flagged, size down): xrp-adx-di-cross-30m (-$1,931 train, DD 28.5%!), xrp-ob-retest-short-1h (-$302 train), eth-rsi-short-mr-1h (-$255 train). Note: 3yr-train PFs are systematically lower than the 1yr-window metrics stored on each entry (e.g. xrp-bearish-fvg train PF 1.29 vs 1yr 1.98) — 2023-24 was a less favorable regime; the stored 1yr metrics are the optimistic end. 5m exit resolution changed almost nothing (only sol-bearish-fvg-1h: +13% PnL) — with these stop/target widths, both levels rarely fall inside one native bar, and where they do the native assumption was already conservative. Full data: scripts/train-forward-output.json (scripts/train-forward-test.ts).",
+    "finalReportAudit": "2026-07-16, 3rd round: docs/FINAL-REPORT.md appeared mid-session claiming 15 walk-forward-validated strategies (up to 89% WR, Sharpe 94.7) sourced from scripts/mega-sweep.ts (already discredited, see above) plus scripts/walk-forward.ts — a THIRD independent hand-rolled backtest engine with its own duplicate liquidity-sweep/FVG/Ichimoku/volume-spike/SuperTrend signal generators, inconsistent with the validated ones in backtest-tools.ts, and no slippage modeling. Re-ran all 15 FINAL-REPORT claims through the real engine (runFuturesBacktest) at the exact claimed (timeframe, stop, target), using the same 3-fold OOS window definition FINAL-REPORT claims to use (scripts/final-report-verify.ts). Every single claim's trade count, WR, and Sharpe was wrong (trade counts off 5-20x — e.g. XRP 'ADX-DI Cross Short 30m' claimed 127 trades/yr, real engine found 685 on the SAME window). ALL FIVE '1d' timeframe claims failed outright (1-17 total trades over 2 years — statistically meaningless; Sharpe formula also numerically blows up on n<=2 trade samples, producing values like -151456794050981440, a known limitation of the variance estimator at tiny n, not a real number). Of the remaining 10 sub-daily claims, 3 had negative full-window PnL despite a narrow partial OOS pass (disqualified) and 7 were genuinely real and profitable once tested on the real engine with correct signal logic — but at very different numbers than claimed. Those 7 were re-verified at realistic sizing (5x/5%, scripts/final-report-realistic-verify.ts) and added below where they add genuine diversity (new timeframe or new symbol coverage) over the existing pool; entries where this round's numbers were weaker than the already-validated prior-round entry were left as-is. Warning headers added to scripts/walk-forward.ts, scripts/signal-scanner.ts, scripts/debug-scanner.ts (same anti-pattern). docs/FINAL-REPORT.md corrected in place rather than deleted."
+  },
   "config": {
     "initialCapital": 10000,
-    "leverage": 10,
-    "marginPerTradePct": 0.5,
+    "leverage": 5,
+    "marginPerTradePct": 0.05,
     "feeBps": 5,
-    "maxHoldBars": 48,
-    "interval": "1h"
+    "slippageBps": 3,
+    "note": "maxHoldBars and interval are now PER-STRATEGY (see each entry's tf/maxHoldBars) — this pool spans 30m to 4h, no longer a single fixed interval."
   },
   "signalTypes": {
-    "rsi_above": "RSI above threshold (simple mean reversion)",
-    "rsi_below": "RSI below threshold (simple mean reversion)",
-    "macd_bearish_cross": "MACD line crosses below signal line",
-    "macd_bullish_cross": "MACD line crosses above signal line",
-    "bollinger_touch_upper": "Price touches upper Bollinger Band",
-    "bollinger_touch_lower": "Price touches lower Bollinger Band",
-    "price_above_ema": "Price above EMA (trend filter)",
-    "price_below_ema": "Price below EMA (trend filter)",
-    "bearish_ob": "Bearish Order Block - last bullish candle before strong bearish break",
-    "bullish_ob": "Bullish Order Block - last bearish candle before strong bullish break",
-    "bearish_bos": "Bearish Break of Structure - price breaks below recent swing low",
-    "bullish_bos": "Bullish Break of Structure - price breaks above recent swing high",
-    "bearish_fvg": "Bearish Fair Value Gap - 3-candle gap down pattern",
-    "bullish_fvg": "Bullish Fair Value Gap - 3-candle gap up pattern",
-    "bearish_liq_sweep": "Liquidity sweep of swing high + reversal down",
-    "bullish_liq_sweep": "Liquidity sweep of swing low + reversal up",
-    "bearish_displacement": "Strong bearish momentum (body > 1.5x avg)",
-    "bullish_displacement": "Strong bullish momentum (body > 1.5x avg)",
     "bearish_liq_ob": "ICT combo: Liquidity sweep + Order Block (short)",
-    "bullish_liq_ob": "ICT combo: Liquidity sweep + Order Block (long)",
-    "bullish_liq_fvg": "ICT combo: Liquidity sweep + Fair Value Gap (long)",
     "bearish_liq_fvg": "ICT combo: Liquidity sweep + Fair Value Gap (short)",
-    "bearish_bos_displacement": "BOS confirmed by bearish displacement",
-    "bullish_bos_displacement": "BOS confirmed by bullish displacement",
-    "bearish_htf_trend_short": "HTF downtrend + bearish OB entry",
-    "bullish_htf_trend_long": "HTF uptrend + bullish OB entry"
+    "bearish_liq_sweep": "Liquidity sweep of swing high + reversal down",
+    "bullish_liq_fvg": "ICT combo: Liquidity sweep + Fair Value Gap (long)",
+    "bearish_fvg": "Bearish Fair Value Gap - 3-candle gap down pattern",
+    "ichimoku_bearish_breakout": "LuxAlgo-style: price breaks below the Ichimoku kumo cloud",
+    "adx_di_cross_short": "ADX > threshold and +DI crosses below -DI (trend strength + direction change)",
+    "rsi_above": "RSI above threshold (simple mean reversion)",
+    "ichimoku_below_cloud_short": "Price in sustained below-cloud state (not just the breakout moment)",
+    "ob_retest_short": "SMC mitigation entry: bearish OB zone detected at ATR-adaptive displacement, entry on FIRST retest of proximal (zone invalidated if close through distal). value = impulse threshold x ATR."
   },
   "symbols": {
     "XRPUSDT": [
-      {
-        "id": "xrp-rsi-short-mr",
-        "label": "RSI>80 Short MR",
-        "direction": "short",
-        "entry": [{ "type": "rsi_above", "period": 14, "value": 80 }],
-        "risk": { "stopPct": 0.02, "targetPct": 0.12 },
-        "metrics": { "sharpe": 33.9, "pf": 3.28, "winRate": 0.41, "trades": 22, "pnlUsd": 37441, "maxDDPct": 0.35 }
-      },
-      {
-        "id": "xrp-macd-bearish-short",
-        "label": "MACD Bearish Cross Short",
-        "direction": "short",
-        "entry": [{ "type": "macd_bearish_cross" }],
-        "risk": { "stopPct": 0.03, "targetPct": 0.12 },
-        "metrics": { "sharpe": 19.1, "pf": 1.25, "winRate": 0.45, "trades": 113, "pnlUsd": 145783, "maxDDPct": 0.57 }
-      },
-      {
-        "id": "xrp-price-below-ema-short",
-        "label": "Price<EMA20 Short",
-        "direction": "short",
-        "entry": [{ "type": "price_below_ema", "period": 20 }],
-        "risk": { "stopPct": 0.03, "targetPct": 0.06 },
-        "metrics": { "sharpe": 13.8, "pf": 1.18, "winRate": 0.44, "trades": 194, "pnlUsd": 68026, "maxDDPct": 0.74 }
-      },
-      {
-        "id": "xrp-bb-upper-short",
-        "label": "Bollinger Upper Touch Short",
-        "direction": "short",
-        "entry": [{ "type": "bollinger_touch_upper" }],
-        "risk": { "stopPct": 0.02, "targetPct": 0.12 },
-        "metrics": { "sharpe": 13.4, "pf": 1.22, "winRate": 0.33, "trades": 132, "pnlUsd": 36736, "maxDDPct": 0.75 }
-      },
-      {
-        "id": "xrp-ict-liq-ob-short",
-        "label": "Liq Sweep + OB Short (ICT)",
-        "direction": "short",
-        "entry": [{ "type": "bearish_liq_ob" }],
-        "risk": { "stopPct": 0.01, "targetPct": 0.04 },
-        "metrics": { "sharpe": 34.3, "pf": 16.67, "winRate": 0.57, "trades": 14, "pnlUsd": 93529, "maxDDPct": 0.0 }
-      },
-      {
-        "id": "xrp-ict-liq-fvg-short",
-        "label": "Liq Sweep + FVG Short",
-        "direction": "short",
-        "entry": [{ "type": "bearish_liq_fvg" }],
-        "risk": { "stopPct": 0.01, "targetPct": 0.06 },
-        "metrics": { "sharpe": 32.9, "pf": 12.60, "winRate": 0.36, "trades": 11, "pnlUsd": 53025, "maxDDPct": 0.0 }
-      },
-      {
-        "id": "xrp-liq-sweep-short",
-        "label": "Liquidity Sweep Short",
-        "direction": "short",
-        "entry": [{ "type": "bearish_liq_sweep" }],
-        "risk": { "stopPct": 0.01, "targetPct": 0.06 },
-        "metrics": { "sharpe": 35.2, "pf": 14.65, "winRate": 0.40, "trades": 10, "pnlUsd": 56013, "maxDDPct": 0.0 }
-      },
-      {
-        "id": "xrp-ict-liq-fvg-long",
-        "label": "Liq Sweep + FVG Long",
-        "direction": "long",
-        "entry": [{ "type": "bullish_liq_fvg" }],
-        "risk": { "stopPct": 0.01, "targetPct": 0.02 },
-        "metrics": { "sharpe": 9.5, "pf": 1.14, "winRate": 0.40, "trades": 70, "pnlUsd": 4049, "maxDDPct": 0.0 }
-      }
+      { "id": "xrp-bearish-fvg-1h", "label": "Bearish FVG Short", "direction": "short", "tf": "1h", "maxHoldBars": 48,
+        "entry": [{ "type": "bearish_fvg" }], "risk": { "stopPct": 0.03, "targetPct": 0.06 },
+        "metrics": { "sharpe": 28.7, "pf": 1.99, "winRate": 0.58, "trades": 194, "pnlUsd": 7084, "returnPct": 0.708, "maxDDPct": 0.032 } },
+      { "id": "xrp-liq-sweep-short-1h", "label": "Liquidity Sweep Short", "direction": "short", "tf": "1h", "maxHoldBars": 48,
+        "entry": [{ "type": "bearish_liq_sweep" }], "risk": { "stopPct": 0.03, "targetPct": 0.06 },
+        "metrics": { "sharpe": 25.1, "pf": 1.86, "winRate": 0.55, "trades": 163, "pnlUsd": 4648, "returnPct": 0.465, "maxDDPct": 0.036 } },
+      { "id": "xrp-liq-fvg-short-30m", "label": "Liq Sweep + FVG Short", "direction": "short", "tf": "30m", "maxHoldBars": 48,
+        "entry": [{ "type": "bearish_liq_fvg" }], "risk": { "stopPct": 0.02, "targetPct": 0.04 },
+        "metrics": { "sharpe": 25.3, "pf": 1.84, "winRate": 0.55, "trades": 105, "pnlUsd": 1793, "returnPct": 0.179, "maxDDPct": 0.026 } },
+      { "id": "xrp-adx-di-cross-30m", "label": "ADX-DI Cross Short", "direction": "short", "tf": "30m", "maxHoldBars": 48,
+        "entry": [{ "type": "adx_di_cross_short", "value": 20 }], "risk": { "stopPct": 0.02, "targetPct": 0.04 },
+        "metrics": { "sharpe": 23.0, "pf": 1.71, "winRate": 0.54, "trades": 156, "pnlUsd": 2497, "returnPct": 0.250, "maxDDPct": 0.049, "warn": "TRAIN_FAIL in the 2.5yr train window (-$1,931, DD 28.5%) — strongly recent-regime-dependent despite good 2026 forward (PF 1.64). Weakest structural claim in the pool. Size minimal or skip." } },
+      { "id": "xrp-liq-fvg-long-1h", "label": "Liq Sweep + FVG Long", "direction": "long", "tf": "1h", "maxHoldBars": 48,
+        "entry": [{ "type": "bullish_liq_fvg" }], "risk": { "stopPct": 0.01, "targetPct": 0.04 },
+        "metrics": { "sharpe": 18.6, "pf": 1.60, "winRate": 0.33, "trades": 121, "pnlUsd": 1421, "returnPct": 0.142, "maxDDPct": 0.025 } },
+      { "id": "xrp-ob-retest-short-1h", "label": "OB Zone Retest Short (SMC mitigation entry)", "direction": "short", "tf": "1h", "maxHoldBars": 48,
+        "entry": [{ "type": "ob_retest_short" }], "risk": { "stopPct": 0.02, "targetPct": 0.06 },
+        "metrics": { "sharpe": 34.0, "pf": 2.35, "winRate": 0.48, "trades": 21, "pnlUsd": 690, "returnPct": 0.069, "maxDDPct": 0.017, "note": "Low frequency (~21/yr) but highest PF in the pool and 1.7% maxDD. Retest entry, NOT the impulse-bar bearish_ob signal (which is net-negative on ETH/SOL and 6%+ DD on XRP). Both halves positive ($528/$154).", "warn": "TRAIN_FAIL in the 2.5yr train window (-$302) — recent-regime edge only. 2026 forward positive but 11 trades (below sample bar). Size minimal." } },
+      { "id": "xrp-liq-sweep-short-2h", "label": "Liquidity Sweep Short 2h (swing variant, 2yr sample)", "direction": "short", "tf": "2h", "maxHoldBars": 36,
+        "entry": [{ "type": "bearish_liq_sweep" }], "risk": { "stopPct": 0.02, "targetPct": 0.06 },
+        "metrics": { "sharpe": 15.5, "pf": 1.50, "winRate": 0.39, "trades": 275, "pnlUsd": 2381, "returnPct": 0.238, "maxDDPct": 0.124, "note": "2yr full-window, all 3 OOS folds positive ($1771/$1442/$1175). Same signal as xrp-liq-sweep-short-1h at a slower cadence — useful for lower-screen-time trading, weaker Sharpe than the 1h version." } }
     ],
     "ETHUSDT": [
-      {
-        "id": "eth-rsi-short-mr",
-        "label": "RSI>80 Short MR",
-        "direction": "short",
-        "entry": [{ "type": "rsi_above", "period": 14, "value": 80 }],
-        "risk": { "stopPct": 0.03, "targetPct": 0.12 },
-        "metrics": { "sharpe": 25.2, "pf": 1.58, "winRate": 0.48, "trades": 29, "pnlUsd": 23881, "maxDDPct": 0.50 }
-      },
-      {
-        "id": "eth-ict-liq-fvg-long",
-        "label": "Liq Sweep + FVG Long (BEST LONG)",
-        "direction": "long",
-        "entry": [{ "type": "bullish_liq_fvg" }],
-        "risk": { "stopPct": 0.01, "targetPct": 0.02 },
-        "metrics": { "sharpe": 32.1, "pf": 1.75, "winRate": 0.52, "trades": 67, "pnlUsd": 36205, "maxDDPct": 0.0 }
-      },
-      {
-        "id": "eth-bearish-fvg-short",
-        "label": "Bearish FVG Short",
-        "direction": "short",
-        "entry": [{ "type": "bearish_fvg" }],
-        "risk": { "stopPct": 0.03, "targetPct": 0.02 },
-        "metrics": { "sharpe": 30.7, "pf": 6.06, "winRate": 0.73, "trades": 11, "pnlUsd": 30385, "maxDDPct": 0.0 }
-      },
-      {
-        "id": "eth-liq-sweep-short",
-        "label": "Liq Sweep Short",
-        "direction": "short",
-        "entry": [{ "type": "bearish_liq_sweep" }],
-        "risk": { "stopPct": 0.02, "targetPct": 0.02 },
-        "metrics": { "sharpe": 19.5, "pf": 3.09, "winRate": 0.50, "trades": 20, "pnlUsd": 19375, "maxDDPct": 0.0 }
-      }
+      { "id": "eth-liq-fvg-long-4h", "label": "Liq Sweep + FVG Long (BEST LONG)", "direction": "long", "tf": "4h", "maxHoldBars": 42,
+        "entry": [{ "type": "bullish_liq_fvg" }], "risk": { "stopPct": 0.02, "targetPct": 0.04 },
+        "metrics": { "sharpe": 36.4, "pf": 2.21, "winRate": 0.55, "trades": 64, "pnlUsd": 2030, "returnPct": 0.203, "maxDDPct": 0.036 } },
+      { "id": "eth-bearish-fvg-1h", "label": "Bearish FVG Short", "direction": "short", "tf": "1h", "maxHoldBars": 48,
+        "entry": [{ "type": "bearish_fvg" }], "risk": { "stopPct": 0.02, "targetPct": 0.02 },
+        "metrics": { "sharpe": 17.6, "pf": 1.44, "winRate": 0.60, "trades": 363, "pnlUsd": 3872, "returnPct": 0.387, "maxDDPct": 0.031 } },
+      { "id": "eth-liq-fvg-short-30m", "label": "Liq Sweep + FVG Short", "direction": "short", "tf": "30m", "maxHoldBars": 48,
+        "entry": [{ "type": "bearish_liq_fvg" }], "risk": { "stopPct": 0.008, "targetPct": 0.04 },
+        "metrics": { "sharpe": 21.3, "pf": 1.79, "winRate": 0.34, "trades": 114, "pnlUsd": 1334, "returnPct": 0.133, "maxDDPct": 0.023 } },
+      { "id": "eth-rsi-short-mr-1h", "label": "RSI>80 Short MR", "direction": "short", "tf": "1h", "maxHoldBars": 48,
+        "entry": [{ "type": "rsi_above", "period": 14, "value": 80 }], "risk": { "stopPct": 0.03, "targetPct": 0.06 },
+        "metrics": { "sharpe": 22.0, "pf": 1.73, "winRate": 0.57, "trades": 30, "pnlUsd": 646, "returnPct": 0.065, "maxDDPct": 0.021, "warn": "TRAIN_FAIL in the 2.5yr train window (-$255) — edge only exists in the recent regime. 2026 forward is positive (PF 1.47) but tiny sample (13 trades). Size minimal." } }
     ],
     "SOLUSDT": [
-      {
-        "id": "sol-rsi-short-mr",
-        "label": "RSI>75 Short MR",
-        "direction": "short",
-        "entry": [{ "type": "rsi_above", "period": 14, "value": 75 }],
-        "risk": { "stopPct": 0.03, "targetPct": 0.12 },
-        "metrics": { "sharpe": 12.2, "pf": 1.08, "winRate": 0.38, "trades": 40, "pnlUsd": 2435, "maxDDPct": 0.70 }
-      },
-      {
-        "id": "sol-htf-trend-ob-short",
-        "label": "HTF Trend + OB Short",
-        "direction": "short",
-        "entry": [{ "type": "bearish_htf_trend_short" }],
-        "risk": { "stopPct": 0.03, "targetPct": 0.04 },
-        "metrics": { "sharpe": 32.7, "pf": 5.79, "winRate": 0.69, "trades": 16, "pnlUsd": 98193, "maxDDPct": 0.0 }
-      },
-      {
-        "id": "sol-displacement-short",
-        "label": "Bearish Displacement Short",
-        "direction": "short",
-        "entry": [{ "type": "bearish_displacement" }],
-        "risk": { "stopPct": 0.03, "targetPct": 0.04 },
-        "metrics": { "sharpe": 27.4, "pf": 5.06, "winRate": 0.56, "trades": 16, "pnlUsd": 37684, "maxDDPct": 0.0 }
-      },
-      {
-        "id": "sol-ict-liq-fvg-long",
-        "label": "Liq Sweep + FVG Long",
-        "direction": "long",
-        "entry": [{ "type": "bullish_liq_fvg" }],
-        "risk": { "stopPct": 0.01, "targetPct": 0.02 },
-        "metrics": { "sharpe": 11.3, "pf": 1.18, "winRate": 0.41, "trades": 83, "pnlUsd": 6832, "maxDDPct": 0.0 }
-      }
+      { "id": "sol-bearish-fvg-1h", "label": "Bearish FVG Short (NEW — was previously unprofitable on SOL)", "direction": "short", "tf": "1h", "maxHoldBars": 48,
+        "entry": [{ "type": "bearish_fvg" }], "risk": { "stopPct": 0.01, "targetPct": 0.02 },
+        "metrics": { "sharpe": 21.1, "pf": 1.56, "winRate": 0.47, "trades": 477, "pnlUsd": 4958, "returnPct": 0.496, "maxDDPct": 0.047 } },
+      { "id": "sol-liq-sweep-short-1h", "label": "Liquidity Sweep Short (NEW — was previously unprofitable on SOL)", "direction": "short", "tf": "1h", "maxHoldBars": 48,
+        "entry": [{ "type": "bearish_liq_sweep" }], "risk": { "stopPct": 0.02, "targetPct": 0.06 },
+        "metrics": { "sharpe": 14.1, "pf": 1.41, "winRate": 0.39, "trades": 215, "pnlUsd": 3103, "returnPct": 0.310, "maxDDPct": 0.061 } },
+      { "id": "sol-liq-fvg-short-1h", "label": "Liq Sweep + FVG Short (NEW — was previously unprofitable on SOL)", "direction": "short", "tf": "1h", "maxHoldBars": 48,
+        "entry": [{ "type": "bearish_liq_fvg" }], "risk": { "stopPct": 0.01, "targetPct": 0.02 },
+        "metrics": { "sharpe": 22.2, "pf": 1.63, "winRate": 0.48, "trades": 143, "pnlUsd": 1364, "returnPct": 0.136, "maxDDPct": 0.043 } },
+      { "id": "sol-liq-fvg-long-1h", "label": "Liq Sweep + FVG Long", "direction": "long", "tf": "1h", "maxHoldBars": 48,
+        "entry": [{ "type": "bullish_liq_fvg" }], "risk": { "stopPct": 0.01, "targetPct": 0.02 },
+        "metrics": { "sharpe": 17.0, "pf": 1.46, "winRate": 0.45, "trades": 158, "pnlUsd": 1132, "returnPct": 0.113, "maxDDPct": 0.021 } },
+      { "id": "sol-ichimoku-below-4h", "label": "Ichimoku Below Cloud Short 4h (NEW — SOL had no Ichimoku entry before)", "direction": "short", "tf": "4h", "maxHoldBars": 24,
+        "entry": [{ "type": "ichimoku_below_cloud_short" }], "risk": { "stopPct": 0.03, "targetPct": 0.06 },
+        "metrics": { "sharpe": 7.6, "pf": 1.17, "winRate": 0.39, "trades": 280, "pnlUsd": 1283, "returnPct": 0.128, "maxDDPct": 0.099, "note": "2yr full-window, all 3 OOS folds positive but declining trend ($931/$637/$158) — flag possible edge decay, recheck before sizing up." } },
+      { "id": "sol-liq-sweep-short-2h", "label": "Liquidity Sweep Short 2h (swing variant, weaker than 1h version)", "direction": "short", "tf": "2h", "maxHoldBars": 36,
+        "entry": [{ "type": "bearish_liq_sweep" }], "risk": { "stopPct": 0.03, "targetPct": 0.05 },
+        "metrics": { "sharpe": 10.6, "pf": 1.26, "winRate": 0.45, "trades": 266, "pnlUsd": 1586, "returnPct": 0.159, "maxDDPct": 0.092, "note": "2yr full-window, all 3 OOS folds positive but fold2 near-zero ($73). Prefer sol-liq-sweep-short-1h (stronger Sharpe) unless lower screen-time is the priority." } }
     ]
   }
 }

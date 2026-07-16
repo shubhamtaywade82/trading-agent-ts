@@ -27,6 +27,7 @@ import { BinanceStreamManager } from "../exchange/binance-stream.js";
 import {
   BinanceBacktestTool, BinanceWalkForwardTool, BinanceMonteCarloTool, BinanceParamSweepTool,
   BinancePortfolioBacktestTool, BinanceFuturesBacktestTool, BinanceFuturesSweepTool, BinanceSignalFusionTool,
+  BinanceMultiTimeframeSweepTool,
 } from "../tools/backtest-tools.js";
 import { BinancePaperTradeTool } from "../tools/paper-trading-tools.js";
 import { PaperTradingManager } from "../exchange/paper-trading.js";
@@ -80,7 +81,8 @@ export class AgentToolManager {
       .register(new BinancePortfolioBacktestTool())
       .register(new BinanceFuturesBacktestTool())
       .register(new BinanceFuturesSweepTool())
-      .register(new BinanceSignalFusionTool());
+      .register(new BinanceSignalFusionTool())
+      .register(new BinanceMultiTimeframeSweepTool());
   }
 
   registerBinanceStreamTools(stream: BinanceStreamManager): void {

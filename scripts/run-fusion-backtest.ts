@@ -5,8 +5,8 @@ const strategies = JSON.parse(readFileSync("strategies.json", "utf-8"));
 
 const toolInput: Record<string, any> = {
   initialCapital: strategies.config.initialCapital ?? 10000,
-  leverage: 10,
-  marginPerTradePct: 0.1,
+  leverage: strategies.config.leverage ?? 5,
+  marginPerTradePct: strategies.config.marginPerTradePct ?? 0.05,
   confluentAddPct: 0.5,
   interval: strategies.config.interval ?? "1h",
   startTime: Date.now() - 365 * 24 * 60 * 60 * 1000,
@@ -28,11 +28,11 @@ for (const [sym, strats] of Object.entries(strategies.symbols)) {
 }
 
 const tool = new BinanceSignalFusionTool();
-console.log("\n=== SIGNAL FUSION BACKTEST ===");
+console.log("\n=== SIGNAL FUSION BACKTEST (realistic sizing) ===");
 console.log(`Symbols: ${Object.keys(toolInput.strategies).join(", ")}`);
 console.log(`Interval: ${toolInput.interval}`);
-console.log(`Capital: $${toolInput.initialCapital} @ ${toolInput.leverage}x`);
-console.log(`Confluence add: ${toolInput.confluentAddPct * 100}%\n`);
+console.log(`Capital: $${toolInput.initialCapital} @ ${toolInput.leverage}x, margin/trade ${toolInput.marginPerTradePct * 100}%`);
+console.log(`Confluence add: ${toolInput.confluentAddPct * 100}% of base margin, capped at 3 adds, first-to-fire = FIFO entry (rest of that bar's same-side signals become confluence, opposite-side signals are ignored while a position is open)\n`);
 
 const result = await tool.call(toolInput);
 
@@ -41,18 +41,17 @@ console.log(`Return: ${(result.totalReturnPct * 100).toFixed(2)}% | PnL: \$${res
 console.log(`Max DD: ${(result.maxDrawdownPct * 100).toFixed(2)}%`);
 console.log(`Total trades: ${result.totalTrades}`);
 
-console.log(`\n── Strategy Entry Counts ──`);
+console.log(`\n── Strategy Entry Counts (who wins the FIFO race) ──`);
 for (const [id, count] of Object.entries(result.strategyEntryCounts as Record<string, number>).sort((a, b) => b[1] - a[1])) {
   console.log(`  ${id}: ${count} entries`);
 }
 
 const totalConf = Object.values(result.confluenceEvents as Record<string, number>).reduce((s: number, v) => s + v, 0);
-console.log(`\n── Confluence Events: ${totalConf} ──`);
+console.log(`\n── Confluence Events (same-side add while already in position): ${totalConf} ──`);
 for (const [key, count] of Object.entries(result.confluenceEvents as Record<string, number>).sort((a, b) => b[1] - a[1])) {
   console.log(`  ${key}: ${count}`);
 }
 
-// Per-direction breakdown
 const trades = result.trades as any[];
 const entries = trades.filter((t: any) => t.type === "entry");
 const bySymbol: Record<string, { entries: number; exits: number; pnl: number }> = {};
@@ -71,3 +70,11 @@ for (const [sym, d] of Object.entries(bySymbol)) {
   const total = trades.filter((t: any) => t.type === "exit" && t.sym === sym).length;
   console.log(`  ${sym}: ${d.entries} entries → ${d.exits} exits, \$${Math.round(d.pnl).toLocaleString()} PnL, ${total > 0 ? ((wins/total)*100).toFixed(0) : 'N/A'}% WR`);
 }
+
+const confluenceTrades = trades.filter((t: any) => t.type === "exit" && t.confluences > 0);
+console.log(`\n── Trades with confluence adds: ${confluenceTrades.length} / ${trades.filter((t:any)=>t.type==="exit").length} exits ──`);
+const avgPnlWithConf = confluenceTrades.length ? confluenceTrades.reduce((s: number, t: any) => s + t.pnl, 0) / confluenceTrades.length : 0;
+const noConf = trades.filter((t: any) => t.type === "exit" && t.confluences === 0);
+const avgPnlNoConf = noConf.length ? noConf.reduce((s: number, t: any) => s + t.pnl, 0) / noConf.length : 0;
+console.log(`  Avg PnL per trade WITH confluence adds: $${avgPnlWithConf.toFixed(2)}`);
+console.log(`  Avg PnL per trade WITHOUT confluence adds: $${avgPnlNoConf.toFixed(2)}`);

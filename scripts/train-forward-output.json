@@ -1,0 +1,779 @@
+[
+  {
+    "symbol": "XRPUSDT",
+    "id": "xrp-bearish-fvg-1h",
+    "label": "Bearish FVG Short",
+    "tf": "1h",
+    "direction": "short",
+    "entry": [
+      {
+        "type": "bearish_fvg"
+      }
+    ],
+    "risk": {
+      "stopPct": 0.03,
+      "targetPct": 0.06
+    },
+    "train": {
+      "trades": 536,
+      "wr": 0.4701492537313433,
+      "pf": 1.2874147466290449,
+      "sharpe": 9.735475609183663,
+      "pnl": 6635,
+      "maxDD": 0.15744078222191865,
+      "pnlPerYr": 2697
+    },
+    "fwdNative": {
+      "trades": 103,
+      "wr": 0.5825242718446602,
+      "pf": 1.877777132619208,
+      "sharpe": 26.06307568193469,
+      "pnl": 2805,
+      "maxDD": 0.02739053168143179
+    },
+    "fwd5m": {
+      "trades": 103,
+      "wr": 0.5825242718446602,
+      "pf": 1.877777132619208,
+      "sharpe": 26.06307568193469,
+      "pnl": 2805,
+      "maxDD": 0.02739053168143179,
+      "pnlPerYrPace": 5207
+    },
+    "verdict": "HOLDS"
+  },
+  {
+    "symbol": "XRPUSDT",
+    "id": "xrp-liq-sweep-short-1h",
+    "label": "Liquidity Sweep Short",
+    "tf": "1h",
+    "direction": "short",
+    "entry": [
+      {
+        "type": "bearish_liq_sweep"
+      }
+    ],
+    "risk": {
+      "stopPct": 0.03,
+      "targetPct": 0.06
+    },
+    "train": {
+      "trades": 473,
+      "wr": 0.452431289640592,
+      "pf": 1.227457015498778,
+      "sharpe": 8.586545028253052,
+      "pnl": 4836,
+      "maxDD": 0.10102241615791051,
+      "pnlPerYr": 1966
+    },
+    "fwdNative": {
+      "trades": 78,
+      "wr": 0.6025641025641025,
+      "pf": 2.221668534570502,
+      "sharpe": 31.342168065736303,
+      "pnl": 2254,
+      "maxDD": 0.025909708981353093
+    },
+    "fwd5m": {
+      "trades": 78,
+      "wr": 0.6025641025641025,
+      "pf": 2.221668534570502,
+      "sharpe": 31.342168065736303,
+      "pnl": 2254,
+      "maxDD": 0.025909708981353093,
+      "pnlPerYrPace": 4184
+    },
+    "verdict": "HOLDS"
+  },
+  {
+    "symbol": "XRPUSDT",
+    "id": "xrp-liq-fvg-short-30m",
+    "label": "Liq Sweep + FVG Short",
+    "tf": "30m",
+    "direction": "short",
+    "entry": [
+      {
+        "type": "bearish_liq_fvg"
+      }
+    ],
+    "risk": {
+      "stopPct": 0.02,
+      "targetPct": 0.04
+    },
+    "train": {
+      "trades": 490,
+      "wr": 0.49183673469387756,
+      "pf": 1.4880725217921273,
+      "sharpe": 15.834272284753744,
+      "pnl": 6503,
+      "maxDD": 0.04315288596043105,
+      "pnlPerYr": 2644
+    },
+    "fwdNative": {
+      "trades": 114,
+      "wr": 0.5263157894736842,
+      "pf": 1.7647502682708034,
+      "sharpe": 23.368904730112348,
+      "pnl": 1787,
+      "maxDD": 0.026414321584781793
+    },
+    "fwd5m": {
+      "trades": 114,
+      "wr": 0.5263157894736842,
+      "pf": 1.7647502682708034,
+      "sharpe": 23.368904730112348,
+      "pnl": 1787,
+      "maxDD": 0.026414321584781793,
+      "pnlPerYrPace": 3317
+    },
+    "verdict": "HOLDS"
+  },
+  {
+    "symbol": "XRPUSDT",
+    "id": "xrp-adx-di-cross-30m",
+    "label": "ADX-DI Cross Short",
+    "tf": "30m",
+    "direction": "short",
+    "entry": [
+      {
+        "type": "adx_di_cross_short",
+        "value": 20
+      }
+    ],
+    "risk": {
+      "stopPct": 0.02,
+      "targetPct": 0.04
+    },
+    "train": {
+      "trades": 878,
+      "wr": 0.39749430523917995,
+      "pf": 0.9074731968530285,
+      "sharpe": -3.5681261155874795,
+      "pnl": -1931,
+      "maxDD": 0.28501218628731806,
+      "pnlPerYr": -785
+    },
+    "fwdNative": {
+      "trades": 169,
+      "wr": 0.5207100591715976,
+      "pf": 1.635827282458906,
+      "sharpe": 20.940466514708778,
+      "pnl": 2453,
+      "maxDD": 0.04926426670941492
+    },
+    "fwd5m": {
+      "trades": 169,
+      "wr": 0.5207100591715976,
+      "pf": 1.635827282458906,
+      "sharpe": 20.940466514708778,
+      "pnl": 2453,
+      "maxDD": 0.04926426670941492,
+      "pnlPerYrPace": 4554
+    },
+    "verdict": "TRAIN_FAIL"
+  },
+  {
+    "symbol": "XRPUSDT",
+    "id": "xrp-liq-fvg-long-1h",
+    "label": "Liq Sweep + FVG Long",
+    "tf": "1h",
+    "direction": "long",
+    "entry": [
+      {
+        "type": "bullish_liq_fvg"
+      }
+    ],
+    "risk": {
+      "stopPct": 0.01,
+      "targetPct": 0.04
+    },
+    "train": {
+      "trades": 306,
+      "wr": 0.3235294117647059,
+      "pf": 1.4994806354298176,
+      "sharpe": 15.553747768822637,
+      "pnl": 3126,
+      "maxDD": 0.03655525489963468,
+      "pnlPerYr": 1271
+    },
+    "fwdNative": {
+      "trades": 69,
+      "wr": 0.30434782608695654,
+      "pf": 1.3504310892391287,
+      "sharpe": 11.663275255195096,
+      "pnl": 462,
+      "maxDD": 0.024993492117967052
+    },
+    "fwd5m": {
+      "trades": 69,
+      "wr": 0.30434782608695654,
+      "pf": 1.3504310892391287,
+      "sharpe": 11.663275255195096,
+      "pnl": 462,
+      "maxDD": 0.024993492117967052,
+      "pnlPerYrPace": 858
+    },
+    "verdict": "HOLDS"
+  },
+  {
+    "symbol": "XRPUSDT",
+    "id": "xrp-ob-retest-short-1h",
+    "label": "OB Zone Retest Short (SMC mitigation entry)",
+    "tf": "1h",
+    "direction": "short",
+    "entry": [
+      {
+        "type": "ob_retest_short"
+      }
+    ],
+    "risk": {
+      "stopPct": 0.02,
+      "targetPct": 0.06
+    },
+    "train": {
+      "trades": 44,
+      "wr": 0.2727272727272727,
+      "pf": 0.8016526160504638,
+      "sharpe": -8.216696607983586,
+      "pnl": -302,
+      "maxDD": 0.09595142479905437,
+      "pnlPerYr": -123
+    },
+    "fwdNative": {
+      "trades": 11,
+      "wr": 0.36363636363636365,
+      "pf": 1.4236416610077627,
+      "sharpe": 13.871177159560224,
+      "pnl": 139,
+      "maxDD": 0.01702881691034545
+    },
+    "fwd5m": {
+      "trades": 11,
+      "wr": 0.36363636363636365,
+      "pf": 1.4236416610077627,
+      "sharpe": 13.871177159560224,
+      "pnl": 139,
+      "maxDD": 0.01702881691034545,
+      "pnlPerYrPace": 258
+    },
+    "verdict": "TRAIN_FAIL"
+  },
+  {
+    "symbol": "XRPUSDT",
+    "id": "xrp-liq-sweep-short-2h",
+    "label": "Liquidity Sweep Short 2h (swing variant, 2yr sample)",
+    "tf": "2h",
+    "direction": "short",
+    "entry": [
+      {
+        "type": "bearish_liq_sweep"
+      }
+    ],
+    "risk": {
+      "stopPct": 0.02,
+      "targetPct": 0.06
+    },
+    "train": {
+      "trades": 344,
+      "wr": 0.3488372093023256,
+      "pf": 1.2360821486691,
+      "sharpe": 8.088567009919664,
+      "pnl": 2705,
+      "maxDD": 0.17252338173102807,
+      "pnlPerYr": 1099
+    },
+    "fwdNative": {
+      "trades": 62,
+      "wr": 0.45161290322580644,
+      "pf": 1.6689922063004399,
+      "sharpe": 21.119997106866833,
+      "pnl": 1235,
+      "maxDD": 0.025738347618430323
+    },
+    "fwd5m": {
+      "trades": 62,
+      "wr": 0.45161290322580644,
+      "pf": 1.6689922063004399,
+      "sharpe": 21.119997106866833,
+      "pnl": 1235,
+      "maxDD": 0.025738347618430323,
+      "pnlPerYrPace": 2293
+    },
+    "verdict": "HOLDS"
+  },
+  {
+    "symbol": "ETHUSDT",
+    "id": "eth-liq-fvg-long-4h",
+    "label": "Liq Sweep + FVG Long (BEST LONG)",
+    "tf": "4h",
+    "direction": "long",
+    "entry": [
+      {
+        "type": "bullish_liq_fvg"
+      }
+    ],
+    "risk": {
+      "stopPct": 0.02,
+      "targetPct": 0.04
+    },
+    "train": {
+      "trades": 87,
+      "wr": 0.5402298850574713,
+      "pf": 2.188192699013128,
+      "sharpe": 35.51022056184526,
+      "pnl": 2782,
+      "maxDD": 0.03582687909362668,
+      "pnlPerYr": 1131
+    },
+    "fwdNative": {
+      "trades": 10,
+      "wr": 0.5,
+      "pf": 1.8827527526924297,
+      "sharpe": 27.54736993406953,
+      "pnl": 233,
+      "maxDD": 0.015514567279605025
+    },
+    "fwd5m": {
+      "trades": 10,
+      "wr": 0.5,
+      "pf": 1.8827527526924297,
+      "sharpe": 27.54736993406953,
+      "pnl": 233,
+      "maxDD": 0.015514567279605025,
+      "pnlPerYrPace": 433
+    },
+    "verdict": "HOLDS"
+  },
+  {
+    "symbol": "ETHUSDT",
+    "id": "eth-bearish-fvg-1h",
+    "label": "Bearish FVG Short",
+    "tf": "1h",
+    "direction": "short",
+    "entry": [
+      {
+        "type": "bearish_fvg"
+      }
+    ],
+    "risk": {
+      "stopPct": 0.02,
+      "targetPct": 0.02
+    },
+    "train": {
+      "trades": 832,
+      "wr": 0.5829326923076923,
+      "pf": 1.3514441580236327,
+      "sharpe": 13.562653580213242,
+      "pnl": 7757,
+      "maxDD": 0.057326452974889766,
+      "pnlPerYr": 3153
+    },
+    "fwdNative": {
+      "trades": 192,
+      "wr": 0.5833333333333334,
+      "pf": 1.3567544390011388,
+      "sharpe": 14.619785773224267,
+      "pnl": 1552,
+      "maxDD": 0.03148788562726689
+    },
+    "fwd5m": {
+      "trades": 192,
+      "wr": 0.5833333333333334,
+      "pf": 1.3567544390011388,
+      "sharpe": 14.619785773224267,
+      "pnl": 1552,
+      "maxDD": 0.03148788562726689,
+      "pnlPerYrPace": 2882
+    },
+    "verdict": "HOLDS"
+  },
+  {
+    "symbol": "ETHUSDT",
+    "id": "eth-liq-fvg-short-30m",
+    "label": "Liq Sweep + FVG Short",
+    "tf": "30m",
+    "direction": "short",
+    "entry": [
+      {
+        "type": "bearish_liq_fvg"
+      }
+    ],
+    "risk": {
+      "stopPct": 0.008,
+      "targetPct": 0.04
+    },
+    "train": {
+      "trades": 633,
+      "wr": 0.3080568720379147,
+      "pf": 1.3287750392728754,
+      "sharpe": 10.618496185366364,
+      "pnl": 3720,
+      "maxDD": 0.046517387582250797,
+      "pnlPerYr": 1512
+    },
+    "fwdNative": {
+      "trades": 122,
+      "wr": 0.32786885245901637,
+      "pf": 1.6711532132572238,
+      "sharpe": 18.59131961405801,
+      "pnl": 1212,
+      "maxDD": 0.022871842893393644
+    },
+    "fwd5m": {
+      "trades": 122,
+      "wr": 0.32786885245901637,
+      "pf": 1.6711532132572238,
+      "sharpe": 18.59131961405801,
+      "pnl": 1212,
+      "maxDD": 0.022871842893393644,
+      "pnlPerYrPace": 2250
+    },
+    "verdict": "HOLDS"
+  },
+  {
+    "symbol": "ETHUSDT",
+    "id": "eth-rsi-short-mr-1h",
+    "label": "RSI>80 Short MR",
+    "tf": "1h",
+    "direction": "short",
+    "entry": [
+      {
+        "type": "rsi_above",
+        "period": 14,
+        "value": 80
+      }
+    ],
+    "risk": {
+      "stopPct": 0.03,
+      "targetPct": 0.06
+    },
+    "train": {
+      "trades": 60,
+      "wr": 0.43333333333333335,
+      "pf": 0.8851917314772266,
+      "sharpe": -4.384308455628234,
+      "pnl": -255,
+      "maxDD": 0.09198973172017941,
+      "pnlPerYr": -104
+    },
+    "fwdNative": {
+      "trades": 13,
+      "wr": 0.5384615384615384,
+      "pf": 1.4686363269329354,
+      "sharpe": 15.28829739336244,
+      "pnl": 186,
+      "maxDD": 0.015345175344937576
+    },
+    "fwd5m": {
+      "trades": 13,
+      "wr": 0.5384615384615384,
+      "pf": 1.4686363269329354,
+      "sharpe": 15.28829739336244,
+      "pnl": 186,
+      "maxDD": 0.015345175344937576,
+      "pnlPerYrPace": 345
+    },
+    "verdict": "TRAIN_FAIL"
+  },
+  {
+    "symbol": "ETHUSDT",
+    "id": "eth-liq-sweep-short-2h",
+    "label": "Liquidity Sweep Short 2h (NEW — ETH had no plain liq-sweep entry before, weak but real)",
+    "tf": "2h",
+    "direction": "short",
+    "entry": [
+      {
+        "type": "bearish_liq_sweep"
+      }
+    ],
+    "risk": {
+      "stopPct": 0.01,
+      "targetPct": 0.03
+    },
+    "train": {
+      "trades": 516,
+      "wr": 0.30426356589147285,
+      "pf": 1.127435343415989,
+      "sharpe": 5.067073454414405,
+      "pnl": 1290,
+      "maxDD": 0.08726778758852077,
+      "pnlPerYr": 524
+    },
+    "fwdNative": {
+      "trades": 107,
+      "wr": 0.27102803738317754,
+      "pf": 0.9999144235901297,
+      "sharpe": 0.20193717989307775,
+      "pnl": 0,
+      "maxDD": 0.03749879892819339
+    },
+    "fwd5m": {
+      "trades": 107,
+      "wr": 0.27102803738317754,
+      "pf": 0.9999144235901297,
+      "sharpe": 0.20193717989307775,
+      "pnl": 0,
+      "maxDD": 0.03749879892819339,
+      "pnlPerYrPace": 0
+    },
+    "verdict": "FWD_FAIL"
+  },
+  {
+    "symbol": "SOLUSDT",
+    "id": "sol-bearish-fvg-1h",
+    "label": "Bearish FVG Short (NEW — was previously unprofitable on SOL)",
+    "tf": "1h",
+    "direction": "short",
+    "entry": [
+      {
+        "type": "bearish_fvg"
+      }
+    ],
+    "risk": {
+      "stopPct": 0.01,
+      "targetPct": 0.02
+    },
+    "train": {
+      "trades": 1242,
+      "wr": 0.4669887278582931,
+      "pf": 1.6171255046018236,
+      "sharpe": 20.719356016592023,
+      "pnl": 18019,
+      "maxDD": 0.046021240642615535,
+      "pnlPerYr": 7325
+    },
+    "fwdNative": {
+      "trades": 248,
+      "wr": 0.42338709677419356,
+      "pf": 1.3101423018153233,
+      "sharpe": 12.282100636247545,
+      "pnl": 1275,
+      "maxDD": 0.03562244267224032
+    },
+    "fwd5m": {
+      "trades": 248,
+      "wr": 0.4314516129032258,
+      "pf": 1.3541845598797067,
+      "sharpe": 13.776699030995921,
+      "pnl": 1447,
+      "maxDD": 0.03562244267224032,
+      "pnlPerYrPace": 2686
+    },
+    "verdict": "HOLDS"
+  },
+  {
+    "symbol": "SOLUSDT",
+    "id": "sol-liq-sweep-short-1h",
+    "label": "Liquidity Sweep Short (NEW — was previously unprofitable on SOL)",
+    "tf": "1h",
+    "direction": "short",
+    "entry": [
+      {
+        "type": "bearish_liq_sweep"
+      }
+    ],
+    "risk": {
+      "stopPct": 0.02,
+      "targetPct": 0.06
+    },
+    "train": {
+      "trades": 622,
+      "wr": 0.342443729903537,
+      "pf": 1.2244962015887957,
+      "sharpe": 8.252433603571843,
+      "pnl": 5672,
+      "maxDD": 0.10351564292791862,
+      "pnlPerYr": 2306
+    },
+    "fwdNative": {
+      "trades": 108,
+      "wr": 0.39814814814814814,
+      "pf": 1.33859082627085,
+      "sharpe": 12.091577782740336,
+      "pnl": 1189,
+      "maxDD": 0.047683573968235575
+    },
+    "fwd5m": {
+      "trades": 108,
+      "wr": 0.39814814814814814,
+      "pf": 1.33859082627085,
+      "sharpe": 12.091577782740336,
+      "pnl": 1189,
+      "maxDD": 0.047683573968235575,
+      "pnlPerYrPace": 2208
+    },
+    "verdict": "HOLDS"
+  },
+  {
+    "symbol": "SOLUSDT",
+    "id": "sol-liq-fvg-short-1h",
+    "label": "Liq Sweep + FVG Short (NEW — was previously unprofitable on SOL)",
+    "tf": "1h",
+    "direction": "short",
+    "entry": [
+      {
+        "type": "bearish_liq_fvg"
+      }
+    ],
+    "risk": {
+      "stopPct": 0.01,
+      "targetPct": 0.02
+    },
+    "train": {
+      "trades": 372,
+      "wr": 0.4838709677419355,
+      "pf": 1.701257447942669,
+      "sharpe": 23.822989184353002,
+      "pnl": 4278,
+      "maxDD": 0.02091545879574199,
+      "pnlPerYr": 1739
+    },
+    "fwdNative": {
+      "trades": 76,
+      "wr": 0.42105263157894735,
+      "pf": 1.3325240184231482,
+      "sharpe": 12.822354548708601,
+      "pnl": 393,
+      "maxDD": 0.03507306777380327
+    },
+    "fwd5m": {
+      "trades": 76,
+      "wr": 0.42105263157894735,
+      "pf": 1.3325240184231482,
+      "sharpe": 12.822354548708601,
+      "pnl": 393,
+      "maxDD": 0.03507306777380327,
+      "pnlPerYrPace": 729
+    },
+    "verdict": "HOLDS"
+  },
+  {
+    "symbol": "SOLUSDT",
+    "id": "sol-liq-fvg-long-1h",
+    "label": "Liq Sweep + FVG Long",
+    "tf": "1h",
+    "direction": "long",
+    "entry": [
+      {
+        "type": "bullish_liq_fvg"
+      }
+    ],
+    "risk": {
+      "stopPct": 0.01,
+      "targetPct": 0.02
+    },
+    "train": {
+      "trades": 390,
+      "wr": 0.45384615384615384,
+      "pf": 1.5080568377796209,
+      "sharpe": 18.300904785305153,
+      "pnl": 3298,
+      "maxDD": 0.024582187811471944,
+      "pnlPerYr": 1341
+    },
+    "fwdNative": {
+      "trades": 78,
+      "wr": 0.46153846153846156,
+      "pf": 1.5123032401810688,
+      "sharpe": 18.830823482062062,
+      "pnl": 604,
+      "maxDD": 0.018742431514288393
+    },
+    "fwd5m": {
+      "trades": 78,
+      "wr": 0.46153846153846156,
+      "pf": 1.5123032401810688,
+      "sharpe": 18.830823482062062,
+      "pnl": 604,
+      "maxDD": 0.018742431514288393,
+      "pnlPerYrPace": 1121
+    },
+    "verdict": "HOLDS"
+  },
+  {
+    "symbol": "SOLUSDT",
+    "id": "sol-ichimoku-below-4h",
+    "label": "Ichimoku Below Cloud Short 4h (NEW — SOL had no Ichimoku entry before)",
+    "tf": "4h",
+    "direction": "short",
+    "entry": [
+      {
+        "type": "ichimoku_below_cloud_short"
+      }
+    ],
+    "risk": {
+      "stopPct": 0.03,
+      "targetPct": 0.06
+    },
+    "train": {
+      "trades": 325,
+      "wr": 0.36923076923076925,
+      "pf": 1.0653045691795258,
+      "sharpe": 3.1877493679238222,
+      "pnl": 1050,
+      "maxDD": 0.13986007718160076,
+      "pnlPerYr": 427
+    },
+    "fwdNative": {
+      "trades": 62,
+      "wr": 0.4032258064516129,
+      "pf": 1.2279291001900832,
+      "sharpe": 9.464793952489138,
+      "pnl": 645,
+      "maxDD": 0.0909870918765663
+    },
+    "fwd5m": {
+      "trades": 62,
+      "wr": 0.4032258064516129,
+      "pf": 1.2279291001900832,
+      "sharpe": 9.464793952489138,
+      "pnl": 645,
+      "maxDD": 0.0909870918765663,
+      "pnlPerYrPace": 1198
+    },
+    "verdict": "HOLDS"
+  },
+  {
+    "symbol": "SOLUSDT",
+    "id": "sol-liq-sweep-short-2h",
+    "label": "Liquidity Sweep Short 2h (swing variant, weaker than 1h version)",
+    "tf": "2h",
+    "direction": "short",
+    "entry": [
+      {
+        "type": "bearish_liq_sweep"
+      }
+    ],
+    "risk": {
+      "stopPct": 0.03,
+      "targetPct": 0.05
+    },
+    "train": {
+      "trades": 352,
+      "wr": 0.4403409090909091,
+      "pf": 1.237537845197104,
+      "sharpe": 10.068268087571706,
+      "pnl": 4185,
+      "maxDD": 0.08893955389334225,
+      "pnlPerYr": 1701
+    },
+    "fwdNative": {
+      "trades": 63,
+      "wr": 0.5079365079365079,
+      "pf": 1.3433525743645747,
+      "sharpe": 13.209711808379028,
+      "pnl": 811,
+      "maxDD": 0.05268580229832478
+    },
+    "fwd5m": {
+      "trades": 63,
+      "wr": 0.5079365079365079,
+      "pf": 1.3433525743645747,
+      "sharpe": 13.209711808379028,
+      "pnl": 811,
+      "maxDD": 0.05268580229832478,
+      "pnlPerYrPace": 1506
+    },
+    "verdict": "HOLDS"
+  }
+]

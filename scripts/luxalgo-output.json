@@ -1,0 +1,618 @@
+{
+  "config": {
+    "leverage": 10,
+    "marginPerTradePct": 0.5,
+    "slippageBps": 3,
+    "feeBps": 5,
+    "maxHoldBars": 48,
+    "note": "robustness screen sizing — see reverify-realistic-size pattern for real numbers on survivors"
+  },
+  "symbols": {
+    "XRPUSDT": [
+      {
+        "label": "SuperTrend Bullish Flip Long",
+        "direction": "long",
+        "entry": [
+          {
+            "type": "supertrend_bullish_flip"
+          }
+        ],
+        "risk": {
+          "stopPct": 0.02,
+          "targetPct": 0.04
+        },
+        "metrics": {
+          "sharpe": 0,
+          "pf": 0,
+          "winRate": 0,
+          "trades": 0,
+          "pnlUsd": 0,
+          "maxDDPct": 0
+        },
+        "halfSampleCheck": {
+          "h1": {
+            "trades": 0,
+            "pnlUsd": 0
+          },
+          "h2": {
+            "trades": 0,
+            "pnlUsd": 0
+          },
+          "bothHalvesPositive": false
+        },
+        "verdict": "LOW_SAMPLE"
+      },
+      {
+        "label": "SuperTrend Bearish Flip Short",
+        "direction": "short",
+        "entry": [
+          {
+            "type": "supertrend_bearish_flip"
+          }
+        ],
+        "risk": {
+          "stopPct": 0.02,
+          "targetPct": 0.04
+        },
+        "metrics": {
+          "sharpe": 0,
+          "pf": 0,
+          "winRate": 0,
+          "trades": 0,
+          "pnlUsd": 0,
+          "maxDDPct": 0
+        },
+        "halfSampleCheck": {
+          "h1": {
+            "trades": 0,
+            "pnlUsd": 0
+          },
+          "h2": {
+            "trades": 0,
+            "pnlUsd": 0
+          },
+          "bothHalvesPositive": false
+        },
+        "verdict": "LOW_SAMPLE"
+      },
+      {
+        "label": "ADX Bullish Trend Long",
+        "direction": "long",
+        "entry": [
+          {
+            "type": "adx_bullish_trend",
+            "value": 25
+          }
+        ],
+        "risk": {
+          "stopPct": 0.02,
+          "targetPct": 0.04
+        },
+        "metrics": {
+          "sharpe": -10.02,
+          "pf": 0.794,
+          "winRate": 0.327,
+          "trades": 275,
+          "pnlUsd": -9977,
+          "maxDDPct": 0.999
+        },
+        "halfSampleCheck": {
+          "h1": {
+            "trades": 136,
+            "pnlUsd": -8777
+          },
+          "h2": {
+            "trades": 139,
+            "pnlUsd": -9795
+          },
+          "bothHalvesPositive": false
+        },
+        "verdict": "REGIME_FRAGILE"
+      },
+      {
+        "label": "ADX Bearish Trend Short",
+        "direction": "short",
+        "entry": [
+          {
+            "type": "adx_bearish_trend",
+            "value": 25
+          }
+        ],
+        "risk": {
+          "stopPct": 0.02,
+          "targetPct": 0.04
+        },
+        "metrics": {
+          "sharpe": 6.1,
+          "pf": 1,
+          "winRate": 0.409,
+          "trades": 320,
+          "pnlUsd": 18,
+          "maxDDPct": 0.89
+        },
+        "halfSampleCheck": {
+          "h1": {
+            "trades": 170,
+            "pnlUsd": -3499
+          },
+          "h2": {
+            "trades": 151,
+            "pnlUsd": 4861
+          },
+          "bothHalvesPositive": false
+        },
+        "verdict": "REGIME_FRAGILE"
+      },
+      {
+        "label": "Ichimoku Bullish Breakout Long",
+        "direction": "long",
+        "entry": [
+          {
+            "type": "ichimoku_bullish_breakout"
+          }
+        ],
+        "risk": {
+          "stopPct": 0.02,
+          "targetPct": 0.04
+        },
+        "metrics": {
+          "sharpe": -16.6,
+          "pf": 0.699,
+          "winRate": 0.291,
+          "trades": 127,
+          "pnlUsd": -9776,
+          "maxDDPct": 0.987
+        },
+        "halfSampleCheck": {
+          "h1": {
+            "trades": 59,
+            "pnlUsd": -7361
+          },
+          "h2": {
+            "trades": 68,
+            "pnlUsd": -9152
+          },
+          "bothHalvesPositive": false
+        },
+        "verdict": "REGIME_FRAGILE"
+      },
+      {
+        "label": "Ichimoku Bearish Breakout Short",
+        "direction": "short",
+        "entry": [
+          {
+            "type": "ichimoku_bearish_breakout"
+          }
+        ],
+        "risk": {
+          "stopPct": 0.02,
+          "targetPct": 0.04
+        },
+        "metrics": {
+          "sharpe": 15.3,
+          "pf": 1.21,
+          "winRate": 0.469,
+          "trades": 130,
+          "pnlUsd": 47482,
+          "maxDDPct": 0.627
+        },
+        "halfSampleCheck": {
+          "h1": {
+            "trades": 68,
+            "pnlUsd": 12185
+          },
+          "h2": {
+            "trades": 61,
+            "pnlUsd": 13661
+          },
+          "bothHalvesPositive": true
+        },
+        "verdict": "SURVIVES"
+      }
+    ],
+    "ETHUSDT": [
+      {
+        "label": "SuperTrend Bullish Flip Long",
+        "direction": "long",
+        "entry": [
+          {
+            "type": "supertrend_bullish_flip"
+          }
+        ],
+        "risk": {
+          "stopPct": 0.02,
+          "targetPct": 0.04
+        },
+        "metrics": {
+          "sharpe": 0,
+          "pf": 0,
+          "winRate": 0,
+          "trades": 0,
+          "pnlUsd": 0,
+          "maxDDPct": 0
+        },
+        "halfSampleCheck": {
+          "h1": {
+            "trades": 0,
+            "pnlUsd": 0
+          },
+          "h2": {
+            "trades": 0,
+            "pnlUsd": 0
+          },
+          "bothHalvesPositive": false
+        },
+        "verdict": "LOW_SAMPLE"
+      },
+      {
+        "label": "SuperTrend Bearish Flip Short",
+        "direction": "short",
+        "entry": [
+          {
+            "type": "supertrend_bearish_flip"
+          }
+        ],
+        "risk": {
+          "stopPct": 0.02,
+          "targetPct": 0.04
+        },
+        "metrics": {
+          "sharpe": 0,
+          "pf": 0,
+          "winRate": 0,
+          "trades": 0,
+          "pnlUsd": 0,
+          "maxDDPct": 0
+        },
+        "halfSampleCheck": {
+          "h1": {
+            "trades": 0,
+            "pnlUsd": 0
+          },
+          "h2": {
+            "trades": 0,
+            "pnlUsd": 0
+          },
+          "bothHalvesPositive": false
+        },
+        "verdict": "LOW_SAMPLE"
+      },
+      {
+        "label": "ADX Bullish Trend Long",
+        "direction": "long",
+        "entry": [
+          {
+            "type": "adx_bullish_trend",
+            "value": 25
+          }
+        ],
+        "risk": {
+          "stopPct": 0.02,
+          "targetPct": 0.04
+        },
+        "metrics": {
+          "sharpe": -8.7,
+          "pf": 0.834,
+          "winRate": 0.341,
+          "trades": 267,
+          "pnlUsd": -9949,
+          "maxDDPct": 0.998
+        },
+        "halfSampleCheck": {
+          "h1": {
+            "trades": 136,
+            "pnlUsd": -8382
+          },
+          "h2": {
+            "trades": 131,
+            "pnlUsd": -9655
+          },
+          "bothHalvesPositive": false
+        },
+        "verdict": "REGIME_FRAGILE"
+      },
+      {
+        "label": "ADX Bearish Trend Short",
+        "direction": "short",
+        "entry": [
+          {
+            "type": "adx_bearish_trend",
+            "value": 25
+          }
+        ],
+        "risk": {
+          "stopPct": 0.02,
+          "targetPct": 0.04
+        },
+        "metrics": {
+          "sharpe": 0.08,
+          "pf": 0.889,
+          "winRate": 0.372,
+          "trades": 312,
+          "pnlUsd": -9356,
+          "maxDDPct": 0.942
+        },
+        "halfSampleCheck": {
+          "h1": {
+            "trades": 164,
+            "pnlUsd": -9003
+          },
+          "h2": {
+            "trades": 147,
+            "pnlUsd": -3664
+          },
+          "bothHalvesPositive": false
+        },
+        "verdict": "REGIME_FRAGILE"
+      },
+      {
+        "label": "Ichimoku Bullish Breakout Long",
+        "direction": "long",
+        "entry": [
+          {
+            "type": "ichimoku_bullish_breakout"
+          }
+        ],
+        "risk": {
+          "stopPct": 0.02,
+          "targetPct": 0.04
+        },
+        "metrics": {
+          "sharpe": -1.19,
+          "pf": 0.835,
+          "winRate": 0.377,
+          "trades": 114,
+          "pnlUsd": -6847,
+          "maxDDPct": 0.827
+        },
+        "halfSampleCheck": {
+          "h1": {
+            "trades": 61,
+            "pnlUsd": -6462
+          },
+          "h2": {
+            "trades": 53,
+            "pnlUsd": -1089
+          },
+          "bothHalvesPositive": false
+        },
+        "verdict": "REGIME_FRAGILE"
+      },
+      {
+        "label": "Ichimoku Bearish Breakout Short",
+        "direction": "short",
+        "entry": [
+          {
+            "type": "ichimoku_bearish_breakout"
+          }
+        ],
+        "risk": {
+          "stopPct": 0.02,
+          "targetPct": 0.04
+        },
+        "metrics": {
+          "sharpe": 3.47,
+          "pf": 0.937,
+          "winRate": 0.369,
+          "trades": 122,
+          "pnlUsd": -3671,
+          "maxDDPct": 0.687
+        },
+        "halfSampleCheck": {
+          "h1": {
+            "trades": 60,
+            "pnlUsd": -5759
+          },
+          "h2": {
+            "trades": 61,
+            "pnlUsd": 6656
+          },
+          "bothHalvesPositive": false
+        },
+        "verdict": "REGIME_FRAGILE"
+      }
+    ],
+    "SOLUSDT": [
+      {
+        "label": "SuperTrend Bullish Flip Long",
+        "direction": "long",
+        "entry": [
+          {
+            "type": "supertrend_bullish_flip"
+          }
+        ],
+        "risk": {
+          "stopPct": 0.02,
+          "targetPct": 0.04
+        },
+        "metrics": {
+          "sharpe": 0,
+          "pf": 0,
+          "winRate": 0,
+          "trades": 0,
+          "pnlUsd": 0,
+          "maxDDPct": 0
+        },
+        "halfSampleCheck": {
+          "h1": {
+            "trades": 0,
+            "pnlUsd": 0
+          },
+          "h2": {
+            "trades": 0,
+            "pnlUsd": 0
+          },
+          "bothHalvesPositive": false
+        },
+        "verdict": "LOW_SAMPLE"
+      },
+      {
+        "label": "SuperTrend Bearish Flip Short",
+        "direction": "short",
+        "entry": [
+          {
+            "type": "supertrend_bearish_flip"
+          }
+        ],
+        "risk": {
+          "stopPct": 0.02,
+          "targetPct": 0.04
+        },
+        "metrics": {
+          "sharpe": 0,
+          "pf": 0,
+          "winRate": 0,
+          "trades": 0,
+          "pnlUsd": 0,
+          "maxDDPct": 0
+        },
+        "halfSampleCheck": {
+          "h1": {
+            "trades": 0,
+            "pnlUsd": 0
+          },
+          "h2": {
+            "trades": 0,
+            "pnlUsd": 0
+          },
+          "bothHalvesPositive": false
+        },
+        "verdict": "LOW_SAMPLE"
+      },
+      {
+        "label": "ADX Bullish Trend Long",
+        "direction": "long",
+        "entry": [
+          {
+            "type": "adx_bullish_trend",
+            "value": 25
+          }
+        ],
+        "risk": {
+          "stopPct": 0.02,
+          "targetPct": 0.04
+        },
+        "metrics": {
+          "sharpe": -3.33,
+          "pf": 0.959,
+          "winRate": 0.353,
+          "trades": 300,
+          "pnlUsd": -9833,
+          "maxDDPct": 0.997
+        },
+        "halfSampleCheck": {
+          "h1": {
+            "trades": 159,
+            "pnlUsd": -2683
+          },
+          "h2": {
+            "trades": 141,
+            "pnlUsd": -9729
+          },
+          "bothHalvesPositive": false
+        },
+        "verdict": "REGIME_FRAGILE"
+      },
+      {
+        "label": "ADX Bearish Trend Short",
+        "direction": "short",
+        "entry": [
+          {
+            "type": "adx_bearish_trend",
+            "value": 25
+          }
+        ],
+        "risk": {
+          "stopPct": 0.02,
+          "targetPct": 0.04
+        },
+        "metrics": {
+          "sharpe": 1.5,
+          "pf": 0.864,
+          "winRate": 0.367,
+          "trades": 365,
+          "pnlUsd": -9245,
+          "maxDDPct": 0.978
+        },
+        "halfSampleCheck": {
+          "h1": {
+            "trades": 185,
+            "pnlUsd": -9634
+          },
+          "h2": {
+            "trades": 180,
+            "pnlUsd": 10051
+          },
+          "bothHalvesPositive": false
+        },
+        "verdict": "REGIME_FRAGILE"
+      },
+      {
+        "label": "Ichimoku Bullish Breakout Long",
+        "direction": "long",
+        "entry": [
+          {
+            "type": "ichimoku_bullish_breakout"
+          }
+        ],
+        "risk": {
+          "stopPct": 0.02,
+          "targetPct": 0.04
+        },
+        "metrics": {
+          "sharpe": 5.94,
+          "pf": 0.994,
+          "winRate": 0.395,
+          "trades": 119,
+          "pnlUsd": -467,
+          "maxDDPct": 0.793
+        },
+        "halfSampleCheck": {
+          "h1": {
+            "trades": 61,
+            "pnlUsd": -1370
+          },
+          "h2": {
+            "trades": 56,
+            "pnlUsd": 3759
+          },
+          "bothHalvesPositive": false
+        },
+        "verdict": "REGIME_FRAGILE"
+      },
+      {
+        "label": "Ichimoku Bearish Breakout Short",
+        "direction": "short",
+        "entry": [
+          {
+            "type": "ichimoku_bearish_breakout"
+          }
+        ],
+        "risk": {
+          "stopPct": 0.02,
+          "targetPct": 0.04
+        },
+        "metrics": {
+          "sharpe": 3.42,
+          "pf": 0.934,
+          "winRate": 0.38,
+          "trades": 129,
+          "pnlUsd": -4015,
+          "maxDDPct": 0.734
+        },
+        "halfSampleCheck": {
+          "h1": {
+            "trades": 66,
+            "pnlUsd": -5619
+          },
+          "h2": {
+            "trades": 62,
+            "pnlUsd": 5246
+          },
+          "bothHalvesPositive": false
+        },
+        "verdict": "REGIME_FRAGILE"
+      }
+    ]
+  }
+}

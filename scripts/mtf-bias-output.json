@@ -1,0 +1,452 @@
+[
+  {
+    "symbol": "XRPUSDT",
+    "ltf": "5m",
+    "signal": "bearish_liq_sweep",
+    "direction": "short",
+    "ungated": {
+      "trades": 294,
+      "wr": 0.3673469387755102,
+      "pf": 1.0666593460469107,
+      "sharpe": 2.75859268961414,
+      "pnl": 169,
+      "maxDD": 0.04133110418533419
+    },
+    "gated": {
+      "trades": 220,
+      "wr": 0.38636363636363635,
+      "pf": 1.1610368939684903,
+      "sharpe": 6.270538608525325,
+      "pnl": 302,
+      "maxDD": 0.025840481829155527,
+      "h1": 401,
+      "h2": -104,
+      "verdict": "REGIME_FRAGILE"
+    }
+  },
+  {
+    "symbol": "XRPUSDT",
+    "ltf": "5m",
+    "signal": "bearish_fvg",
+    "direction": "short",
+    "ungated": {
+      "trades": 374,
+      "wr": 0.3663101604278075,
+      "pf": 1.0911534035360846,
+      "sharpe": 3.680258303545747,
+      "pnl": 297,
+      "maxDD": 0.03618572244021312
+    },
+    "gated": {
+      "trades": 287,
+      "wr": 0.3554006968641115,
+      "pf": 1.0660153114833526,
+      "sharpe": 2.7299377028095337,
+      "pnl": 168,
+      "maxDD": 0.027846259775011303,
+      "h1": 257,
+      "h2": -77,
+      "verdict": "REGIME_FRAGILE"
+    }
+  },
+  {
+    "symbol": "XRPUSDT",
+    "ltf": "5m",
+    "signal": "bullish_liq_fvg",
+    "direction": "long",
+    "ungated": {
+      "trades": 170,
+      "wr": 0.3176470588235294,
+      "pf": 0.7258257028989226,
+      "sharpe": -12.74142687388808,
+      "pnl": -417,
+      "maxDD": 0.04858434014250215
+    },
+    "gated": {
+      "trades": 39,
+      "wr": 0.28205128205128205,
+      "pf": 0.47530816199306536,
+      "sharpe": -31.242335562703275,
+      "pnl": -188,
+      "maxDD": 0.02205655430632012,
+      "h1": -158,
+      "h2": -30,
+      "verdict": "NET_NEGATIVE"
+    }
+  },
+  {
+    "symbol": "XRPUSDT",
+    "ltf": "15m",
+    "signal": "bearish_liq_sweep",
+    "direction": "short",
+    "ungated": {
+      "trades": 186,
+      "wr": 0.5053763440860215,
+      "pf": 1.5043832146819565,
+      "sharpe": 17.644856743126184,
+      "pnl": 1218,
+      "maxDD": 0.034960088085237526
+    },
+    "gated": {
+      "trades": 126,
+      "wr": 0.5158730158730159,
+      "pf": 1.5586451431590016,
+      "sharpe": 19.218954762475846,
+      "pnl": 888,
+      "maxDD": 0.028852772000186096,
+      "h1": 216,
+      "h2": 676,
+      "verdict": "SURVIVES"
+    }
+  },
+  {
+    "symbol": "XRPUSDT",
+    "ltf": "15m",
+    "signal": "bearish_fvg",
+    "direction": "short",
+    "ungated": {
+      "trades": 225,
+      "wr": 0.47555555555555556,
+      "pf": 1.2927850470744928,
+      "sharpe": 11.017265950572911,
+      "pnl": 882,
+      "maxDD": 0.027190548008765008
+    },
+    "gated": {
+      "trades": 155,
+      "wr": 0.43870967741935485,
+      "pf": 1.143488607065739,
+      "sharpe": 5.878199103567882,
+      "pnl": 312,
+      "maxDD": 0.025818817325194005,
+      "h1": 56,
+      "h2": 255,
+      "verdict": "SURVIVES"
+    }
+  },
+  {
+    "symbol": "XRPUSDT",
+    "ltf": "15m",
+    "signal": "bullish_liq_fvg",
+    "direction": "long",
+    "ungated": {
+      "trades": 128,
+      "wr": 0.3359375,
+      "pf": 0.6848717491634394,
+      "sharpe": -15.763290862361252,
+      "pnl": -617,
+      "maxDD": 0.06675016083066748
+    },
+    "gated": {
+      "trades": 42,
+      "wr": 0.30952380952380953,
+      "pf": 0.5488838231158778,
+      "sharpe": -25.85484598349097,
+      "pnl": -338,
+      "maxDD": 0.037314378869296345,
+      "h1": -191,
+      "h2": -150,
+      "verdict": "NET_NEGATIVE"
+    }
+  },
+  {
+    "symbol": "ETHUSDT",
+    "ltf": "5m",
+    "signal": "bearish_liq_sweep",
+    "direction": "short",
+    "ungated": {
+      "trades": 308,
+      "wr": 0.33766233766233766,
+      "pf": 0.8824690649933191,
+      "sharpe": -5.0209672129693566,
+      "pnl": -311,
+      "maxDD": 0.07316465476366955
+    },
+    "gated": {
+      "trades": 180,
+      "wr": 0.3333333333333333,
+      "pf": 0.9607080590162264,
+      "sharpe": -1.5392419592067828,
+      "pnl": -61,
+      "maxDD": 0.051073074982109924,
+      "h1": 45,
+      "h2": -108,
+      "verdict": "NET_NEGATIVE"
+    }
+  },
+  {
+    "symbol": "ETHUSDT",
+    "ltf": "5m",
+    "signal": "bearish_fvg",
+    "direction": "short",
+    "ungated": {
+      "trades": 370,
+      "wr": 0.40540540540540543,
+      "pf": 1.1574373669410352,
+      "sharpe": 6.096743626374118,
+      "pnl": 488,
+      "maxDD": 0.049528594252543065
+    },
+    "gated": {
+      "trades": 222,
+      "wr": 0.3918918918918919,
+      "pf": 1.2081843914231645,
+      "sharpe": 7.931260945892134,
+      "pnl": 399,
+      "maxDD": 0.027533584454660042,
+      "h1": 502,
+      "h2": -117,
+      "verdict": "REGIME_FRAGILE"
+    }
+  },
+  {
+    "symbol": "ETHUSDT",
+    "ltf": "5m",
+    "signal": "bullish_liq_fvg",
+    "direction": "long",
+    "ungated": {
+      "trades": 194,
+      "wr": 0.33505154639175255,
+      "pf": 0.8148890081558354,
+      "sharpe": -8.060420786725697,
+      "pnl": -313,
+      "maxDD": 0.032736724098547165
+    },
+    "gated": {
+      "trades": 89,
+      "wr": 0.38202247191011235,
+      "pf": 0.8761666723550361,
+      "sharpe": -5.2710372627512,
+      "pnl": -94,
+      "maxDD": 0.01090807348950025,
+      "h1": -95,
+      "h2": 1,
+      "verdict": "NET_NEGATIVE"
+    }
+  },
+  {
+    "symbol": "ETHUSDT",
+    "ltf": "15m",
+    "signal": "bearish_liq_sweep",
+    "direction": "short",
+    "ungated": {
+      "trades": 179,
+      "wr": 0.46368715083798884,
+      "pf": 1.2329168854651975,
+      "sharpe": 9.05777710905267,
+      "pnl": 561,
+      "maxDD": 0.04314262765511768
+    },
+    "gated": {
+      "trades": 116,
+      "wr": 0.4396551724137931,
+      "pf": 1.157082272435238,
+      "sharpe": 6.261423336016013,
+      "pnl": 245,
+      "maxDD": 0.03660402202532544,
+      "h1": 273,
+      "h2": -8,
+      "verdict": "REGIME_FRAGILE"
+    }
+  },
+  {
+    "symbol": "ETHUSDT",
+    "ltf": "15m",
+    "signal": "bearish_fvg",
+    "direction": "short",
+    "ungated": {
+      "trades": 233,
+      "wr": 0.4248927038626609,
+      "pf": 1.0989760717951622,
+      "sharpe": 4.23594037084765,
+      "pnl": 335,
+      "maxDD": 0.05355576483314088
+    },
+    "gated": {
+      "trades": 147,
+      "wr": 0.41496598639455784,
+      "pf": 1.110720273786795,
+      "sharpe": 4.644337795993377,
+      "pnl": 234,
+      "maxDD": 0.03720581261835013,
+      "h1": 96,
+      "h2": 172,
+      "verdict": "SURVIVES"
+    }
+  },
+  {
+    "symbol": "ETHUSDT",
+    "ltf": "15m",
+    "signal": "bullish_liq_fvg",
+    "direction": "long",
+    "ungated": {
+      "trades": 120,
+      "wr": 0.4083333333333333,
+      "pf": 0.8916904212434297,
+      "sharpe": -4.630239507311167,
+      "pnl": -185,
+      "maxDD": 0.03393593887119937
+    },
+    "gated": {
+      "trades": 44,
+      "wr": 0.4318181818181818,
+      "pf": 0.9803806987907612,
+      "sharpe": -0.6903435052965433,
+      "pnl": -13,
+      "maxDD": 0.0196434246307893,
+      "h1": -4,
+      "h2": -9,
+      "verdict": "NET_NEGATIVE"
+    }
+  },
+  {
+    "symbol": "SOLUSDT",
+    "ltf": "5m",
+    "signal": "bearish_liq_sweep",
+    "direction": "short",
+    "ungated": {
+      "trades": 318,
+      "wr": 0.36477987421383645,
+      "pf": 1.125961985602568,
+      "sharpe": 4.9849765632705285,
+      "pnl": 357,
+      "maxDD": 0.04059191307726853
+    },
+    "gated": {
+      "trades": 187,
+      "wr": 0.32620320855614976,
+      "pf": 1.0425074194458521,
+      "sharpe": 1.8452382055117513,
+      "pnl": 75,
+      "maxDD": 0.032361380019515586,
+      "h1": 79,
+      "h2": -28,
+      "verdict": "REGIME_FRAGILE"
+    }
+  },
+  {
+    "symbol": "SOLUSDT",
+    "ltf": "5m",
+    "signal": "bearish_fvg",
+    "direction": "short",
+    "ungated": {
+      "trades": 388,
+      "wr": 0.3865979381443299,
+      "pf": 1.2676356454142537,
+      "sharpe": 9.979060170353174,
+      "pnl": 937,
+      "maxDD": 0.03161248646915142
+    },
+    "gated": {
+      "trades": 229,
+      "wr": 0.3799126637554585,
+      "pf": 1.3237844439549302,
+      "sharpe": 11.805714886890268,
+      "pnl": 668,
+      "maxDD": 0.024102466793475295,
+      "h1": 532,
+      "h2": 76,
+      "verdict": "SURVIVES"
+    }
+  },
+  {
+    "symbol": "SOLUSDT",
+    "ltf": "5m",
+    "signal": "bullish_liq_fvg",
+    "direction": "long",
+    "ungated": {
+      "trades": 177,
+      "wr": 0.3502824858757062,
+      "pf": 0.9827560971700924,
+      "sharpe": -0.6139124565986742,
+      "pnl": -27,
+      "maxDD": 0.026803533996171972
+    },
+    "gated": {
+      "trades": 74,
+      "wr": 0.32432432432432434,
+      "pf": 0.8929782611015853,
+      "sharpe": -4.475083079812432,
+      "pnl": -72,
+      "maxDD": 0.01187000705996234,
+      "h1": -59,
+      "h2": -13,
+      "verdict": "NET_NEGATIVE"
+    }
+  },
+  {
+    "symbol": "SOLUSDT",
+    "ltf": "15m",
+    "signal": "bearish_liq_sweep",
+    "direction": "short",
+    "ungated": {
+      "trades": 204,
+      "wr": 0.4019607843137255,
+      "pf": 0.9864777863412695,
+      "sharpe": -0.4347576899005864,
+      "pnl": -42,
+      "maxDD": 0.05787860261137502
+    },
+    "gated": {
+      "trades": 115,
+      "wr": 0.41739130434782606,
+      "pf": 1.093959318376282,
+      "sharpe": 3.920219294801116,
+      "pnl": 152,
+      "maxDD": 0.03247900308595819,
+      "h1": 95,
+      "h2": 56,
+      "verdict": "SURVIVES"
+    }
+  },
+  {
+    "symbol": "SOLUSDT",
+    "ltf": "15m",
+    "signal": "bearish_fvg",
+    "direction": "short",
+    "ungated": {
+      "trades": 247,
+      "wr": 0.44129554655870445,
+      "pf": 1.234527670702042,
+      "sharpe": 9.245098561582918,
+      "pnl": 844,
+      "maxDD": 0.03841603046083387
+    },
+    "gated": {
+      "trades": 145,
+      "wr": 0.4482758620689655,
+      "pf": 1.2993941388610435,
+      "sharpe": 11.23221188739668,
+      "pnl": 600,
+      "maxDD": 0.025831617675580947,
+      "h1": 21,
+      "h2": 566,
+      "verdict": "SURVIVES"
+    }
+  },
+  {
+    "symbol": "SOLUSDT",
+    "ltf": "15m",
+    "signal": "bullish_liq_fvg",
+    "direction": "long",
+    "ungated": {
+      "trades": 102,
+      "wr": 0.47058823529411764,
+      "pf": 1.2944647785366499,
+      "sharpe": 10.889794959255271,
+      "pnl": 391,
+      "maxDD": 0.019531137960360864
+    },
+    "gated": {
+      "trades": 43,
+      "wr": 0.3953488372093023,
+      "pf": 1.0163408338495796,
+      "sharpe": 0.8660642146547605,
+      "pnl": 11,
+      "maxDD": 0.01995891558487383,
+      "h1": -141,
+      "h2": 155,
+      "verdict": "REGIME_FRAGILE"
+    }
+  }
+]

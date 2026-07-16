@@ -15,6 +15,8 @@
     "start": "node dist/tui/index.js",
     "dev": "tsx src/tui/index.ts",
     "benchmark": "tsx src/benchmark/cli.ts",
+    "paper-trade": "tsx scripts/paper-trade-runner.ts",
+    "paper-trade:tui": "tsx scripts/paper-trade-tui.tsx",
     "lint": "eslint src tests --ext .ts,.tsx",
     "format:check": "prettier --check src tests"
   },

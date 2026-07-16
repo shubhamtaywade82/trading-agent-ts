@@ -82,3 +82,124 @@ export function bollingerSeries(values: number[], period = 20, k = 2): Array<{ u
     i + 1 >= period ? bollingerBands(values.slice(0, i + 1), period, k) : { upper: NaN, middle: NaN, lower: NaN }
   );
 }
+
+// --- ATR (Average True Range) ---
+export type CandleHL = { high: number; low: number; close: number };
+
+export function atrSeries(candles: CandleHL[], period = 14): number[] {
+  const tr: number[] = [candles[0].high - candles[0].low];
+  for (let i = 1; i < candles.length; i++) {
+    const h = candles[i].high;
+    const l = candles[i].low;
+    const pc = candles[i - 1].close;
+    tr.push(Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc)));
+  }
+  const out: number[] = [];
+  for (let i = 0; i < candles.length; i++) {
+    if (i < period - 1) { out.push(NaN); continue; }
+    if (i === period - 1) {
+      out.push(tr.slice(0, period).reduce((s, v) => s + v, 0) / period);
+    } else {
+      out.push((out[i - 1] * (period - 1) + tr[i]) / period);
+    }
+  }
+  return out;
+}
+
+// --- SuperTrend (standard Pine Script `up`/`dn` band algorithm) ---
+// `lower` (support) only ratchets UP while price holds above it; `upper`
+// (resistance) only ratchets DOWN while price holds below it — each band is
+// evaluated against the PRIOR bar's band value, not recomputed fresh every
+// bar (a from-scratch hl2±mult*ATR band is almost never crossed by a single
+// bar's close, which silently produces zero trend flips ever).
+// Trend flips bullish when price closes above the prior resistance band,
+// bearish when it closes below the prior support band.
+export interface SuperTrendResult { trend: "up" | "down"; upper: number; lower: number; }
+export function superTrendSeries(candles: CandleHL[], atrPeriod = 10, multiplier = 3): SuperTrendResult[] {
+  const atr = atrSeries(candles, atrPeriod);
+  const out: SuperTrendResult[] = [];
+  let prevUpper = NaN, prevLower = NaN, trend: "up" | "down" = "up";
+  for (let i = 0; i < candles.length; i++) {
+    if (i < atrPeriod || isNaN(atr[i])) {
+      out.push({ trend: "up", upper: NaN, lower: NaN });
+      continue;
+    }
+    const hl2 = (candles[i].high + candles[i].low) / 2;
+    const band = atr[i] * multiplier;
+    let lower = hl2 - band;
+    let upper = hl2 + band;
+
+    if (!isNaN(prevLower) && candles[i - 1].close > prevLower) lower = Math.max(lower, prevLower);
+    if (!isNaN(prevUpper) && candles[i - 1].close < prevUpper) upper = Math.min(upper, prevUpper);
+
+    if (trend === "down" && candles[i].close > (isNaN(prevUpper) ? upper : prevUpper)) trend = "up";
+    else if (trend === "up" && candles[i].close < (isNaN(prevLower) ? lower : prevLower)) trend = "down";
+
+    out.push({ trend, upper, lower });
+    prevUpper = upper; prevLower = lower;
+  }
+  return out;
+}
+
+// --- ADX (Average Directional Index) + DI+/DI- ---
+export interface ADXResult { adx: number; plusDI: number; minusDI: number; }
+export function adxSeries(candles: CandleHL[], period = 14): ADXResult[] {
+  const n = candles.length;
+  const out: ADXResult[] = [{ adx: NaN, plusDI: NaN, minusDI: NaN }];
+  if (n < 2) return out;
+  const tr = [0]; const up = [0]; const dn = [0];
+  for (let i = 1; i < n; i++) {
+    const h = candles[i].high; const l = candles[i].low; const pc = candles[i - 1].close;
+    tr.push(Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc)));
+    const u = h - candles[i - 1].high;
+    const d = candles[i - 1].low - l;
+    up.push(u < 0 || u < d ? 0 : u);
+    dn.push(d < 0 || d < u ? 0 : d);
+  }
+  let sumTR = 0, sumUP = 0, sumDN = 0, sumDX = 0;
+  for (let i = 1; i < n; i++) {
+    sumTR += tr[i]; sumUP += up[i]; sumDN += dn[i];
+    if (i < period) { out.push({ adx: NaN, plusDI: NaN, minusDI: NaN }); continue; }
+    if (i > period) {
+      sumTR -= tr[i - period]; sumUP -= up[i - period]; sumDN -= dn[i - period];
+    }
+    const pDI = sumTR > 0 ? 100 * sumUP / sumTR : 0;
+    const mDI = sumTR > 0 ? 100 * sumDN / sumTR : 0;
+    const dx = (pDI + mDI) > 0 ? 100 * Math.abs(pDI - mDI) / (pDI + mDI) : 0;
+    if (i === period) { sumDX = dx; out.push({ adx: dx, plusDI: pDI, minusDI: mDI }); }
+    else { sumDX = (sumDX * (period - 1) + dx) / period; out.push({ adx: sumDX, plusDI: pDI, minusDI: mDI }); }
+  }
+  return out;
+}
+
+// --- Ichimoku Cloud (simplified) ---
+export interface IchimokuResult {
+  tenkan: number; kijun: number; senkouA: number; senkouB: number; cloud: "above" | "below" | "inside";
+}
+export function ichimokuSeries(candles: CandleHL[]): IchimokuResult[] {
+  const n = candles.length;
+  const out: IchimokuResult[] = [];
+  for (let i = 0; i < n; i++) {
+    if (i < 51) { out.push({ tenkan: NaN, kijun: NaN, senkouA: NaN, senkouB: NaN, cloud: "inside" }); continue; }
+    const h9 = Math.max(...candles.slice(i - 8, i + 1).map(c => c.high));
+    const l9 = Math.min(...candles.slice(i - 8, i + 1).map(c => c.low));
+    const tenkan = (h9 + l9) / 2;
+    const h26 = Math.max(...candles.slice(i - 25, i + 1).map(c => c.high));
+    const l26 = Math.min(...candles.slice(i - 25, i + 1).map(c => c.low));
+    const kijun = (h26 + l26) / 2;
+    const h52 = Math.max(...candles.slice(i - 51, i + 1).map(c => c.high));
+    const l52 = Math.min(...candles.slice(i - 51, i + 1).map(c => c.low));
+    const senkouB = (h52 + l52) / 2;
+    const senkouA = (tenkan + kijun) / 2;
+    let cloud: "above" | "below" | "inside";
+    if (i >= 26) {
+      const sA = out[i - 26]?.senkouA ?? senkouA;
+      const sB = out[i - 26]?.senkouB ?? senkouB;
+      cloud = candles[i].close > Math.max(sA, sB) ? "above" : candles[i].close < Math.min(sA, sB) ? "below" : "inside";
+    } else {
+      cloud = candles[i].close > Math.max(senkouA, senkouB) ? "above" : candles[i].close < Math.min(senkouA, senkouB) ? "below" : "inside";
+    }
+    out.push({ tenkan, kijun, senkouA, senkouB, cloud });
+  }
+  return out;
+}
