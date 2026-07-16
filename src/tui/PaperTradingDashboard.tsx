@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
-import { Box, Text, useApp, useInput, useStdout, measureElement, DOMElement } from "ink";
+import { Box, Text, useApp, useInput } from "ink";
 import { readFileSync, existsSync } from "fs";
 import { LivePaperRunner } from "../paper-trading/live-runner.js";
 import { BinanceStreamManager } from "../exchange/binance-stream.js";
@@ -64,12 +64,7 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, on
   analyst?: TradeAnalyst | null; onExit?: () => void;
 }): JSX.Element {
   const { exit } = useApp();
-  const { stdout } = useStdout();
   const [analystSummary, setAnalystSummary] = useState(analyst?.getLatestSummary() ?? null);
-  const [scrollOffset, setScrollOffset] = useState(0);
-  const [contentHeight, setContentHeight] = useState(0);
-  const [viewportHeight, setViewportHeight] = useState((stdout?.rows ?? 40) - 4); // minus header + footer + margins
-  const scrollRef = useRef<DOMElement | null>(null);
   const [rows, setRows] = useState<RowStatus[]>(runner.getStatus() as RowStatus[]);
   const [feed, setFeed] = useState<FeedEvent[]>(readLastJournalEvents(journalFile, 8));
   const [lastEval, setLastEval] = useState<EvalResult[]>([]);
@@ -131,29 +126,6 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, on
     return () => clearInterval(t);
   }, []);
 
-  // Terminal resize — keep the scroll viewport matched to actual rows.
-  useEffect(() => {
-    if (!stdout) return;
-    const onResize = () => setViewportHeight((stdout.rows ?? 40) - 4);
-    stdout.on("resize", onResize);
-    return () => { stdout.off("resize", onResize); };
-  }, [stdout]);
-
-  // Remeasure scrollable content height after every render (cheap — Yoga
-  // layout is already computed for paint; measureElement just reads it) so
-  // the scroll clamp always matches what's actually on screen right now.
-  useEffect(() => {
-    if (scrollRef.current) {
-      const { height } = measureElement(scrollRef.current);
-      if (height !== contentHeight) setContentHeight(height);
-    }
-  });
-
-  const maxScroll = Math.max(0, contentHeight - viewportHeight);
-  useEffect(() => {
-    if (scrollOffset > maxScroll) setScrollOffset(maxScroll);
-  }, [maxScroll, scrollOffset]);
-
   // Read-only LLM analyst — checks its own schedule (min trade count + min
   // interval, see trade-analyst.ts) and only calls the model when due. This
   // never touches runner/trading state; it only reads the journal file and
@@ -175,15 +147,7 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, on
         runner.stop();
         exit();
         if (onExit) onExit(); else process.exit(0);
-        return;
       }
-      const clamp = (n: number) => Math.max(0, Math.min(maxScroll, n));
-      if (key.downArrow || input === "j") setScrollOffset(s => clamp(s + 1));
-      else if (key.upArrow || input === "k") setScrollOffset(s => clamp(s - 1));
-      else if (key.pageDown) setScrollOffset(s => clamp(s + viewportHeight));
-      else if (key.pageUp) setScrollOffset(s => clamp(s - viewportHeight));
-      else if (input === "g") setScrollOffset(0);
-      else if (input === "G") setScrollOffset(maxScroll);
     });
   }
 
@@ -247,11 +211,6 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, on
         </Text>
         <Text color="gray">{clock.toLocaleTimeString()}</Text>
       </Box>
-
-      {/* Scrollable body — fixed-height clip, content shifted up by
-          scrollOffset. Header above and footer below stay pinned. */}
-      <Box height={viewportHeight} overflow="hidden">
-      <Box flexDirection="column" marginTop={-scrollOffset} ref={scrollRef}>
 
       {/* Price ticker strip */}
       <Box marginBottom={1}>
