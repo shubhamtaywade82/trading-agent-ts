@@ -4,6 +4,8 @@ import { readFileSync, existsSync } from "fs";
 import { LivePaperRunner } from "../paper-trading/live-runner.js";
 import { BinanceStreamManager } from "../exchange/binance-stream.js";
 import { TradeAnalyst } from "../paper-trading/trade-analyst.js";
+import { ReadinessMonitor, StrategyReadiness, PortfolioReadiness } from "../paper-trading/readiness.js";
+import { FillNotifier } from "../paper-trading/notifier.js";
 
 interface RowStatus {
   id: string; symbol: string; tf: string; direction: "long" | "short";
@@ -59,12 +61,14 @@ function Col({ width, align = "left", color, bold, children }: {
   );
 }
 
-export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, onExit }: {
+export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, readiness, fillNotifier, onExit }: {
   runner: LivePaperRunner; pollMs: number; journalFile: string;
-  analyst?: TradeAnalyst | null; onExit?: () => void;
+  analyst?: TradeAnalyst | null; readiness?: ReadinessMonitor | null; fillNotifier?: FillNotifier | null;
+  onExit?: () => void;
 }): JSX.Element {
   const { exit } = useApp();
   const [analystSummary, setAnalystSummary] = useState(analyst?.getLatestSummary() ?? null);
+  const [readinessResult, setReadinessResult] = useState<{ strategies: StrategyReadiness[]; portfolio: PortfolioReadiness } | null>(null);
   const [rows, setRows] = useState<RowStatus[]>(runner.getStatus() as RowStatus[]);
   const [feed, setFeed] = useState<FeedEvent[]>(readLastJournalEvents(journalFile, 8));
   const [lastEval, setLastEval] = useState<EvalResult[]>([]);
@@ -126,6 +130,15 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, on
     return () => clearInterval(t);
   }, []);
 
+  // Deterministic readiness gate (not LLM-judged, see readiness.ts) — run
+  // once on mount so the panel isn't blank until the first new fill.
+  useEffect(() => {
+    if (!readiness) return;
+    let cancelled = false;
+    readiness.check().then(rr => { if (!cancelled) setReadinessResult({ strategies: rr.strategies, portfolio: rr.portfolio }); });
+    return () => { cancelled = true; };
+  }, [readiness]);
+
   // Read-only LLM analyst — checks its own schedule (min trade count + min
   // interval, see trade-analyst.ts) and only calls the model when due. This
   // never touches runner/trading state; it only reads the journal file and
@@ -163,7 +176,14 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, on
           setLastEval(result.evaluations);
           setLastTick(new Date());
           setError(null);
-          if (result.fills > 0) setFeed(readLastJournalEvents(journalFile, 8));
+          if (result.fills > 0) {
+            setFeed(readLastJournalEvents(journalFile, 8));
+            void fillNotifier?.checkAndNotify();
+            if (readiness) {
+              const rr = await readiness.check();
+              setReadinessResult({ strategies: rr.strategies, portfolio: rr.portfolio });
+            }
+          }
         } catch (e) {
           setError((e as Error).message);
         }
@@ -232,6 +252,20 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, on
           );
         })}
       </Box>
+
+      {/* Readiness gate — deterministic (not LLM-judged), see readiness.ts.
+          Only strategies/pool clearing minTrades + PF + WR-vs-backtest bar. */}
+      {readinessResult && (readinessResult.portfolio.ready || readinessResult.strategies.some(s => s.ready)) && (
+        <Box borderStyle="double" borderColor="green" paddingX={1} marginBottom={1}>
+          <Text bold color="green">
+            🟢 {readinessResult.portfolio.ready ? "PORTFOLIO READY FOR LIVE" : "READY FOR LIVE"}: {" "}
+            {readinessResult.portfolio.ready
+              ? `${readinessResult.portfolio.readyCount}/${readinessResult.portfolio.evaluableCount} evaluable strategies passing`
+              : readinessResult.strategies.filter(s => s.ready).map(s => s.strategyId).join(", ")}
+            <Text color="gray"> (at current {runner.getPortfolio().leverage}x / {(runner.getPortfolio().marginPerTradePct*100).toFixed(0)}% sizing only)</Text>
+          </Text>
+        </Box>
+      )}
 
       {/* Portfolio — broker-style account balance rollup across all strategy buckets */}
       <Panel title="PORTFOLIO" borderColor="blueBright">

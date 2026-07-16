@@ -2,22 +2,29 @@
 // Autonomous paper trading — runs every strategy in strategies.json
 // continuously, no human input, until stopped (Ctrl+C or SIGTERM).
 //
-// Usage: npx tsx scripts/paper-trade-runner.ts [--poll-seconds=60] [--no-analyst]
+// Usage: npx tsx scripts/paper-trade-runner.ts [--poll-seconds=60] [--no-analyst] [--no-notify]
 import { LivePaperRunner } from "../src/paper-trading/live-runner.js";
 import { TradeAnalyst } from "../src/paper-trading/trade-analyst.js";
+import { ReadinessMonitor } from "../src/paper-trading/readiness.js";
+import { FillNotifier } from "../src/paper-trading/notifier.js";
 
 const pollArg = process.argv.find(a => a.startsWith("--poll-seconds="));
 const pollSeconds = pollArg ? Number(pollArg.split("=")[1]) : 60;
 const analystEnabled = !process.argv.includes("--no-analyst");
+const notifyEnabled = !process.argv.includes("--no-notify");
+const telegramConfigured = !!process.env.TELEGRAM_BOT_TOKEN && !!process.env.TELEGRAM_CHAT_ID;
 
 const runner = new LivePaperRunner();
 const analyst = analystEnabled ? new TradeAnalyst() : null;
+const readiness = new ReadinessMonitor({ notifyTelegram: notifyEnabled && telegramConfigured });
+const fillNotifier = notifyEnabled && telegramConfigured ? new FillNotifier({ journalFile: ".trading-agent/paper-trades.jsonl" }) : null;
 
 console.log("=== Autonomous Paper Trading Runner ===");
 console.log(`Poll interval: ${pollSeconds}s`);
 console.log(`State: .trading-agent/paper-state.json`);
 console.log(`Journal: .trading-agent/paper-trades.jsonl`);
 console.log(`AI analyst: ${analystEnabled ? "on (read-only, .trading-agent/paper-trading-insights.md)" : "off"}`);
+console.log(`Telegram alerts: ${notifyEnabled ? (telegramConfigured ? "on (readiness + fills)" : "off (TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID not set)") : "off (--no-notify)"}`);
 console.log(`Strategies loaded: ${runner.getStatus().length}\n`);
 
 function printStatus() {
@@ -45,10 +52,14 @@ function shutdown() {
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 
-runner.start(pollSeconds * 1000, (result) => {
+runner.start(pollSeconds * 1000, async (result) => {
   if (result.fills > 0) {
     console.log(`[${new Date().toISOString()}] tick: ${result.groupsChecked} groups, ${result.fills} fill(s)`);
     printStatus();
+    await fillNotifier?.checkAndNotify();
+    const { newlyReady, portfolioNewlyReady } = await readiness.check();
+    for (const s of newlyReady) console.log(`\n🟢 READY FOR LIVE: ${s.label} — ${s.trades} trades, WR ${(s.liveWinRate*100).toFixed(0)}%, PF ${s.livePf.toFixed(2)}, PnL $${s.totalPnl.toFixed(2)}`);
+    if (portfolioNewlyReady) console.log(`\n🟢🟢 PORTFOLIO READY FOR LIVE`);
   }
 }).catch(e => {
   console.error("Runner crashed:", e);

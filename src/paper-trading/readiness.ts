@@ -162,21 +162,23 @@ export class ReadinessMonitor {
   // cheap, pure computation over the journal, no network unless notifying).
   async check(): Promise<{ strategies: StrategyReadiness[]; portfolio: PortfolioReadiness; newlyReady: StrategyReadiness[]; portfolioNewlyReady: boolean }> {
     const { strategies, portfolio } = assessReadiness(this.cfg.journalFile, this.cfg.poolPath, this.cfg.criteria);
+    const sizing = loadSizingConfig(this.cfg.poolPath);
+    const sizingNote = `Validated at ${sizing.leverage}x leverage, ${(sizing.marginPerTradePct * 100).toFixed(0)}% margin/trade — "ready" means ready AT THESE SETTINGS ONLY, sizing up changes risk in ways never tested here.`;
     const notified = new Set(this.state.notifiedStrategyIds);
     const newlyReady = strategies.filter(s => s.ready && !notified.has(s.strategyId));
     const portfolioNewlyReady = portfolio.ready && !this.state.portfolioNotified;
 
     for (const s of newlyReady) {
       this.state.notifiedStrategyIds.push(s.strategyId);
-      this.log({ type: "strategy_ready", strategyId: s.strategyId, label: s.label, trades: s.trades, liveWinRate: s.liveWinRate, livePf: s.livePf, totalPnl: s.totalPnl });
-      const text = `🟢 READY FOR LIVE: ${s.label} (${s.strategyId})\n${s.trades} trades, WR ${(s.liveWinRate*100).toFixed(0)}%, PF ${s.livePf.toFixed(2)}, PnL $${s.totalPnl.toFixed(2)}`;
+      this.log({ type: "strategy_ready", strategyId: s.strategyId, label: s.label, trades: s.trades, liveWinRate: s.liveWinRate, livePf: s.livePf, totalPnl: s.totalPnl, leverage: sizing.leverage, marginPerTradePct: sizing.marginPerTradePct });
+      const text = `🟢 READY FOR LIVE: ${s.label} (${s.strategyId})\n${s.trades} trades, WR ${(s.liveWinRate*100).toFixed(0)}%, PF ${s.livePf.toFixed(2)}, PnL $${s.totalPnl.toFixed(2)}\n${sizingNote}`;
       if (this.cfg.notifyBell) terminalBell();
       if (this.cfg.notifyTelegram) await sendTelegram(text);
     }
     if (portfolioNewlyReady) {
       this.state.portfolioNotified = true;
-      this.log({ type: "portfolio_ready", readyCount: portfolio.readyCount, evaluableCount: portfolio.evaluableCount, readyStrategyIds: portfolio.readyStrategyIds });
-      const text = `🟢🟢 PORTFOLIO READY FOR LIVE: ${portfolio.readyCount}/${portfolio.evaluableCount} evaluable strategies passing (${portfolio.totalStrategies} total in pool)`;
+      this.log({ type: "portfolio_ready", readyCount: portfolio.readyCount, evaluableCount: portfolio.evaluableCount, readyStrategyIds: portfolio.readyStrategyIds, leverage: sizing.leverage, marginPerTradePct: sizing.marginPerTradePct });
+      const text = `🟢🟢 PORTFOLIO READY FOR LIVE: ${portfolio.readyCount}/${portfolio.evaluableCount} evaluable strategies passing (${portfolio.totalStrategies} total in pool)\n${sizingNote}`;
       if (this.cfg.notifyBell) terminalBell();
       if (this.cfg.notifyTelegram) await sendTelegram(text);
     }
