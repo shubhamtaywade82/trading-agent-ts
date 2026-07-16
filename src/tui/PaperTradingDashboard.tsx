@@ -100,35 +100,53 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
         .then(() => setWsStatus(s => ({ ...s, [sym]: "live" })))
         .catch(() => setWsStatus(s => ({ ...s, [sym]: "error" })));
     }
-    const priceInterval = setInterval(() => {
-      setLivePrices(prev => {
-        const next = { ...prev };
-        for (const sym of symbols) {
-          const tick = stream.getLatest(sym);
-          if (tick) next[sym] = { price: tick.price, time: tick.time, changePct24h: tick.changePct24h };
-        }
-        return next;
-      });
-      setWsStatus(prev => {
-        const next = { ...prev };
-        for (const sym of symbols) {
-          if (next[sym] === "error") continue;
-          const tick = stream.getLatest(sym);
-          next[sym] = tick && Date.now() - tick.time < 15_000 ? "live" : next[sym] === "connecting" ? "connecting" : "stale";
-        }
-        return next;
-      });
-    }, 1000);
     return () => {
-      clearInterval(priceInterval);
       for (const sym of symbols) stream.unsubscribe(sym);
     };
   }, [runner]);
 
+  // Single 1s heartbeat driving every per-second concern (clock, countdown,
+  // WS price poll) — was 3 separate setInterval callbacks each calling
+  // setState independently, which Ink/React would render as 2-3 separate
+  // full-terminal repaints per second (visible flicker). One interval means
+  // one batched render per second. Also skips setState entirely when a
+  // symbol's price/status hasn't actually changed, so the diff Ink repaints
+  // stays as small as possible even on the one render/sec that does happen.
   useEffect(() => {
-    const t = setInterval(() => setClock(new Date()), 1000);
+    const t = setInterval(() => {
+      setClock(new Date());
+      setNextTickIn(s => (s > 0 ? s - 1 : 0));
+
+      const stream = streamRef.current;
+      const symbols = runner.getSymbols();
+      if (!stream) return;
+
+      setLivePrices(prev => {
+        let changed = false;
+        const next = { ...prev };
+        for (const sym of symbols) {
+          const tick = stream.getLatest(sym);
+          if (tick && (prev[sym]?.price !== tick.price || prev[sym]?.time !== tick.time)) {
+            next[sym] = { price: tick.price, time: tick.time, changePct24h: tick.changePct24h };
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+      setWsStatus(prev => {
+        let changed = false;
+        const next = { ...prev };
+        for (const sym of symbols) {
+          if (next[sym] === "error") continue;
+          const tick = stream.getLatest(sym);
+          const computed = tick && Date.now() - tick.time < 15_000 ? "live" : next[sym] === "connecting" ? "connecting" : "stale";
+          if (computed !== prev[sym]) { next[sym] = computed; changed = true; }
+        }
+        return changed ? next : prev;
+      });
+    }, 1000);
     return () => clearInterval(t);
-  }, []);
+  }, [runner]);
 
   // Deterministic readiness gate (not LLM-judged, see readiness.ts) — run
   // once on mount so the panel isn't blank until the first new fill.
@@ -166,7 +184,6 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
 
   useEffect(() => {
     let stopped = false;
-    let countdown: ReturnType<typeof setInterval>;
     async function loop() {
       while (!stopped) {
         setTicking(true);
@@ -194,8 +211,7 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
       }
     }
     void loop();
-    countdown = setInterval(() => setNextTickIn(s => (s > 0 ? s - 1 : 0)), 1000);
-    return () => { stopped = true; clearInterval(countdown); };
+    return () => { stopped = true; };
   }, [runner, pollMs]);
 
   const unrealized = (r: RowStatus): number | null => {
