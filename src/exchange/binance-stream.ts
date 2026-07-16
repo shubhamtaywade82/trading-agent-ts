@@ -4,6 +4,7 @@ export interface Tick {
   symbol: string;
   price: number;
   time: number;
+  changePct24h?: number; // 24h % change from the @ticker stream, if available
 }
 
 export type AlertCondition = "above" | "below";
@@ -58,7 +59,7 @@ export class BinanceStreamManager {
       });
       ws.on("message", (data: Buffer) => {
         const msg = JSON.parse(data.toString());
-        const tick: Tick = { symbol: sym, price: Number(msg.c), time: Date.now() };
+        const tick: Tick = { symbol: sym, price: Number(msg.c), time: Date.now(), changePct24h: Number(msg.P) };
         this.latest.set(sym, tick);
         this.checkAlerts(tick);
       });
