@@ -566,6 +566,344 @@ function runFuturesBacktest(
   };
 }
 
+// ── SMC/ICT market structure helpers (shared by signal-fusion tool) ──
+function smcSwingHighs(closes: number[], lookback: number): boolean[] {
+  return closes.map((_, i) => {
+    if (i < lookback || i >= closes.length - lookback) return false;
+    for (let j = i - lookback; j <= i + lookback; j++) if (j !== i && closes[j] >= closes[i]) return false;
+    return true;
+  });
+}
+function smcSwingLows(closes: number[], lookback: number): boolean[] {
+  return closes.map((_, i) => {
+    if (i < lookback || i >= closes.length - lookback) return false;
+    for (let j = i - lookback; j <= i + lookback; j++) if (j !== i && closes[j] <= closes[i]) return false;
+    return true;
+  });
+}
+function smcBullishOB(candles: Candle[], i: number, lb: number): number | null {
+  if (i < 2) return null;
+  const body = Math.abs(candles[i].close - candles[i].open);
+  const range = candles[i].high - candles[i].low;
+  if (!(body > range * 0.6 && candles[i].close > candles[i - 1].high)) return null;
+  for (let j = i - 1; j >= Math.max(1, i - lb); j--) if (candles[j].close < candles[j].open) return j;
+  return null;
+}
+function smcBearishOB(candles: Candle[], i: number, lb: number): number | null {
+  if (i < 2) return null;
+  const body = Math.abs(candles[i].close - candles[i].open);
+  const range = candles[i].high - candles[i].low;
+  if (!(body > range * 0.6 && candles[i].close < candles[i - 1].low)) return null;
+  for (let j = i - 1; j >= Math.max(1, i - lb); j--) if (candles[j].close > candles[j].open) return j;
+  return null;
+}
+function smcBullishFVG(candles: Candle[], i: number): boolean {
+  if (i < 1 || i >= candles.length - 1) return false;
+  return candles[i - 1].high < candles[i + 1].low;
+}
+function smcBearishFVG(candles: Candle[], i: number): boolean {
+  if (i < 1 || i >= candles.length - 1) return false;
+  return candles[i - 1].low > candles[i + 1].high;
+}
+function smcBullishLiqSweep(candles: Candle[], lows: boolean[], i: number, lb: number): boolean {
+  if (i < 1) return false;
+  for (let j = i - 1; j >= Math.max(0, i - lb); j--)
+    if (lows[j] && candles[i - 1].low < candles[j].low && candles[i].close > candles[j].low) return true;
+  return false;
+}
+function smcBearishLiqSweep(candles: Candle[], highs: boolean[], i: number, lb: number): boolean {
+  if (i < 1) return false;
+  for (let j = i - 1; j >= Math.max(0, i - lb); j--)
+    if (highs[j] && candles[i - 1].high > candles[j].high && candles[i].close < candles[j].high) return true;
+  return false;
+}
+function smcDisplacement(candles: Candle[], i: number): { dir: "up" | "down"; strength: number } | null {
+  if (i < 1) return null;
+  const body = Math.abs(candles[i].close - candles[i].open);
+  const avg = candles.slice(Math.max(0, i - 20), i).reduce((s, c) => s + Math.abs(c.close - c.open), 0) / 20;
+  if (body > avg * 1.5 && candles[i].close > candles[i - 1].high) return { dir: "up", strength: body / avg };
+  if (body > avg * 1.5 && candles[i].close < candles[i - 1].low) return { dir: "down", strength: body / avg };
+  return null;
+}
+
+export class BinanceSignalFusionTool extends Tool {
+  get name(): string { return "binance_signal_fusion"; }
+  get description(): string {
+    return (
+      "Multi-strategy signal fusion backtest. Runs ALL strategies per symbol in parallel. " +
+      "First strategy to trigger enters the trade. Additional same-side signals while in position " +
+      "add confluence (increase position size). Tracks per-strategy contribution and confluence events."
+    );
+  }
+  get tags(): string[] { return ["binance", "backtest", "fusion", "multi-strategy", "quant-research"]; }
+  get parameters(): Record<string, unknown> {
+    return {
+      type: "object",
+      properties: {
+        strategies: {
+          type: "object",
+          description: "Keys = symbol, value = array of strategy configs",
+          properties: {},
+        },
+        initialCapital: { type: "number", default: 10000 },
+        leverage: { type: "number", default: 10 },
+        marginPerTradePct: { type: "number", default: 0.5 },
+        confluentAddPct: { type: "number", default: 0.5, description: "Additional margin fraction on confluence signal" },
+        interval: { type: "string", default: "1h" },
+        startTime: { type: "number" },
+        endTime: { type: "number" },
+      },
+      required: ["strategies"],
+    };
+  }
+  async call(args: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const strategies = args.strategies as Record<string, any[]>;
+    const initialCapital = Number(args.initialCapital ?? 10000);
+    const leverage = Number(args.leverage ?? 10);
+    const marginPerTradePct = Number(args.marginPerTradePct ?? 0.5);
+    const confluentAddPct = Number(args.confluentAddPct ?? 0.5);
+    const interval = String(args.interval ?? "1h");
+    const endTime = Number(args.endTime ?? Date.now());
+    const startTime = Number(args.startTime ?? (endTime - 365 * 24 * 60 * 60 * 1000));
+
+    const symbolData: Record<string, Candle[]> = {};
+    for (const sym of Object.keys(strategies)) {
+      const fetched = await fetchCandlesRange(sym, interval, startTime, endTime);
+      if ("error" in fetched) return fetched;
+      symbolData[sym] = fetched.candles;
+    }
+
+    // ── Pre-compute ALL indicator arrays per symbol (O(n) pass) ──
+    type PreComputed = {
+      closes: number[]; sh: boolean[]; sl: boolean[];
+      rsi: Record<number, (number | undefined)[]>;
+      macd: { macd: number; signal: number }[];
+      bb: { upper: number; lower: number; middle: number }[];
+      ema: Record<number, number[]>;
+      ob_bull: boolean[]; ob_bear: boolean[];
+      fvg_bull: boolean[]; fvg_bear: boolean[];
+      disp_bull: boolean[]; disp_bear: boolean[];
+      liq_bull: boolean[]; liq_bear: boolean[];
+      liqob_bull: boolean[]; liqob_bear: boolean[];
+      liqfvg_bull: boolean[]; liqfvg_bear: boolean[];
+      htfShort?: boolean[]; htfLong?: boolean[];
+    };
+    const pre: Record<string, PreComputed> = {};
+
+    for (const [sym, candles] of Object.entries(symbolData)) {
+      const closes = candles.map(c => c.close);
+      const n = closes.length;
+      const sh = smcSwingHighs(closes, 5);
+      const sl = smcSwingLows(closes, 5);
+
+      const needRsi = new Set<number>();
+      const needEma = new Set<number>();
+      for (const s of (strategies[sym] || [])) {
+        if (s.signalType === "rsi_above" || s.signalType === "rsi_below") needRsi.add(s.signalPeriod ?? 14);
+        if (s.signalType === "price_above_ema" || s.signalType === "price_below_ema") needEma.add(s.signalPeriod ?? 20);
+      }
+      const rsi: Record<number, (number | undefined)[]> = {};
+      for (const p of needRsi) rsi[p] = rsiSeries(closes, p) as (number | undefined)[];
+
+      const macd = macdSeries(closes) as { macd: number; signal: number }[];
+      const bb = bollingerSeries(closes) as { upper: number; lower: number; middle: number }[];
+
+      const ema: Record<number, number[]> = {};
+      for (const p of needEma) {
+        const raw = emaSeries(closes, p) as number[];
+        ema[p] = [...Array(n - raw.length).fill(NaN), ...raw];
+      }
+
+      const ob_bull = new Array<boolean>(n).fill(false);
+      const ob_bear = new Array<boolean>(n).fill(false);
+      const fvg_bull = new Array<boolean>(n).fill(false);
+      const fvg_bear = new Array<boolean>(n).fill(false);
+      const disp_bull = new Array<boolean>(n).fill(false);
+      const disp_bear = new Array<boolean>(n).fill(false);
+      const liq_bull = new Array<boolean>(n).fill(false);
+      const liq_bear = new Array<boolean>(n).fill(false);
+      const liqob_bull = new Array<boolean>(n).fill(false);
+      const liqob_bear = new Array<boolean>(n).fill(false);
+      const liqfvg_bull = new Array<boolean>(n).fill(false);
+      const liqfvg_bear = new Array<boolean>(n).fill(false);
+
+      for (let i = 0; i < n; i++) {
+        const oB = smcBullishOB(candles, i, 10) !== null;
+        const oS = smcBearishOB(candles, i, 10) !== null;
+        ob_bull[i] = oB; ob_bear[i] = oS;
+        fvg_bull[i] = smcBullishFVG(candles, i);
+        fvg_bear[i] = smcBearishFVG(candles, i);
+        const d = smcDisplacement(candles, i);
+        disp_bull[i] = d?.dir === "up"; disp_bear[i] = d?.dir === "down";
+        liq_bull[i] = smcBullishLiqSweep(candles, sl, i, 20);
+        liq_bear[i] = smcBearishLiqSweep(candles, sh, i, 20);
+        liqob_bull[i] = liq_bull[i] && oB;
+        liqob_bear[i] = liq_bear[i] && oS;
+        liqfvg_bull[i] = liq_bull[i] && fvg_bull[i];
+        liqfvg_bear[i] = liq_bear[i] && fvg_bear[i];
+      }
+
+      const extra: Partial<PreComputed> = {};
+      for (const s of (strategies[sym] || [])) {
+        if (s.signalType === "bearish_htf_trend_short") {
+          extra.htfShort = new Array(n).fill(false);
+          for (let i = 50; i < n; i++) {
+            const avg = (closes[i - 1] + closes[i - 2] + closes[i - 3] + closes[i - 4] + closes[i - 5]) / 5;
+            extra.htfShort[i] = closes[i] < avg * 0.98 && ob_bear[i];
+          }
+        }
+        if (s.signalType === "bullish_htf_trend_long") {
+          extra.htfLong = new Array(n).fill(false);
+          for (let i = 50; i < n; i++) {
+            const avg = (closes[i - 1] + closes[i - 2] + closes[i - 3] + closes[i - 4] + closes[i - 5]) / 5;
+            extra.htfLong[i] = closes[i] > avg * 1.02 && ob_bull[i];
+          }
+        }
+      }
+
+      pre[sym] = { closes, sh, sl, rsi, macd, bb, ema, ob_bull, ob_bear, fvg_bull, fvg_bear, disp_bull, disp_bear, liq_bull, liq_bear, liqob_bull, liqob_bear, liqfvg_bull, liqfvg_bear, ...extra };
+    }
+
+    const positions: Record<string, any> = {};
+    for (const sym of Object.keys(strategies)) positions[sym] = null;
+
+    const eqCurve: number[] = [initialCapital];
+    let capital = initialCapital;
+    const tradeLog: any[] = [];
+    const stratCounts: Record<string, number> = {};
+    const confluences: Record<string, number> = {};
+    const feeFrac = 5 / 10000;
+    const maxLen = Math.max(...Object.values(symbolData).map(c => c.length));
+
+    for (let i = 50; i < maxLen; i++) {
+      if (i % 10 === 0) eqCurve.push(capital);
+      for (const [sym, candles] of Object.entries(symbolData)) {
+        if (i >= candles.length) continue;
+        const p = pre[sym];
+        const stratList = strategies[sym] || [];
+
+        const triggered: { strat: any; dir: string }[] = [];
+        for (const s of stratList) {
+          const sig = s.signalType; const per = s.signalPeriod ?? 14; const val = s.signalValue;
+          let hit = false;
+
+          if (sig === "rsi_above") { const a = p.rsi[per]; hit = a?.[i] !== undefined && !isNaN(a[i]!) && a[i]! > (val ?? 70); }
+          else if (sig === "rsi_below") { const a = p.rsi[per]; hit = a?.[i] !== undefined && !isNaN(a[i]!) && a[i]! < (val ?? 30); }
+          else if (sig === "macd_bearish_cross") { const c = p.macd[i]; const v = p.macd[i - 1]; hit = !!c && !!v && !isNaN(c.macd) && !isNaN(v.macd) && v.macd >= v.signal && c.macd < c.signal; }
+          else if (sig === "macd_bullish_cross") { const c = p.macd[i]; const v = p.macd[i - 1]; hit = !!c && !!v && !isNaN(c.macd) && !isNaN(v.macd) && v.macd <= v.signal && c.macd > c.signal; }
+          else if (sig === "bollinger_touch_upper") { const b = p.bb[i]; hit = !!b && !isNaN(b.upper) && candles[i].close >= b.upper; }
+          else if (sig === "bollinger_touch_lower") { const b = p.bb[i]; hit = !!b && !isNaN(b.lower) && candles[i].close <= b.lower; }
+          else if (sig === "price_above_ema") { const a = p.ema[per]; hit = a?.[i] !== undefined && !isNaN(a[i]) && candles[i].close > a[i]; }
+          else if (sig === "price_below_ema") { const a = p.ema[per]; hit = a?.[i] !== undefined && !isNaN(a[i]) && candles[i].close < a[i]; }
+          else if (sig === "bearish_ob") hit = p.ob_bear[i];
+          else if (sig === "bullish_ob") hit = p.ob_bull[i];
+          else if (sig === "bearish_fvg") hit = p.fvg_bear[i];
+          else if (sig === "bullish_fvg") hit = p.fvg_bull[i];
+          else if (sig === "bearish_liq_sweep") hit = p.liq_bear[i];
+          else if (sig === "bullish_liq_sweep") hit = p.liq_bull[i];
+          else if (sig === "bearish_displacement") hit = p.disp_bear[i];
+          else if (sig === "bullish_displacement") hit = p.disp_bull[i];
+          else if (sig === "bearish_liq_ob") hit = p.liqob_bear[i];
+          else if (sig === "bullish_liq_ob") hit = p.liqob_bull[i];
+          else if (sig === "bearish_liq_fvg") hit = p.liqfvg_bear[i];
+          else if (sig === "bullish_liq_fvg") hit = p.liqfvg_bull[i];
+          else if (sig === "bearish_bos_displacement") hit = p.disp_bear[i];
+          else if (sig === "bullish_bos_displacement") hit = p.disp_bull[i];
+          else if (sig === "bearish_htf_trend_short") hit = p.htfShort?.[i] ?? false;
+          else if (sig === "bullish_htf_trend_long") hit = p.htfLong?.[i] ?? false;
+
+          if (hit) triggered.push({ strat: s, dir: s.direction });
+        }
+
+        if (triggered.length === 0) continue;
+
+        const pos = positions[sym];
+        if (!pos) {
+          const t = triggered[0];
+          const ep = candles[i].close;
+          if (capital <= 0) continue;
+          const baseMargin = Math.min(capital * marginPerTradePct, capital * 0.5);
+          const notional = baseMargin * leverage;
+          const qty = notional / ep;
+          const dir = t.dir;
+          const sp = dir === "long" ? ep * (1 - t.strat.stopPct) : ep * (1 + t.strat.stopPct);
+          const tp = dir === "long" ? ep * (1 + t.strat.targetPct) : ep * (1 - t.strat.targetPct);
+          const liq = dir === "long" ? ep * (1 - 1 / leverage + 0.005) : ep * (1 + 1 / leverage - 0.005);
+
+          positions[sym] = { direction: dir, entryPrice: ep, entryIdx: i, margin: baseMargin, notional, qty, stopPrice: sp, targetPrice: tp, liqPrice: liq, baseMargin, confluences: [], entryStrat: t.strat.id || t.strat.label };
+          stratCounts[t.strat.id || t.strat.label] = (stratCounts[t.strat.id || t.strat.label] || 0) + 1;
+          tradeLog.push({ type: "entry", sym, time: new Date(candles[i].openTime).toISOString(), dir, price: ep, strat: t.strat.label, margin: baseMargin });
+        } else {
+          const sameSide = triggered.filter(t => t.dir === pos.direction);
+          for (const t of sameSide) {
+            const sig = t.strat.signalType;
+            const isTrivialFilter = sig === "price_below_ema" || sig === "price_above_ema" || sig === "bollinger_touch_upper" || sig === "bollinger_touch_lower";
+            if (isTrivialFilter) continue;
+            const key = `confluence:${t.strat.label}`;
+            confluences[key] = (confluences[key] || 0) + 1;
+            if (pos.confluences.length < 3) {
+              const addMargin = pos.baseMargin * confluentAddPct;
+              const addNotional = addMargin * leverage;
+              pos.margin += addMargin;
+              pos.notional += addNotional;
+              pos.qty += addNotional / candles[i].close;
+              pos.confluences.push(t.strat.label);
+              tradeLog.push({ type: "confluence_add", sym, time: new Date(candles[i].openTime).toISOString(), dir: pos.direction, price: candles[i].close, strat: t.strat.label, addMargin });
+            }
+          }
+        }
+      }
+
+      for (const [sym, pos] of Object.entries(positions)) {
+        if (!pos) continue;
+        const candles = symbolData[sym];
+        if (i >= candles.length) continue;
+        const bar = candles[i];
+        const dir = pos.direction;
+        const hitLiq = dir === "long" ? bar.low <= pos.liqPrice : bar.high >= pos.liqPrice;
+        const hitStop = dir === "long" ? bar.low <= pos.stopPrice : bar.high >= pos.stopPrice;
+        const hitTarget = dir === "long" ? bar.high >= pos.targetPrice : bar.low <= pos.targetPrice;
+
+        if (hitLiq || hitStop || hitTarget || i - pos.entryIdx >= 48) {
+          let xp: number; let reason: string;
+          if (hitLiq) { xp = pos.liqPrice; reason = "liquidation"; }
+          else if (hitStop) { xp = pos.stopPrice; reason = "stop"; }
+          else if (hitTarget) { xp = pos.targetPrice; reason = "target"; }
+          else { xp = bar.close; reason = "timeout"; }
+          const pnl = (xp - pos.entryPrice) * (dir === "long" ? 1 : -1) * pos.qty - pos.notional * feeFrac;
+          capital += pnl; if (capital < 0) capital = 0;
+          tradeLog.push({ type: "exit", sym, time: new Date(bar.openTime).toISOString(), dir, price: xp, reason, pnl: Math.round(pnl * 100) / 100, entryStrat: pos.entryStrat, confluences: pos.confluences.length });
+          positions[sym] = null;
+        }
+      }
+    }
+
+    for (const [sym, pos] of Object.entries(positions)) {
+      if (!pos) continue;
+      const candles = symbolData[sym];
+      const xp = candles[candles.length - 1].close;
+      const pnl = (xp - pos.entryPrice) * (pos.direction === "long" ? 1 : -1) * pos.qty - pos.notional * feeFrac;
+      capital += pnl; if (capital < 0) capital = 0;
+      positions[sym] = null;
+    }
+
+    const totalPnl = capital - initialCapital;
+    let peak = initialCapital; let mdd = 0;
+    for (const e of eqCurve) { if (e > peak) peak = e; const dd = (peak - e) / peak; if (dd > mdd) mdd = dd; }
+
+    return {
+      initialCapital, finalCapital: Math.round(capital * 100) / 100,
+      totalReturnPct: totalPnl / initialCapital,
+      totalPnlUsd: Math.round(totalPnl * 100) / 100,
+      maxDrawdownPct: mdd,
+      totalTrades: tradeLog.filter(t => t.type === "entry").length,
+      trades: tradeLog,
+      strategyEntryCounts: stratCounts,
+      confluenceEvents: confluences,
+    };
+  }
+}
+
 export class BinancePortfolioBacktestTool extends Tool {
   get name(): string {
     return "binance_portfolio_backtest";

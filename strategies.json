@@ -1,0 +1,174 @@
+{
+  "config": {
+    "initialCapital": 10000,
+    "leverage": 10,
+    "marginPerTradePct": 0.5,
+    "feeBps": 5,
+    "maxHoldBars": 48,
+    "interval": "1h"
+  },
+  "signalTypes": {
+    "rsi_above": "RSI above threshold (simple mean reversion)",
+    "rsi_below": "RSI below threshold (simple mean reversion)",
+    "macd_bearish_cross": "MACD line crosses below signal line",
+    "macd_bullish_cross": "MACD line crosses above signal line",
+    "bollinger_touch_upper": "Price touches upper Bollinger Band",
+    "bollinger_touch_lower": "Price touches lower Bollinger Band",
+    "price_above_ema": "Price above EMA (trend filter)",
+    "price_below_ema": "Price below EMA (trend filter)",
+    "bearish_ob": "Bearish Order Block - last bullish candle before strong bearish break",
+    "bullish_ob": "Bullish Order Block - last bearish candle before strong bullish break",
+    "bearish_bos": "Bearish Break of Structure - price breaks below recent swing low",
+    "bullish_bos": "Bullish Break of Structure - price breaks above recent swing high",
+    "bearish_fvg": "Bearish Fair Value Gap - 3-candle gap down pattern",
+    "bullish_fvg": "Bullish Fair Value Gap - 3-candle gap up pattern",
+    "bearish_liq_sweep": "Liquidity sweep of swing high + reversal down",
+    "bullish_liq_sweep": "Liquidity sweep of swing low + reversal up",
+    "bearish_displacement": "Strong bearish momentum (body > 1.5x avg)",
+    "bullish_displacement": "Strong bullish momentum (body > 1.5x avg)",
+    "bearish_liq_ob": "ICT combo: Liquidity sweep + Order Block (short)",
+    "bullish_liq_ob": "ICT combo: Liquidity sweep + Order Block (long)",
+    "bullish_liq_fvg": "ICT combo: Liquidity sweep + Fair Value Gap (long)",
+    "bearish_liq_fvg": "ICT combo: Liquidity sweep + Fair Value Gap (short)",
+    "bearish_bos_displacement": "BOS confirmed by bearish displacement",
+    "bullish_bos_displacement": "BOS confirmed by bullish displacement",
+    "bearish_htf_trend_short": "HTF downtrend + bearish OB entry",
+    "bullish_htf_trend_long": "HTF uptrend + bullish OB entry"
+  },
+  "symbols": {
+    "XRPUSDT": [
+      {
+        "id": "xrp-rsi-short-mr",
+        "label": "RSI>80 Short MR",
+        "direction": "short",
+        "entry": [{ "type": "rsi_above", "period": 14, "value": 80 }],
+        "risk": { "stopPct": 0.02, "targetPct": 0.12 },
+        "metrics": { "sharpe": 33.9, "pf": 3.28, "winRate": 0.41, "trades": 22, "pnlUsd": 37441, "maxDDPct": 0.35 }
+      },
+      {
+        "id": "xrp-macd-bearish-short",
+        "label": "MACD Bearish Cross Short",
+        "direction": "short",
+        "entry": [{ "type": "macd_bearish_cross" }],
+        "risk": { "stopPct": 0.03, "targetPct": 0.12 },
+        "metrics": { "sharpe": 19.1, "pf": 1.25, "winRate": 0.45, "trades": 113, "pnlUsd": 145783, "maxDDPct": 0.57 }
+      },
+      {
+        "id": "xrp-price-below-ema-short",
+        "label": "Price<EMA20 Short",
+        "direction": "short",
+        "entry": [{ "type": "price_below_ema", "period": 20 }],
+        "risk": { "stopPct": 0.03, "targetPct": 0.06 },
+        "metrics": { "sharpe": 13.8, "pf": 1.18, "winRate": 0.44, "trades": 194, "pnlUsd": 68026, "maxDDPct": 0.74 }
+      },
+      {
+        "id": "xrp-bb-upper-short",
+        "label": "Bollinger Upper Touch Short",
+        "direction": "short",
+        "entry": [{ "type": "bollinger_touch_upper" }],
+        "risk": { "stopPct": 0.02, "targetPct": 0.12 },
+        "metrics": { "sharpe": 13.4, "pf": 1.22, "winRate": 0.33, "trades": 132, "pnlUsd": 36736, "maxDDPct": 0.75 }
+      },
+      {
+        "id": "xrp-ict-liq-ob-short",
+        "label": "Liq Sweep + OB Short (ICT)",
+        "direction": "short",
+        "entry": [{ "type": "bearish_liq_ob" }],
+        "risk": { "stopPct": 0.01, "targetPct": 0.04 },
+        "metrics": { "sharpe": 34.3, "pf": 16.67, "winRate": 0.57, "trades": 14, "pnlUsd": 93529, "maxDDPct": 0.0 }
+      },
+      {
+        "id": "xrp-ict-liq-fvg-short",
+        "label": "Liq Sweep + FVG Short",
+        "direction": "short",
+        "entry": [{ "type": "bearish_liq_fvg" }],
+        "risk": { "stopPct": 0.01, "targetPct": 0.06 },
+        "metrics": { "sharpe": 32.9, "pf": 12.60, "winRate": 0.36, "trades": 11, "pnlUsd": 53025, "maxDDPct": 0.0 }
+      },
+      {
+        "id": "xrp-liq-sweep-short",
+        "label": "Liquidity Sweep Short",
+        "direction": "short",
+        "entry": [{ "type": "bearish_liq_sweep" }],
+        "risk": { "stopPct": 0.01, "targetPct": 0.06 },
+        "metrics": { "sharpe": 35.2, "pf": 14.65, "winRate": 0.40, "trades": 10, "pnlUsd": 56013, "maxDDPct": 0.0 }
+      },
+      {
+        "id": "xrp-ict-liq-fvg-long",
+        "label": "Liq Sweep + FVG Long",
+        "direction": "long",
+        "entry": [{ "type": "bullish_liq_fvg" }],
+        "risk": { "stopPct": 0.01, "targetPct": 0.02 },
+        "metrics": { "sharpe": 9.5, "pf": 1.14, "winRate": 0.40, "trades": 70, "pnlUsd": 4049, "maxDDPct": 0.0 }
+      }
+    ],
+    "ETHUSDT": [
+      {
+        "id": "eth-rsi-short-mr",
+        "label": "RSI>80 Short MR",
+        "direction": "short",
+        "entry": [{ "type": "rsi_above", "period": 14, "value": 80 }],
+        "risk": { "stopPct": 0.03, "targetPct": 0.12 },
+        "metrics": { "sharpe": 25.2, "pf": 1.58, "winRate": 0.48, "trades": 29, "pnlUsd": 23881, "maxDDPct": 0.50 }
+      },
+      {
+        "id": "eth-ict-liq-fvg-long",
+        "label": "Liq Sweep + FVG Long (BEST LONG)",
+        "direction": "long",
+        "entry": [{ "type": "bullish_liq_fvg" }],
+        "risk": { "stopPct": 0.01, "targetPct": 0.02 },
+        "metrics": { "sharpe": 32.1, "pf": 1.75, "winRate": 0.52, "trades": 67, "pnlUsd": 36205, "maxDDPct": 0.0 }
+      },
+      {
+        "id": "eth-bearish-fvg-short",
+        "label": "Bearish FVG Short",
+        "direction": "short",
+        "entry": [{ "type": "bearish_fvg" }],
+        "risk": { "stopPct": 0.03, "targetPct": 0.02 },
+        "metrics": { "sharpe": 30.7, "pf": 6.06, "winRate": 0.73, "trades": 11, "pnlUsd": 30385, "maxDDPct": 0.0 }
+      },
+      {
+        "id": "eth-liq-sweep-short",
+        "label": "Liq Sweep Short",
+        "direction": "short",
+        "entry": [{ "type": "bearish_liq_sweep" }],
+        "risk": { "stopPct": 0.02, "targetPct": 0.02 },
+        "metrics": { "sharpe": 19.5, "pf": 3.09, "winRate": 0.50, "trades": 20, "pnlUsd": 19375, "maxDDPct": 0.0 }
+      }
+    ],
+    "SOLUSDT": [
+      {
+        "id": "sol-rsi-short-mr",
+        "label": "RSI>75 Short MR",
+        "direction": "short",
+        "entry": [{ "type": "rsi_above", "period": 14, "value": 75 }],
+        "risk": { "stopPct": 0.03, "targetPct": 0.12 },
+        "metrics": { "sharpe": 12.2, "pf": 1.08, "winRate": 0.38, "trades": 40, "pnlUsd": 2435, "maxDDPct": 0.70 }
+      },
+      {
+        "id": "sol-htf-trend-ob-short",
+        "label": "HTF Trend + OB Short",
+        "direction": "short",
+        "entry": [{ "type": "bearish_htf_trend_short" }],
+        "risk": { "stopPct": 0.03, "targetPct": 0.04 },
+        "metrics": { "sharpe": 32.7, "pf": 5.79, "winRate": 0.69, "trades": 16, "pnlUsd": 98193, "maxDDPct": 0.0 }
+      },
+      {
+        "id": "sol-displacement-short",
+        "label": "Bearish Displacement Short",
+        "direction": "short",
+        "entry": [{ "type": "bearish_displacement" }],
+        "risk": { "stopPct": 0.03, "targetPct": 0.04 },
+        "metrics": { "sharpe": 27.4, "pf": 5.06, "winRate": 0.56, "trades": 16, "pnlUsd": 37684, "maxDDPct": 0.0 }
+      },
+      {
+        "id": "sol-ict-liq-fvg-long",
+        "label": "Liq Sweep + FVG Long",
+        "direction": "long",
+        "entry": [{ "type": "bullish_liq_fvg" }],
+        "risk": { "stopPct": 0.01, "targetPct": 0.02 },
+        "metrics": { "sharpe": 11.3, "pf": 1.18, "winRate": 0.41, "trades": 83, "pnlUsd": 6832, "maxDDPct": 0.0 }
+      }
+    ]
+  }
+}
