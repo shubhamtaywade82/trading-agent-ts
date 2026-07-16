@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } fr
 import { dirname } from "path";
 import { Provider } from "../provider/provider.js";
 import { fetchCandlesRange } from "../tools/backtest-tools.js";
+import { resolveOllamaCloudKeys } from "./ollama-cloud.js";
 
 // Per-EVENT (not periodic-batch, see trade-analyst.ts) LLM evaluation — every
 // entry and every exit gets its own reasoned write-up, building a labeled
@@ -36,12 +37,18 @@ export interface EvaluatorConfig {
   candleContextBars: number;
 }
 
+// Same tier/model resolution as trade-analyst.ts: cloud by default, local
+// only via TRADINGAGENT_ANALYST_TIER=local, which then defaults to
+// minicpm5-1b (must be pulled locally first).
+const EVALUATOR_TIER: "local" | "cloud" = process.env.TRADINGAGENT_ANALYST_TIER === "local" ? "local" : "cloud";
+const EVALUATOR_MODEL = process.env.TRADINGAGENT_ANALYST_MODEL || (EVALUATOR_TIER === "local" ? "minicpm5-1b" : "gpt-oss:20b");
+
 export const DEFAULT_EVALUATOR_CONFIG: EvaluatorConfig = {
   journalFile: ".trading-agent/paper-trades.jsonl",
   logFile: ".trading-agent/trade-evaluations.jsonl",
   stateFile: ".trading-agent/trade-evaluator-state.json",
-  model: process.env.TRADINGAGENT_ANALYST_MODEL || "trading-core:latest",
-  tier: "local",
+  model: EVALUATOR_MODEL,
+  tier: EVALUATOR_TIER,
   candleContextBars: 20,
 };
 
@@ -106,7 +113,8 @@ export class TradeEvaluator {
 
   constructor(cfg: Partial<EvaluatorConfig> = {}) {
     this.cfg = { ...DEFAULT_EVALUATOR_CONFIG, ...cfg };
-    this.provider = new Provider({ tier: this.cfg.tier, model: this.cfg.model });
+    const cloudKeys = this.cfg.tier === "cloud" ? resolveOllamaCloudKeys() : {};
+    this.provider = new Provider({ tier: this.cfg.tier, model: this.cfg.model, ...cloudKeys });
     if (existsSync(this.cfg.stateFile)) {
       try { this.state = JSON.parse(readFileSync(this.cfg.stateFile, "utf-8")); } catch { /* defaults */ }
     }

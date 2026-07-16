@@ -6,12 +6,13 @@ import { BinanceStreamManager } from "../exchange/binance-stream.js";
 import { TradeAnalyst } from "../paper-trading/trade-analyst.js";
 import { ReadinessMonitor, StrategyReadiness, PortfolioReadiness } from "../paper-trading/readiness.js";
 import { FillNotifier } from "../paper-trading/notifier.js";
+import { TradeEvaluator, TradeEvaluation } from "../paper-trading/trade-evaluator.js";
 
 interface RowStatus {
   id: string; symbol: string; tf: string; direction: "long" | "short";
   capital: number; pnl: number; trades: number; wins: number; losses: number;
   winRate: number | null;
-  openPosition: { entryPrice: number; entryTime: string; qty: number; notional: number; stopPrice: number; targetPrice: number } | null;
+  openPosition: { entryPrice: number; entryTime: string; qty: number; notional: number; margin: number; stopPrice: number; targetPrice: number } | null;
 }
 
 interface FeedEvent { ts: string; type: string; strategyId?: string; symbol?: string; reason?: string; pnl?: number; entryPrice?: number; message?: string; }
@@ -61,14 +62,17 @@ function Col({ width, align = "left", color, bold, children }: {
   );
 }
 
-export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, readiness, fillNotifier, onExit }: {
+export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, readiness, fillNotifier, evaluator, onExit }: {
   runner: LivePaperRunner; pollMs: number; journalFile: string;
   analyst?: TradeAnalyst | null; readiness?: ReadinessMonitor | null; fillNotifier?: FillNotifier | null;
+  evaluator?: TradeEvaluator | null;
   onExit?: () => void;
 }): JSX.Element {
   const { exit } = useApp();
   const [analystSummary, setAnalystSummary] = useState(analyst?.getLatestSummary() ?? null);
   const [readinessResult, setReadinessResult] = useState<{ strategies: StrategyReadiness[]; portfolio: PortfolioReadiness } | null>(null);
+  const [evaluations, setEvaluations] = useState<TradeEvaluation[]>(evaluator?.getRecentEvaluations(5) ?? []);
+  const [evalQueueLen, setEvalQueueLen] = useState(0);
   const [rows, setRows] = useState<RowStatus[]>(runner.getStatus() as RowStatus[]);
   const [feed, setFeed] = useState<FeedEvent[]>(readLastJournalEvents(journalFile, 8));
   const [lastEval, setLastEval] = useState<EvalResult[]>([]);
@@ -170,6 +174,20 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
     });
     return () => { stopped = true; analyst.stop(); };
   }, [analyst]);
+
+  // Per-EVENT LLM evaluator — separate from the periodic-batch analyst
+  // above. Runs its own background queue (trade-evaluator.ts); this effect
+  // just starts/stops it and reflects its output into the panel.
+  useEffect(() => {
+    if (!evaluator) return;
+    let stopped = false;
+    void evaluator.start(30_000, (queueLen) => {
+      if (stopped) return;
+      setEvaluations(evaluator.getRecentEvaluations(5));
+      setEvalQueueLen(queueLen);
+    });
+    return () => { stopped = true; evaluator.stop(); };
+  }, [evaluator]);
 
   if (process.stdin.isTTY) {
     // eslint-disable-next-line react-hooks/rules-of-hooks
@@ -329,7 +347,11 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
             <Col width={9} color="gray">SIDE</Col>
             <Col width={idW} color="gray">STRATEGY</Col>
             <Col width={5} color="gray">SYM</Col>
+            <Col width={10} align="right" color="gray">QTY</Col>
+            <Col width={9} align="right" color="gray">MARGIN</Col>
             <Col width={10} align="right" color="gray">ENTRY</Col>
+            <Col width={10} align="right" color="gray">SL</Col>
+            <Col width={10} align="right" color="gray">TP</Col>
             <Col width={10} align="right" color="gray">CURRENT</Col>
             <Col width={10} align="right" color="gray">UNREAL</Col>
             <Col width={10} align="right" color="gray">SINCE</Col>
@@ -345,7 +367,11 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
                 </Col>
                 <Col width={idW}>{r.id}</Col>
                 <Col width={5}>{r.symbol.replace("USDT", "")}</Col>
+                <Col width={10} align="right" color="gray">{r.openPosition?.qty.toFixed(4) ?? "-"}</Col>
+                <Col width={9} align="right" color="gray">{r.openPosition ? `$${r.openPosition.margin.toFixed(0)}` : "-"}</Col>
                 <Col width={10} align="right" color="gray">{r.openPosition?.entryPrice.toFixed(4) ?? "-"}</Col>
+                <Col width={10} align="right" color="red">{r.openPosition?.stopPrice.toFixed(4) ?? "-"}</Col>
+                <Col width={10} align="right" color="green">{r.openPosition?.targetPrice.toFixed(4) ?? "-"}</Col>
                 <Col width={10} align="right" bold>{live ? live.price.toFixed(4) : "-"}</Col>
                 <Col width={10} align="right" color={pnlColor(u ?? 0)} bold>{u !== null ? fmtMoney(u) : "-"}</Col>
                 <Col width={10} align="right" color="gray">{since ? since.toLocaleTimeString() : "-"}</Col>
@@ -407,6 +433,28 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
               </Text>
             </Box>
           ))}
+        </Panel>
+      )}
+
+      {/* Per-event LLM evaluation trail — every entry AND exit gets its own
+          reasoned write-up (see trade-evaluator.ts), building a labeled log
+          to mine for entry/exit precision later. Async queue, decoupled from
+          the trading tick — queue depth shown so you can see if it's behind. */}
+      {evaluator && (
+        <Panel title={`TRADE EVALUATIONS (read-only)${evalQueueLen > 0 ? ` — ${evalQueueLen} queued` : ""}`} borderColor="cyan">
+          {evaluations.length > 0 ? evaluations.map((e, i) => (
+            <Box key={i} flexDirection="column" marginBottom={i < evaluations.length - 1 ? 1 : 0}>
+              <Text color="gray">
+                {new Date(e.ts).toLocaleTimeString()}{"  "}
+                <Text color={e.eventType === "entry" ? "yellow" : "cyan"} bold>{e.eventType.toUpperCase()}</Text>
+                {" "}{e.strategyId}
+                {e.qualityScore !== null && <Text color={e.qualityScore >= 4 ? "green" : e.qualityScore <= 2 ? "red" : "yellow"}> [{e.qualityScore}/5]</Text>}
+              </Text>
+              {e.error ? <Text color="red">  error: {e.error}</Text> : <Text wrap="wrap">  {e.evaluation}</Text>}
+            </Box>
+          )) : (
+            <Text color="gray">No fills yet to evaluate — .trading-agent/trade-evaluations.jsonl</Text>
+          )}
         </Panel>
       )}
 

@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from "fs";
 import { dirname } from "path";
 import { Provider } from "../provider/provider.js";
+import { resolveOllamaCloudKeys } from "./ollama-cloud.js";
 
 // Read-only LLM analyst over the paper-trading journal. It NEVER touches
 // LivePaperRunner, never sees strategies.json as anything but reference
@@ -119,14 +120,20 @@ export interface AnalystConfig {
   maxSummaryEntries: number;
 }
 
+// Default to Ollama Cloud (not local) — set TRADINGAGENT_ANALYST_TIER=local
+// to opt back into local inference, in which case the model defaults to
+// minicpm5-1b (must be pulled locally first: `ollama pull minicpm5-1b`).
+const ANALYST_TIER: "local" | "cloud" = process.env.TRADINGAGENT_ANALYST_TIER === "local" ? "local" : "cloud";
+const ANALYST_MODEL = process.env.TRADINGAGENT_ANALYST_MODEL || (ANALYST_TIER === "local" ? "minicpm5-1b" : "gpt-oss:20b");
+
 export const DEFAULT_ANALYST_CONFIG: AnalystConfig = {
   journalFile: ".trading-agent/paper-trades.jsonl",
   learningsFile: ".trading-agent/paper-trading-learnings.jsonl",
   summaryFile: ".trading-agent/paper-trading-insights.md",
   stateFile: ".trading-agent/analyst-state.json",
   poolPath: "strategies.json",
-  model: process.env.TRADINGAGENT_ANALYST_MODEL || "trading-core:latest",
-  tier: "local",
+  model: ANALYST_MODEL,
+  tier: ANALYST_TIER,
   minNewTradesToAnalyze: 3,
   minIntervalMs: 60 * 60 * 1000, // 1 hour floor between LLM calls regardless of trade volume
   maxSummaryEntries: 30,
@@ -142,7 +149,8 @@ export class TradeAnalyst {
 
   constructor(cfg: Partial<AnalystConfig> = {}) {
     this.cfg = { ...DEFAULT_ANALYST_CONFIG, ...cfg };
-    this.provider = new Provider({ tier: this.cfg.tier, model: this.cfg.model });
+    const cloudKeys = this.cfg.tier === "cloud" ? resolveOllamaCloudKeys() : {};
+    this.provider = new Provider({ tier: this.cfg.tier, model: this.cfg.model, ...cloudKeys });
     this.loadState();
   }
 
