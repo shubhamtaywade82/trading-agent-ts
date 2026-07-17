@@ -21,6 +21,7 @@ export interface CircuitBreakerConfig {
   pfFloor: number;             // pause if rolling PF drops below this
   maxConsecutiveLosses: number; // pause if this many losses in a row
   cooldownTrades: number;      // fresh closed trades (pool-wide) before re-checking a paused strategy
+  dailyMaxLossPct: number;     // halt ALL new entries for the rest of the UTC day if today's realized loss exceeds this fraction of total initial capital
   notifyTelegram: boolean;
 }
 
@@ -31,8 +32,16 @@ export const DEFAULT_CIRCUIT_BREAKER_CONFIG: CircuitBreakerConfig = {
   pfFloor: 0.7,
   maxConsecutiveLosses: 5,
   cooldownTrades: 20,
+  dailyMaxLossPct: 0.03,
   notifyTelegram: true,
 };
+
+// Sum of realized PnL for trades that CLOSED on the given UTC date
+// (dateIso = "YYYY-MM-DD"). Realized-only — unrealized needs live prices,
+// which nothing on this path tracks; the per-strategy stops bound open risk.
+export function realizedPnlForUtcDate(trades: ClosedTrade[], dateIso: string): number {
+  return trades.filter(t => t.exitTime.slice(0, 10) === dateIso).reduce((s, t) => s + t.pnl, 0);
+}
 
 interface BreakerEntry {
   paused: boolean;
@@ -62,6 +71,12 @@ export class StrategyCircuitBreaker {
   private runner: LivePaperRunner;
   private state: BreakerState = {};
   private running = false;
+  // UTC date ("YYYY-MM-DD") the daily-loss halt tripped on, or null. Once
+  // tripped it holds for the rest of that date even if later exits claw the
+  // loss back — daily-loss-limit semantics, not a live threshold. In-memory
+  // on purpose: a restart recomputes today's loss from the journal, so the
+  // halt re-derives itself (worst case: one duplicate Telegram).
+  private dailyHaltDate: string | null = null;
 
   constructor(runner: LivePaperRunner, cfg: Partial<CircuitBreakerConfig> = {}) {
     this.runner = runner;
@@ -85,9 +100,36 @@ export class StrategyCircuitBreaker {
     return { ...this.state };
   }
 
+  getDailyHalt(): { active: boolean; date: string | null } {
+    return { active: this.runner.isGlobalHalted(), date: this.dailyHaltDate };
+  }
+
+  // Portfolio-level daily loss cap. Trips the runner's global halt (new
+  // entries only) when today's realized loss exceeds dailyMaxLossPct of
+  // total initial capital; releases automatically at the next UTC day.
+  private checkDailyLoss(allTrades: ClosedTrade[]) {
+    const today = new Date().toISOString().slice(0, 10);
+    if (this.dailyHaltDate && this.dailyHaltDate !== today) {
+      this.dailyHaltDate = null;
+      this.runner.setGlobalHalt(false);
+      if (this.cfg.notifyTelegram) sendTelegram(`🟢 DAILY LOSS HALT released — new UTC day, trading resumed.`);
+    }
+    if (this.dailyHaltDate) return; // already halted for today
+    const pnlToday = realizedPnlForUtcDate(allTrades, today);
+    const limit = this.runner.getPortfolio().totalInitialCapital * this.cfg.dailyMaxLossPct;
+    if (pnlToday <= -limit) {
+      this.dailyHaltDate = today;
+      this.runner.setGlobalHalt(true);
+      if (this.cfg.notifyTelegram) {
+        sendTelegram(`🔴 DAILY LOSS HALT: realized PnL today ${pnlToday.toFixed(2)} breached -${(this.cfg.dailyMaxLossPct * 100).toFixed(1)}% of capital.\nAll new entries blocked until next UTC day; open positions still managed normally.`);
+      }
+    }
+  }
+
   // Runs once; returns strategies that changed pause state this call.
   async check(): Promise<{ pausedNow: string[]; resumedNow: string[] }> {
     const allTrades = reconstructClosedTrades(this.cfg.journalFile);
+    this.checkDailyLoss(allTrades);
     const byStrategy = new Map<string, ClosedTrade[]>();
     for (const t of allTrades) {
       const arr = byStrategy.get(t.strategyId);

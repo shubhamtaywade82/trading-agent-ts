@@ -43,6 +43,8 @@ export interface RunnerConfig {
   marginPerTradePct: number;
   feeBps: number;
   slippageBps: number;
+  volSizing: boolean;   // scale margin down when current ATR% runs hot vs the lookback average
+  funding: boolean;     // charge/credit real Binance funding rates on exit
   stateFile: string;
   journalFile: string;
   lookbackDaysByTf: Record<string, number>;
@@ -54,11 +56,43 @@ export const DEFAULT_RUNNER_CONFIG: RunnerConfig = {
   marginPerTradePct: 0.05,
   feeBps: 5,
   slippageBps: 3,
+  volSizing: true,
+  funding: true,
   stateFile: ".trading-agent/paper-state.json",
   journalFile: ".trading-agent/paper-trades.jsonl",
   // generous warmup margin over the longest indicator lookback in the pool (ichimoku=52 bars)
   lookbackDaysByTf: { "15m": 8, "30m": 15, "1h": 25, "2h": 50, "4h": 100, "1d": 400 },
 };
+
+// Volatility-aware sizing scale. Compares recent ATR% (last `period` true
+// ranges) against the average over the whole candle window: when current
+// volatility runs hot, a fixed-% stop is more likely to be tagged by noise,
+// so size down proportionally. Downsize-only (clamped to [0.5, 1]) — never
+// sizes UP in quiet regimes, so live stays conservatively comparable to the
+// fixed-size backtest.
+export function volScale(candles: Candle[], period = 14): number {
+  if (candles.length < period + 1) return 1;
+  const trs: number[] = [];
+  for (let j = 1; j < candles.length; j++) {
+    const c = candles[j], pc = candles[j - 1].close;
+    trs.push(Math.max(c.high - c.low, Math.abs(c.high - pc), Math.abs(c.low - pc)) / pc);
+  }
+  const avg = (a: number[]) => a.reduce((s, x) => s + x, 0) / a.length;
+  const cur = avg(trs.slice(-period));
+  const ref = avg(trs);
+  if (cur <= 0 || ref <= 0) return 1;
+  return Math.min(1, Math.max(0.5, ref / cur));
+}
+
+// Funding PnL over a held position: longs PAY when the rate is positive,
+// shorts RECEIVE. `rates` are the per-event funding rates (e.g. 0.0001)
+// that occurred while the position was open.
+// ponytail: applied to entry notional, not per-event mark notional — the
+// error is a rounding term at 8h funding granularity.
+export function fundingPnl(rates: number[], notional: number, direction: "long" | "short"): number {
+  const sum = rates.reduce((s, r) => s + r, 0);
+  return (direction === "long" ? -1 : 1) * sum * notional;
+}
 
 function loadStrategiesFromPool(poolPath = "strategies.json"): StrategyDef[] {
   const cfg = JSON.parse(readFileSync(poolPath, "utf-8"));
@@ -80,6 +114,11 @@ export class LivePaperRunner {
   private state: Record<string, StratState> = {};
   private cfg: RunnerConfig;
   private running = false;
+  // Portfolio-wide daily-loss halt, set by StrategyCircuitBreaker. Blocks
+  // new entries only; exits still managed. In-memory on purpose: the breaker
+  // recomputes today's realized loss from the journal every check, so a
+  // restart re-derives the halt instead of trusting stale persisted state.
+  private globalHalt = false;
 
   constructor(cfg: Partial<RunnerConfig> = {}, poolPath = "strategies.json") {
     this.cfg = { ...DEFAULT_RUNNER_CONFIG, ...cfg };
@@ -150,6 +189,14 @@ export class LivePaperRunner {
 
   isPaused(strategyId: string): boolean {
     return !!this.state[strategyId]?.paused;
+  }
+
+  setGlobalHalt(on: boolean): void {
+    this.globalHalt = on;
+  }
+
+  isGlobalHalted(): boolean {
+    return this.globalHalt;
   }
 
   // Picks up strategies newly appended to strategies.json (e.g. by
@@ -270,12 +317,25 @@ export class LivePaperRunner {
           else if (hitTarget) { exitPrice = pos.targetPrice; reason = "target"; }
           else { exitPrice = bar.close; reason = "timeout"; }
           const feeFrac = this.cfg.feeBps / 10000;
-          const pnl = (exitPrice - pos.entryPrice) * (dir === "long" ? 1 : -1) * pos.qty - pos.notional * feeFrac;
+          let pnl = (exitPrice - pos.entryPrice) * (dir === "long" ? 1 : -1) * pos.qty - pos.notional * feeFrac;
+          // Position lives from entry-candle close to exit-bar close; charge
+          // any funding events (every 8h) that fell inside that span.
+          let funding = 0;
+          const heldFrom = pos.entryTime + tfMs, heldTo = bar.openTime + tfMs;
+          if (this.cfg.funding && Math.floor(heldTo / EIGHT_H) > Math.floor(heldFrom / EIGHT_H)) {
+            try {
+              const rates = await fetchFundingRates(symbol, heldFrom, heldTo);
+              funding = fundingPnl(rates, pos.notional, dir);
+              pnl += funding;
+            } catch (e) {
+              this.journal({ type: "funding_fetch_error", strategyId: strat.id, symbol, message: (e as Error).message });
+            }
+          }
           st.capital += pnl;
           st.trades++; if (pnl > 0) st.wins++; else st.losses++;
           st.position = null;
           fills++;
-          this.journal({ type: "exit", strategyId: strat.id, symbol, tf, direction: dir, reason, exitPrice, pnl: Math.round(pnl * 100) / 100, capitalAfter: Math.round(st.capital * 100) / 100 });
+          this.journal({ type: "exit", strategyId: strat.id, symbol, tf, direction: dir, reason, exitPrice, pnl: Math.round(pnl * 100) / 100, funding: Math.round(funding * 100) / 100, capitalAfter: Math.round(st.capital * 100) / 100 });
         }
       }
 
@@ -283,7 +343,7 @@ export class LivePaperRunner {
       // yet, and the strategy isn't paused (circuit-breaker sets this flag —
       // see circuit-breaker.ts; buildSignalEvaluator itself never changes).
       let fired = false;
-      if (!st.position && isNew && !st.paused) {
+      if (!st.position && isNew && !st.paused && !this.globalHalt) {
         const evaluator = buildSignalEvaluator(candles, strat.entry);
         const i = candles.length - 1;
         fired = evaluator(i);
@@ -291,7 +351,8 @@ export class LivePaperRunner {
           const slipFrac = this.cfg.slippageBps / 10000;
           const rawEntry = candles[i].close;
           const entryPrice = strat.direction === "long" ? rawEntry * (1 + slipFrac) : rawEntry * (1 - slipFrac);
-          const margin = st.capital * this.cfg.marginPerTradePct;
+          const scale = this.cfg.volSizing ? volScale(candles) : 1;
+          const margin = st.capital * this.cfg.marginPerTradePct * scale;
           const notional = margin * this.cfg.leverage;
           const qty = notional / entryPrice;
           const stopPrice = strat.direction === "long" ? entryPrice * (1 - strat.stopPct) : entryPrice * (1 + strat.stopPct);
@@ -299,7 +360,7 @@ export class LivePaperRunner {
           const liqPrice = strat.direction === "long" ? entryPrice * (1 - 1 / this.cfg.leverage + 0.005) : entryPrice * (1 + 1 / this.cfg.leverage - 0.005);
           st.position = { entryPrice, entryTime: candles[i].openTime, entryBarIdx: i, qty, margin, notional, stopPrice, targetPrice, liqPrice };
           fills++;
-          this.journal({ type: "entry", strategyId: strat.id, symbol, tf, direction: strat.direction, entryPrice, stopPrice, targetPrice, margin: Math.round(margin * 100) / 100 });
+          this.journal({ type: "entry", strategyId: strat.id, symbol, tf, direction: strat.direction, entryPrice, stopPrice, targetPrice, margin: Math.round(margin * 100) / 100, volScale: Math.round(scale * 100) / 100 });
         }
       }
 
@@ -366,6 +427,16 @@ export class LivePaperRunner {
   stop() {
     this.running = false;
   }
+}
+
+const EIGHT_H = 8 * 3_600_000; // Binance funding interval
+
+async function fetchFundingRates(symbol: string, startTime: number, endTime: number): Promise<number[]> {
+  const url = `https://fapi.binance.com/fapi/v1/fundingRate?symbol=${symbol}&startTime=${startTime}&endTime=${endTime}&limit=1000`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`fundingRate HTTP ${res.status}`);
+  const rows = (await res.json()) as { fundingRate: string }[];
+  return rows.map(r => Number(r.fundingRate));
 }
 
 function tfToMs(tf: string): number {
