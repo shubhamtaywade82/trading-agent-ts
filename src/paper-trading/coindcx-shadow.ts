@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync } from "fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "fs";
 import { dirname } from "path";
 
 // Read-only public-market shadow price tracker. CoinDCX is the eventual
@@ -24,6 +24,16 @@ async function fetchCoinDcxPrice(symbol: string): Promise<number | null> {
   const tickers = (await res.json()) as { market: string; last_price: string }[];
   const hit = tickers.find(t => t.market === symbol);
   return hit ? Number(hit.last_price) : null;
+}
+
+export function readBasisRecords(logFile: string): BasisRecord[] {
+  if (!existsSync(logFile)) return [];
+  const lines = readFileSync(logFile, "utf-8").trim().split("\n").filter(Boolean);
+  const out: BasisRecord[] = [];
+  for (const line of lines) {
+    try { out.push(JSON.parse(line)); } catch { /* skip malformed line */ }
+  }
+  return out;
 }
 
 export async function logCoinDcxBasis(

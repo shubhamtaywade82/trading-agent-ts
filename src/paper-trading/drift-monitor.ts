@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } fr
 import { dirname } from "path";
 import { reconstructClosedTrades, ClosedTrade } from "./trade-analyst.js";
 import { sendTelegram } from "./notifier.js";
+import { readBasisRecords } from "./coindcx-shadow.js";
 
 // Proactive live-vs-backtest divergence watcher. readiness.ts's
 // maxWinRateDivergence only ever gets checked at the 20-trade milestone
@@ -20,6 +21,9 @@ export interface DriftMonitorConfig {
   minTradesPerStrategy: number; // don't judge a strategy on too few trades
   wrDivergenceThreshold: number; // |liveWR - backtestWR| that triggers an alert
   pfDropThreshold: number;      // livePF below this triggers an alert
+  basisLogFile: string;         // coindcx-shadow.ts's output (§5.4/§5.7 of the E2E doc)
+  basisWindow: number;          // both the minimum sample size and the rolling window
+  basisThresholdBps: number;    // avg |basisBps| over the window that triggers an alert
   notifyTelegram: boolean;
 }
 
@@ -32,6 +36,9 @@ export const DEFAULT_DRIFT_MONITOR_CONFIG: DriftMonitorConfig = {
   minTradesPerStrategy: 5,
   wrDivergenceThreshold: 0.20,
   pfDropThreshold: 1.0,
+  basisLogFile: ".trading-agent/coindcx-basis.jsonl",
+  basisWindow: 20,
+  basisThresholdBps: 15,
   notifyTelegram: true,
 };
 
@@ -55,17 +62,44 @@ function liveStats(trades: ClosedTrade[]): { winRate: number; pf: number } {
 }
 
 interface StrategyAlertFlags { wrDivergence: boolean; pfBelowFloor: boolean }
-interface DriftState { lastCheckedTotalTrades: number; alerted: Record<string, StrategyAlertFlags> }
+interface DriftState { lastCheckedTotalTrades: number; alerted: Record<string, StrategyAlertFlags>; alertedBasis: Record<string, boolean> }
 
 export class DriftMonitor {
   private cfg: DriftMonitorConfig;
-  private state: DriftState = { lastCheckedTotalTrades: 0, alerted: {} };
+  private state: DriftState = { lastCheckedTotalTrades: 0, alerted: {}, alertedBasis: {} };
   private running = false;
 
   constructor(cfg: Partial<DriftMonitorConfig> = {}) {
     this.cfg = { ...DEFAULT_DRIFT_MONITOR_CONFIG, ...cfg };
     if (existsSync(this.cfg.stateFile)) {
       try { this.state = JSON.parse(readFileSync(this.cfg.stateFile, "utf-8")); } catch { /* defaults */ }
+    }
+    this.state.alertedBasis ??= {}; // back-compat: state files written before the basis-drift check lack this key
+  }
+
+  // Independent of checkEveryNTrades — basis records accumulate on every
+  // fill (entry AND exit), faster than closed trades, so gating this behind
+  // the trade-count throttle would delay its own signal for no reason.
+  private async checkBasisDrift(alerts: string[]): Promise<void> {
+    const records = readBasisRecords(this.cfg.basisLogFile);
+    const bySymbol = new Map<string, number[]>();
+    for (const r of records) {
+      const arr = bySymbol.get(r.symbol);
+      if (arr) arr.push(r.basisBps); else bySymbol.set(r.symbol, [r.basisBps]);
+    }
+    for (const [symbol, all] of bySymbol) {
+      if (all.length < this.cfg.basisWindow) continue; // not enough fills yet to judge
+      const window = all.slice(-this.cfg.basisWindow);
+      const avgAbsBasis = window.reduce((s, b) => s + Math.abs(b), 0) / window.length;
+      const drifting = avgAbsBasis > this.cfg.basisThresholdBps;
+      const wasAlerted = this.state.alertedBasis[symbol] ?? false;
+      if (drifting && !wasAlerted) {
+        const text = `🟡 BASIS DRIFT: ${symbol} avg |Binance↔CoinDCX basis| ${avgAbsBasis.toFixed(1)}bps over last ${window.length} fills — exceeds ${this.cfg.basisThresholdBps}bps, live edge may run smaller than backtested once execution moves to CoinDCX`;
+        alerts.push(text);
+        this.log({ type: "basis_drift", symbol, avgAbsBasisBps: avgAbsBasis, fills: window.length });
+        if (this.cfg.notifyTelegram) await sendTelegram(text);
+      }
+      this.state.alertedBasis[symbol] = drifting; // re-arms if it recovers then drifts again
     }
   }
 
@@ -85,8 +119,12 @@ export class DriftMonitor {
   // (gated by checkEveryNTrades) and any newly-crossed alerts fired.
   async check(): Promise<{ ran: boolean; alerts: string[] }> {
     const trades = reconstructClosedTrades(this.cfg.journalFile);
+    const alerts: string[] = [];
+    await this.checkBasisDrift(alerts); // independent cadence, see comment above
+
     if (trades.length - this.state.lastCheckedTotalTrades < this.cfg.checkEveryNTrades) {
-      return { ran: false, alerts: [] };
+      this.saveState(); // persist any basis-flag changes even when the strategy pass below is skipped
+      return { ran: false, alerts };
     }
 
     const refs = loadBacktestRefs(this.cfg.poolPath);
@@ -96,7 +134,6 @@ export class DriftMonitor {
       if (arr) arr.push(t); else byStrategy.set(t.strategyId, [t]);
     }
 
-    const alerts: string[] = [];
     for (const [strategyId, strategyTrades] of byStrategy) {
       if (strategyTrades.length < this.cfg.minTradesPerStrategy) continue;
       const ref = refs[strategyId];
