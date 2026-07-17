@@ -37,7 +37,7 @@ const analyst = new TradeAnalyst();
 const evaluator = new TradeEvaluator();
 const readiness = new ReadinessMonitor({ notifyTelegram: telegramConfigured });
 const fillNotifier = telegramConfigured ? new FillNotifier({ journalFile: DEFAULT_RUNNER_CONFIG.journalFile }) : null;
-const circuitBreaker = new StrategyCircuitBreaker(runner, { notifyTelegram: telegramConfigured });
+const circuitBreaker = new StrategyCircuitBreaker(runner, { notifyTelegram: telegramConfigured }, stream);
 const driftMonitor = new DriftMonitor({ notifyTelegram: telegramConfigured });
 const researchPipeline = new ResearchPipeline({ notifyTelegram: telegramConfigured }, runner);
 
@@ -85,6 +85,10 @@ process.on("uncaughtException", (e) => {
 // Event-driven entry trigger (sub-second on candle close) — REST poll below
 // remains the safety net for stop/target/liquidation checks either way.
 await runner.attachStream(stream).catch(e => console.error("Kline stream attach failed (REST poll still covers entries):", e));
+// Ticker feed for mark-to-market: totalUnrealizedPnl() (used by the daily
+// loss halt, see circuit-breaker.ts) reads stream.getLatest() per symbol.
+await Promise.all(runner.getSymbols().map(sym => stream.subscribe(sym)))
+  .catch(e => console.error("Ticker stream subscribe failed (daily halt falls back to realized-only):", e));
 
 runner.start(pollSeconds * 1000, async (result) => {
   tickCount++;

@@ -1,4 +1,4 @@
-import { volScale, fundingPnl } from "../../src/paper-trading/live-runner.js";
+import { volScale, fundingPnl, slippageMultiplier } from "../../src/paper-trading/live-runner.js";
 import { realizedPnlForUtcDate } from "../../src/paper-trading/circuit-breaker.js";
 import { Candle } from "../../src/backtest/types.js";
 
@@ -27,6 +27,26 @@ describe("volScale", () => {
 
   it("returns 1 with too few candles", () => {
     expect(volScale([candle(0, 1), candle(1, 1)])).toBe(1);
+  });
+});
+
+describe("slippageMultiplier", () => {
+  it("returns 1 when recent volatility matches the window average", () => {
+    const candles = Array.from({ length: 100 }, (_, i) => candle(i, 1));
+    expect(slippageMultiplier(candles)).toBeCloseTo(1);
+  });
+
+  it("widens when recent volatility spikes, clamped at 3", () => {
+    const calm = Array.from({ length: 100 }, (_, i) => candle(i, 1));
+    const spiky = [...calm.slice(0, 86), ...Array.from({ length: 14 }, (_, i) => candle(86 + i, 20))];
+    const m = slippageMultiplier(spiky);
+    expect(m).toBeGreaterThan(1);
+    expect(m).toBeLessThanOrEqual(3);
+  });
+
+  it("never narrows below 1 in quiet regimes", () => {
+    const spikyPast = [...Array.from({ length: 50 }, (_, i) => candle(i, 10)), ...Array.from({ length: 50 }, (_, i) => candle(50 + i, 1))];
+    expect(slippageMultiplier(spikyPast)).toBe(1);
   });
 });
 

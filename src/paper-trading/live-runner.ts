@@ -3,6 +3,7 @@ import { dirname } from "path";
 import { fetchCandlesRange, buildSignalEvaluator } from "../tools/backtest-tools.js";
 import { Candle } from "../backtest/types.js";
 import { BinanceStreamManager } from "../exchange/binance-stream.js";
+import { logCoinDcxBasis } from "./coindcx-shadow.js";
 
 // Autonomous paper-trading runner. Polls Binance REST for newly-closed
 // candles per (symbol, timeframe) group, evaluates every pool strategy's
@@ -44,7 +45,10 @@ export interface RunnerConfig {
   feeBps: number;
   slippageBps: number;
   volSizing: boolean;   // scale margin down when current ATR% runs hot vs the lookback average
+  volSlippage: boolean; // scale simulated slippage up when current ATR% runs hot vs the lookback average
   funding: boolean;     // charge/credit real Binance funding rates on exit
+  coindcxShadow: boolean; // log Binance-vs-CoinDCX basis on every fill (read-only, best-effort)
+  coindcxShadowFile: string;
   stateFile: string;
   journalFile: string;
   lookbackDaysByTf: Record<string, number>;
@@ -57,20 +61,22 @@ export const DEFAULT_RUNNER_CONFIG: RunnerConfig = {
   feeBps: 5,
   slippageBps: 3,
   volSizing: true,
+  volSlippage: true,
   funding: true,
+  coindcxShadow: true,
+  coindcxShadowFile: ".trading-agent/coindcx-basis.jsonl",
   stateFile: ".trading-agent/paper-state.json",
   journalFile: ".trading-agent/paper-trades.jsonl",
   // generous warmup margin over the longest indicator lookback in the pool (ichimoku=52 bars)
   lookbackDaysByTf: { "15m": 8, "30m": 15, "1h": 25, "2h": 50, "4h": 100, "1d": 400 },
 };
 
-// Volatility-aware sizing scale. Compares recent ATR% (last `period` true
-// ranges) against the average over the whole candle window: when current
-// volatility runs hot, a fixed-% stop is more likely to be tagged by noise,
-// so size down proportionally. Downsize-only (clamped to [0.5, 1]) — never
-// sizes UP in quiet regimes, so live stays conservatively comparable to the
-// fixed-size backtest.
-export function volScale(candles: Candle[], period = 14): number {
+// Ratio of recent ATR% (last `period` true ranges) to the average over the
+// whole candle window — >1 means current volatility is running hot relative
+// to the strategy's validated baseline. Shared by volScale (sizing) and
+// slippageMultiplier (fill realism) below; returns 1 (neutral) when there
+// isn't enough data or the reference is degenerate.
+function atrRatio(candles: Candle[], period: number): number {
   if (candles.length < period + 1) return 1;
   const trs: number[] = [];
   for (let j = 1; j < candles.length; j++) {
@@ -81,7 +87,24 @@ export function volScale(candles: Candle[], period = 14): number {
   const cur = avg(trs.slice(-period));
   const ref = avg(trs);
   if (cur <= 0 || ref <= 0) return 1;
-  return Math.min(1, Math.max(0.5, ref / cur));
+  return cur / ref;
+}
+
+// Volatility-aware sizing scale: when current volatility runs hot, a
+// fixed-% stop is more likely to be tagged by noise, so size down
+// proportionally. Downsize-only (clamped to [0.5, 1]) — never sizes UP in
+// quiet regimes, so live stays conservatively comparable to the fixed-size
+// backtest.
+export function volScale(candles: Candle[], period = 14): number {
+  const r = atrRatio(candles, period);
+  return Math.min(1, Math.max(0.5, 1 / r));
+}
+
+// Volatility-aware slippage: fills are realistically worse (wider spread,
+// thinner book) when volatility is running hot. Widen-only (clamped to
+// [1, 3]) — never narrows below the base slippageBps in quiet regimes.
+export function slippageMultiplier(candles: Candle[], period = 14): number {
+  return Math.min(3, Math.max(1, atrRatio(candles, period)));
 }
 
 // Funding PnL over a held position: longs PAY when the rate is positive,
@@ -259,6 +282,23 @@ export class LivePaperRunner {
     return raw - st.position.notional * feeFrac;
   }
 
+  // Sum of unrealized PnL across every open position, priced off the
+  // stream's latest ticker tick per symbol. Display/risk-check only — same
+  // rule as unrealizedPnl() above, never used by any entry/exit decision.
+  // Positions whose symbol has no live tick yet are skipped (best-effort).
+  totalUnrealizedPnl(stream: BinanceStreamManager): number {
+    let sum = 0;
+    for (const s of this.strategies) {
+      const st = this.state[s.id];
+      if (!st.position) continue;
+      const tick = stream.getLatest(s.symbol);
+      if (!tick) continue;
+      const u = this.unrealizedPnl(s.id, tick.price);
+      if (u !== null) sum += u;
+    }
+    return sum;
+  }
+
   private groupMap(): Map<string, StrategyDef[]> {
     const groups = new Map<string, StrategyDef[]>();
     for (const s of this.strategies) {
@@ -336,6 +376,7 @@ export class LivePaperRunner {
           st.position = null;
           fills++;
           this.journal({ type: "exit", strategyId: strat.id, symbol, tf, direction: dir, reason, exitPrice, pnl: Math.round(pnl * 100) / 100, funding: Math.round(funding * 100) / 100, capitalAfter: Math.round(st.capital * 100) / 100 });
+          if (this.cfg.coindcxShadow) void logCoinDcxBasis(this.cfg.coindcxShadowFile, symbol, "exit", dir, exitPrice);
         }
       }
 
@@ -348,7 +389,8 @@ export class LivePaperRunner {
         const i = candles.length - 1;
         fired = evaluator(i);
         if (fired) {
-          const slipFrac = this.cfg.slippageBps / 10000;
+          const slipMult = this.cfg.volSlippage ? slippageMultiplier(candles) : 1;
+          const slipFrac = (this.cfg.slippageBps / 10000) * slipMult;
           const rawEntry = candles[i].close;
           const entryPrice = strat.direction === "long" ? rawEntry * (1 + slipFrac) : rawEntry * (1 - slipFrac);
           const scale = this.cfg.volSizing ? volScale(candles) : 1;
@@ -360,7 +402,8 @@ export class LivePaperRunner {
           const liqPrice = strat.direction === "long" ? entryPrice * (1 - 1 / this.cfg.leverage + 0.005) : entryPrice * (1 + 1 / this.cfg.leverage - 0.005);
           st.position = { entryPrice, entryTime: candles[i].openTime, entryBarIdx: i, qty, margin, notional, stopPrice, targetPrice, liqPrice };
           fills++;
-          this.journal({ type: "entry", strategyId: strat.id, symbol, tf, direction: strat.direction, entryPrice, stopPrice, targetPrice, margin: Math.round(margin * 100) / 100, volScale: Math.round(scale * 100) / 100 });
+          this.journal({ type: "entry", strategyId: strat.id, symbol, tf, direction: strat.direction, entryPrice, stopPrice, targetPrice, margin: Math.round(margin * 100) / 100, volScale: Math.round(scale * 100) / 100, slipMult: Math.round(slipMult * 100) / 100 });
+          if (this.cfg.coindcxShadow) void logCoinDcxBasis(this.cfg.coindcxShadowFile, symbol, "entry", strat.direction, entryPrice);
         }
       }
 

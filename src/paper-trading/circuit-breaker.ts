@@ -3,6 +3,7 @@ import { dirname } from "path";
 import { LivePaperRunner } from "./live-runner.js";
 import { reconstructClosedTrades, ClosedTrade } from "./trade-analyst.js";
 import { sendTelegram } from "./notifier.js";
+import { BinanceStreamManager } from "../exchange/binance-stream.js";
 
 // Self-correcting risk control: watches each strategy's rolling recent
 // trade history and automatically pauses NEW entries (never touches open
@@ -69,6 +70,7 @@ function consecutiveLosses(trades: ClosedTrade[]): number {
 export class StrategyCircuitBreaker {
   private cfg: CircuitBreakerConfig;
   private runner: LivePaperRunner;
+  private stream?: BinanceStreamManager;
   private state: BreakerState = {};
   private running = false;
   // UTC date ("YYYY-MM-DD") the daily-loss halt tripped on, or null. Once
@@ -78,8 +80,9 @@ export class StrategyCircuitBreaker {
   // halt re-derives itself (worst case: one duplicate Telegram).
   private dailyHaltDate: string | null = null;
 
-  constructor(runner: LivePaperRunner, cfg: Partial<CircuitBreakerConfig> = {}) {
+  constructor(runner: LivePaperRunner, cfg: Partial<CircuitBreakerConfig> = {}, stream?: BinanceStreamManager) {
     this.runner = runner;
+    this.stream = stream;
     this.cfg = { ...DEFAULT_CIRCUIT_BREAKER_CONFIG, ...cfg };
     this.loadState();
   }
@@ -105,8 +108,12 @@ export class StrategyCircuitBreaker {
   }
 
   // Portfolio-level daily loss cap. Trips the runner's global halt (new
-  // entries only) when today's realized loss exceeds dailyMaxLossPct of
-  // total initial capital; releases automatically at the next UTC day.
+  // entries only) when today's realized + unrealized (mark-to-market) PnL
+  // exceeds dailyMaxLossPct of total initial capital; releases automatically
+  // at the next UTC day. Unrealized component only included when a live
+  // stream was passed in (best-effort — a missing tick just contributes 0,
+  // see LivePaperRunner.totalUnrealizedPnl); without it this degrades to the
+  // realized-only check.
   private checkDailyLoss(allTrades: ClosedTrade[]) {
     const today = new Date().toISOString().slice(0, 10);
     if (this.dailyHaltDate && this.dailyHaltDate !== today) {
@@ -115,13 +122,15 @@ export class StrategyCircuitBreaker {
       if (this.cfg.notifyTelegram) sendTelegram(`🟢 DAILY LOSS HALT released — new UTC day, trading resumed.`);
     }
     if (this.dailyHaltDate) return; // already halted for today
-    const pnlToday = realizedPnlForUtcDate(allTrades, today);
+    const realizedToday = realizedPnlForUtcDate(allTrades, today);
+    const unrealizedNow = this.stream ? this.runner.totalUnrealizedPnl(this.stream) : 0;
+    const pnlToday = realizedToday + unrealizedNow;
     const limit = this.runner.getPortfolio().totalInitialCapital * this.cfg.dailyMaxLossPct;
     if (pnlToday <= -limit) {
       this.dailyHaltDate = today;
       this.runner.setGlobalHalt(true);
       if (this.cfg.notifyTelegram) {
-        sendTelegram(`🔴 DAILY LOSS HALT: realized PnL today ${pnlToday.toFixed(2)} breached -${(this.cfg.dailyMaxLossPct * 100).toFixed(1)}% of capital.\nAll new entries blocked until next UTC day; open positions still managed normally.`);
+        sendTelegram(`🔴 DAILY LOSS HALT: today's PnL ${pnlToday.toFixed(2)} (realized ${realizedToday.toFixed(2)} + unrealized ${unrealizedNow.toFixed(2)}) breached -${(this.cfg.dailyMaxLossPct * 100).toFixed(1)}% of capital.\nAll new entries blocked until next UTC day; open positions still managed normally.`);
       }
     }
   }
