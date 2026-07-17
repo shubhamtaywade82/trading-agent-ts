@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } fr
 import { dirname } from "path";
 import { fetchCandlesRange, buildSignalEvaluator } from "../tools/backtest-tools.js";
 import { Candle } from "../backtest/types.js";
+import { BinanceStreamManager } from "../exchange/binance-stream.js";
 
 // Autonomous paper-trading runner. Polls Binance REST for newly-closed
 // candles per (symbol, timeframe) group, evaluates every pool strategy's
@@ -33,6 +34,7 @@ interface StratState {
   position: OpenPosition | null;
   trades: number; wins: number; losses: number;
   lastEvalOpenTime: number; // last candle openTime this strategy was evaluated against
+  paused?: boolean; // set externally (circuit-breaker); blocks new entries only, exits still managed
 }
 
 export interface RunnerConfig {
@@ -134,6 +136,40 @@ export class LivePaperRunner {
     return [...new Set(this.strategies.map(s => s.symbol))];
   }
 
+  // Called by CircuitBreaker (in-process, same daemon) to pause/resume new
+  // entries for a strategy. Mutates in-memory state directly and persists —
+  // going through the file would race with this class's own saveState()
+  // calls on every tick. Blocks new entries only; open positions still exit
+  // normally (see processGroup()'s exit-management block, unconditional).
+  setPaused(strategyId: string, paused: boolean): void {
+    const st = this.state[strategyId];
+    if (!st) return;
+    st.paused = paused;
+    this.saveState();
+  }
+
+  isPaused(strategyId: string): boolean {
+    return !!this.state[strategyId]?.paused;
+  }
+
+  // Picks up strategies newly appended to strategies.json (e.g. by
+  // ResearchPipeline's auto-promotion) without a process restart. Only
+  // ADDS — never removes or mutates an existing strategy's definition or
+  // state, so open positions and history are untouched. Each newly-added
+  // strategy starts with its own fresh isolated capital bucket, same as
+  // every strategy already does.
+  reloadPool(poolPath = "strategies.json"): number {
+    const fresh = loadStrategiesFromPool(poolPath);
+    const existingIds = new Set(this.strategies.map(s => s.id));
+    const added = fresh.filter(s => !existingIds.has(s.id));
+    for (const s of added) {
+      this.strategies.push(s);
+      this.state[s.id] = { capital: this.cfg.initialCapitalPerStrategy, position: null, trades: 0, wins: 0, losses: 0, lastEvalOpenTime: 0 };
+    }
+    if (added.length > 0) this.saveState();
+    return added.length;
+  }
+
   // Portfolio-level rollup across every strategy's isolated capital bucket —
   // each strategy still trades its own $10k slice (see class comment above),
   // this just sums them into the account-level numbers a broker UI shows.
@@ -176,99 +212,141 @@ export class LivePaperRunner {
     return raw - st.position.notional * feeFrac;
   }
 
-  // One polling cycle: fetch latest candles per (symbol, tf) group once,
-  // then evaluate/manage every strategy in that group against them.
-  async tick(): Promise<{ groupsChecked: number; newCandles: number; fills: number; evaluations: { strategyId: string; symbol: string; tf: string; checked: boolean; fired: boolean; lastClosedCandleTime: number }[] }> {
+  private groupMap(): Map<string, StrategyDef[]> {
     const groups = new Map<string, StrategyDef[]>();
     for (const s of this.strategies) {
       const key = `${s.symbol}:${s.tf}`;
       const arr = groups.get(key);
       if (arr) arr.push(s); else groups.set(key, [s]);
     }
+    return groups;
+  }
 
+  // Fetch + evaluate/manage every strategy in one (symbol, tf) group. Shared
+  // by the REST poll safety net (tick()) and the event-driven WS trigger
+  // (attachStream()) — identical decision logic either way, only the trigger
+  // differs (fixed timer vs. a closed-kline push).
+  private async processGroup(symbol: string, tf: string, strats: StrategyDef[]): Promise<{ hadCandles: boolean; fills: number; evaluations: { strategyId: string; symbol: string; tf: string; checked: boolean; fired: boolean; lastClosedCandleTime: number }[] }> {
+    const lookbackDays = this.cfg.lookbackDaysByTf[tf] ?? 30;
+    const endTime = Date.now();
+    const startTime = endTime - lookbackDays * 24 * 60 * 60 * 1000;
+    const fetched = await fetchCandlesRange(symbol, tf, startTime, endTime);
+    if ("error" in fetched) {
+      this.journal({ type: "fetch_error", symbol, tf, message: fetched.message });
+      return { hadCandles: false, fills: 0, evaluations: [] };
+    }
+    let candles: Candle[] = fetched.candles;
+    // Drop the still-forming candle (Binance includes it as the last row).
+    const tfMs = tfToMs(tf);
+    if (candles.length > 0 && candles[candles.length - 1].openTime + tfMs > Date.now()) {
+      candles = candles.slice(0, -1);
+    }
+    if (candles.length === 0) return { hadCandles: false, fills: 0, evaluations: [] };
+    const lastClosed = candles[candles.length - 1];
+
+    let fills = 0;
+    const evaluations: { strategyId: string; symbol: string; tf: string; checked: boolean; fired: boolean; lastClosedCandleTime: number }[] = [];
+    for (const strat of strats) {
+      const st = this.state[strat.id];
+      const isNew = lastClosed.openTime > st.lastEvalOpenTime;
+
+      // Manage an open position against the newest closed candle (same
+      // per-bar check the backtest engine does). Runs regardless of pause
+      // state — pause only blocks NEW entries, never exits.
+      if (st.position && isNew) {
+        const pos = st.position;
+        const bar = lastClosed;
+        const dir = strat.direction;
+        const hitLiq = dir === "long" ? bar.low <= pos.liqPrice : bar.high >= pos.liqPrice;
+        const hitStop = dir === "long" ? bar.low <= pos.stopPrice : bar.high >= pos.stopPrice;
+        const hitTarget = dir === "long" ? bar.high >= pos.targetPrice : bar.low <= pos.targetPrice;
+        const barsHeld = candles.length - 1 - pos.entryBarIdx;
+        const timedOut = barsHeld >= strat.maxHoldBars;
+
+        if (hitLiq || hitStop || hitTarget || timedOut) {
+          let exitPrice: number, reason: string;
+          if (hitLiq) { exitPrice = pos.liqPrice; reason = "liquidation"; }
+          else if (hitStop) { exitPrice = pos.stopPrice; reason = "stop"; }
+          else if (hitTarget) { exitPrice = pos.targetPrice; reason = "target"; }
+          else { exitPrice = bar.close; reason = "timeout"; }
+          const feeFrac = this.cfg.feeBps / 10000;
+          const pnl = (exitPrice - pos.entryPrice) * (dir === "long" ? 1 : -1) * pos.qty - pos.notional * feeFrac;
+          st.capital += pnl;
+          st.trades++; if (pnl > 0) st.wins++; else st.losses++;
+          st.position = null;
+          fills++;
+          this.journal({ type: "exit", strategyId: strat.id, symbol, tf, direction: dir, reason, exitPrice, pnl: Math.round(pnl * 100) / 100, capitalAfter: Math.round(st.capital * 100) / 100 });
+        }
+      }
+
+      // Look for a new entry only if flat, this candle hasn't been checked
+      // yet, and the strategy isn't paused (circuit-breaker sets this flag —
+      // see circuit-breaker.ts; buildSignalEvaluator itself never changes).
+      let fired = false;
+      if (!st.position && isNew && !st.paused) {
+        const evaluator = buildSignalEvaluator(candles, strat.entry);
+        const i = candles.length - 1;
+        fired = evaluator(i);
+        if (fired) {
+          const slipFrac = this.cfg.slippageBps / 10000;
+          const rawEntry = candles[i].close;
+          const entryPrice = strat.direction === "long" ? rawEntry * (1 + slipFrac) : rawEntry * (1 - slipFrac);
+          const margin = st.capital * this.cfg.marginPerTradePct;
+          const notional = margin * this.cfg.leverage;
+          const qty = notional / entryPrice;
+          const stopPrice = strat.direction === "long" ? entryPrice * (1 - strat.stopPct) : entryPrice * (1 + strat.stopPct);
+          const targetPrice = strat.direction === "long" ? entryPrice * (1 + strat.targetPct) : entryPrice * (1 - strat.targetPct);
+          const liqPrice = strat.direction === "long" ? entryPrice * (1 - 1 / this.cfg.leverage + 0.005) : entryPrice * (1 + 1 / this.cfg.leverage - 0.005);
+          st.position = { entryPrice, entryTime: candles[i].openTime, entryBarIdx: i, qty, margin, notional, stopPrice, targetPrice, liqPrice };
+          fills++;
+          this.journal({ type: "entry", strategyId: strat.id, symbol, tf, direction: strat.direction, entryPrice, stopPrice, targetPrice, margin: Math.round(margin * 100) / 100 });
+        }
+      }
+
+      evaluations.push({ strategyId: strat.id, symbol, tf, checked: isNew, fired, lastClosedCandleTime: lastClosed.openTime });
+      if (isNew) st.lastEvalOpenTime = lastClosed.openTime;
+    }
+
+    return { hadCandles: true, fills, evaluations };
+  }
+
+  // One polling cycle: fetch latest candles per (symbol, tf) group once,
+  // then evaluate/manage every strategy in that group against them. Safety
+  // net for stop/target/liquidation checks (must see every bar) and fallback
+  // entry path if a kline stream drops — see attachStream() for the faster,
+  // event-driven entry path.
+  async tick(): Promise<{ groupsChecked: number; newCandles: number; fills: number; evaluations: { strategyId: string; symbol: string; tf: string; checked: boolean; fired: boolean; lastClosedCandleTime: number }[] }> {
+    const groups = this.groupMap();
     let newCandles = 0, fills = 0;
     const evaluations: { strategyId: string; symbol: string; tf: string; checked: boolean; fired: boolean; lastClosedCandleTime: number }[] = [];
     for (const [key, strats] of groups) {
       const [symbol, tf] = key.split(":");
-      const lookbackDays = this.cfg.lookbackDaysByTf[tf] ?? 30;
-      const endTime = Date.now();
-      const startTime = endTime - lookbackDays * 24 * 60 * 60 * 1000;
-      const fetched = await fetchCandlesRange(symbol, tf, startTime, endTime);
-      if ("error" in fetched) {
-        this.journal({ type: "fetch_error", symbol, tf, message: fetched.message });
-        continue;
-      }
-      let candles: Candle[] = fetched.candles;
-      // Drop the still-forming candle (Binance includes it as the last row).
-      const tfMs = tfToMs(tf);
-      if (candles.length > 0 && candles[candles.length - 1].openTime + tfMs > Date.now()) {
-        candles = candles.slice(0, -1);
-      }
-      if (candles.length === 0) continue;
-      const lastClosed = candles[candles.length - 1];
-
-      for (const strat of strats) {
-        const st = this.state[strat.id];
-        const isNew = lastClosed.openTime > st.lastEvalOpenTime;
-
-        // Manage an open position against the newest closed candle (same
-        // per-bar check the backtest engine does).
-        if (st.position && isNew) {
-          const pos = st.position;
-          const bar = lastClosed;
-          const dir = strat.direction;
-          const hitLiq = dir === "long" ? bar.low <= pos.liqPrice : bar.high >= pos.liqPrice;
-          const hitStop = dir === "long" ? bar.low <= pos.stopPrice : bar.high >= pos.stopPrice;
-          const hitTarget = dir === "long" ? bar.high >= pos.targetPrice : bar.low <= pos.targetPrice;
-          const barsHeld = candles.length - 1 - pos.entryBarIdx;
-          const timedOut = barsHeld >= strat.maxHoldBars;
-
-          if (hitLiq || hitStop || hitTarget || timedOut) {
-            let exitPrice: number, reason: string;
-            if (hitLiq) { exitPrice = pos.liqPrice; reason = "liquidation"; }
-            else if (hitStop) { exitPrice = pos.stopPrice; reason = "stop"; }
-            else if (hitTarget) { exitPrice = pos.targetPrice; reason = "target"; }
-            else { exitPrice = bar.close; reason = "timeout"; }
-            const feeFrac = this.cfg.feeBps / 10000;
-            const pnl = (exitPrice - pos.entryPrice) * (dir === "long" ? 1 : -1) * pos.qty - pos.notional * feeFrac;
-            st.capital += pnl;
-            st.trades++; if (pnl > 0) st.wins++; else st.losses++;
-            st.position = null;
-            fills++;
-            this.journal({ type: "exit", strategyId: strat.id, symbol, tf, direction: dir, reason, exitPrice, pnl: Math.round(pnl * 100) / 100, capitalAfter: Math.round(st.capital * 100) / 100 });
-          }
-        }
-
-        // Look for a new entry only if flat and this candle hasn't been checked yet.
-        let fired = false;
-        if (!st.position && isNew) {
-          const evaluator = buildSignalEvaluator(candles, strat.entry);
-          const i = candles.length - 1;
-          fired = evaluator(i);
-          if (fired) {
-            const slipFrac = this.cfg.slippageBps / 10000;
-            const rawEntry = candles[i].close;
-            const entryPrice = strat.direction === "long" ? rawEntry * (1 + slipFrac) : rawEntry * (1 - slipFrac);
-            const margin = st.capital * this.cfg.marginPerTradePct;
-            const notional = margin * this.cfg.leverage;
-            const qty = notional / entryPrice;
-            const stopPrice = strat.direction === "long" ? entryPrice * (1 - strat.stopPct) : entryPrice * (1 + strat.stopPct);
-            const targetPrice = strat.direction === "long" ? entryPrice * (1 + strat.targetPct) : entryPrice * (1 - strat.targetPct);
-            const liqPrice = strat.direction === "long" ? entryPrice * (1 - 1 / this.cfg.leverage + 0.005) : entryPrice * (1 + 1 / this.cfg.leverage - 0.005);
-            st.position = { entryPrice, entryTime: candles[i].openTime, entryBarIdx: i, qty, margin, notional, stopPrice, targetPrice, liqPrice };
-            fills++;
-            this.journal({ type: "entry", strategyId: strat.id, symbol, tf, direction: strat.direction, entryPrice, stopPrice, targetPrice, margin: Math.round(margin * 100) / 100 });
-          }
-        }
-
-        evaluations.push({ strategyId: strat.id, symbol, tf, checked: isNew, fired, lastClosedCandleTime: lastClosed.openTime });
-        if (isNew) st.lastEvalOpenTime = lastClosed.openTime;
-      }
-      newCandles++;
+      const result = await this.processGroup(symbol, tf, strats);
+      if (result.hadCandles) newCandles++;
+      fills += result.fills;
+      evaluations.push(...result.evaluations);
     }
 
     this.saveState();
     return { groupsChecked: groups.size, newCandles, fills, evaluations };
+  }
+
+  // Subscribes a kline WS stream per (symbol, tf) group so entry evaluation
+  // fires the instant Binance reports a closed candle, instead of waiting up
+  // to pollMs for the next tick(). tick()'s REST poll keeps running
+  // unchanged as the safety net for stop/target/liquidation checks and as a
+  // fallback if a stream drops. Purely additive — no decision logic here,
+  // just an earlier trigger into the same processGroup().
+  async attachStream(stream: BinanceStreamManager): Promise<void> {
+    const groups = this.groupMap();
+    await Promise.all([...groups].map(([key, strats]) => {
+      const [symbol, tf] = key.split(":");
+      return stream.subscribeKline(symbol, tf, () => {
+        this.processGroup(symbol, tf, strats)
+          .then(() => this.saveState())
+          .catch(e => this.journal({ type: "stream_tick_error", symbol, tf, message: (e as Error).message }));
+      });
+    }));
   }
 
   async start(pollMs = 60_000, onTick?: (result: { groupsChecked: number; newCandles: number; fills: number; evaluations: { strategyId: string; symbol: string; tf: string; checked: boolean; fired: boolean; lastClosedCandleTime: number }[] }) => void) {

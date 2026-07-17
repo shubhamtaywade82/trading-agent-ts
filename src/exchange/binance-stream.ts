@@ -32,6 +32,18 @@ export interface Liquidation {
   time: number;
 }
 
+export interface ClosedKline {
+  symbol: string;
+  interval: string;
+  openTime: number;
+  closeTime: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
 // ponytail: one manager, in-memory only — no persistence across restarts,
 // add a store if alerts need to survive a process crash.
 export class BinanceStreamManager {
@@ -40,6 +52,7 @@ export class BinanceStreamManager {
   private alerts: Alert[] = [];
   private nextAlertId = 1;
   private liquidations: Liquidation[] = [];
+  private closedKlines = new Map<string, ClosedKline>();
 
   subscribe(symbol: string): Promise<void> {
     const sym = symbol.toUpperCase();
@@ -129,6 +142,60 @@ export class BinanceStreamManager {
     }
   }
 
+  subscribeKline(symbol: string, interval: string, onClose?: (k: ClosedKline) => void): Promise<void> {
+    const sym = symbol.toUpperCase();
+    const stream = `${sym.toLowerCase()}@kline_${interval}`;
+    if (this.sockets.has(stream)) return Promise.resolve();
+
+    return new Promise((resolve, reject) => {
+      const ws = new WebSocket(`${STREAM_BASE}/${stream}`);
+      const onError = (err: Error) => {
+        this.sockets.delete(stream);
+        reject(err);
+      };
+      ws.once("error", onError);
+      ws.once("open", () => {
+        ws.off("error", onError);
+        resolve();
+      });
+      ws.on("message", (data: Buffer) => {
+        const msg = JSON.parse(data.toString());
+        const k = msg.k;
+        if (!k || !k.x) return; // only store closed candles
+        const key = `${sym}:${interval}`;
+        const closed: ClosedKline = {
+          symbol: sym, interval,
+          openTime: Number(k.t), closeTime: Number(k.T),
+          open: Number(k.o), high: Number(k.h), low: Number(k.l), close: Number(k.c),
+          volume: Number(k.v),
+        };
+        this.closedKlines.set(key, closed);
+        onClose?.(closed);
+      });
+      ws.on("error", () => {});
+      this.sockets.set(stream, ws);
+    });
+  }
+
+  unsubscribeKline(symbol: string, interval: string): boolean {
+    const sym = symbol.toUpperCase();
+    const stream = `${sym.toLowerCase()}@kline_${interval}`;
+    const ws = this.sockets.get(stream);
+    if (!ws) return false;
+    ws.terminate();
+    this.sockets.delete(stream);
+    this.closedKlines.delete(`${sym}:${interval}`);
+    return true;
+  }
+
+  isSubscribedToKline(symbol: string, interval: string): boolean {
+    return this.sockets.has(`${symbol.toLowerCase()}@kline_${interval}`);
+  }
+
+  getLatestClosedKline(symbol: string, interval: string): ClosedKline | undefined {
+    return this.closedKlines.get(`${symbol.toUpperCase()}:${interval}`);
+  }
+
   subscribeLiquidations(): Promise<void> {
     if (this.sockets.has(LIQUIDATIONS_STREAM)) return Promise.resolve();
 
@@ -177,5 +244,6 @@ export class BinanceStreamManager {
     this.sockets.clear();
     this.latest.clear();
     this.liquidations = [];
+    this.closedKlines.clear();
   }
 }

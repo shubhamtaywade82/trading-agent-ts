@@ -3,6 +3,7 @@
 // continuously, no human input, until stopped (Ctrl+C or SIGTERM).
 //
 // Usage: npx tsx scripts/paper-trade-runner.ts [--poll-seconds=60] [--no-analyst] [--no-notify] [--no-eval]
+import "dotenv/config";
 import { LivePaperRunner } from "../src/paper-trading/live-runner.js";
 import { TradeAnalyst } from "../src/paper-trading/trade-analyst.js";
 import { ReadinessMonitor } from "../src/paper-trading/readiness.js";

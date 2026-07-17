@@ -4,6 +4,7 @@
 // of scrolling console text.
 //
 // Usage: npx tsx scripts/paper-trade-tui.tsx [--poll-seconds=60] [--no-analyst] [--no-notify] [--no-eval]
+import "dotenv/config";
 import React from "react";
 import { render } from "ink";
 import { LivePaperRunner, DEFAULT_RUNNER_CONFIG } from "../src/paper-trading/live-runner.js";
