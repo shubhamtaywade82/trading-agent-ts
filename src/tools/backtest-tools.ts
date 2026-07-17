@@ -283,6 +283,23 @@ export class BinanceParamSweepTool extends Tool {
 }
 
 // ── Multi-batch klines fetcher (exceeds 1000-candle limit) ──
+// Retries transient network failures ("fetch failed" — DNS blip, connection
+// reset, etc.) a few times with backoff before giving up. Binance 4xx/5xx
+// responses (a real API error) are NOT retried — those return immediately.
+async function fetchWithRetry(url: URL, retries = 3): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fetch(url, { method: "GET" });
+    } catch (e) {
+      if (attempt >= retries) {
+        const cause = (e as Error & { cause?: unknown }).cause;
+        throw new Error(`${(e as Error).message}${cause ? ` (${String(cause)})` : ""}`);
+      }
+      await new Promise(r => setTimeout(r, 500 * 2 ** attempt));
+    }
+  }
+}
+
 export async function fetchCandlesRange(
   symbol: string, interval: string, startTime: number, endTime: number,
 ): Promise<{ candles: ReturnType<typeof parseKlineRows> } | { error: string; message: string }> {
@@ -296,7 +313,7 @@ export async function fetchCandlesRange(
       url.searchParams.set("limit", "1000");
       url.searchParams.set("startTime", String(from));
       url.searchParams.set("endTime", String(endTime));
-      const response = await fetch(url, { method: "GET" });
+      const response = await fetchWithRetry(url);
       const body = await response.json();
       if (!response.ok) return { error: "BinanceApiError", message: JSON.stringify(body) };
       const rows = body as unknown[][];

@@ -23,6 +23,7 @@ const STREAM_BASE = "wss://stream.binance.com:9443/ws";
 const FUTURES_STREAM_BASE = "wss://fstream.binance.com/ws";
 const LIQUIDATIONS_STREAM = "!forceOrder@arr";
 const MAX_LIQUIDATIONS_BUFFERED = 200;
+const MAX_RECONNECT_DELAY_MS = 30_000;
 
 export interface Liquidation {
   symbol: string;
@@ -53,33 +54,61 @@ export class BinanceStreamManager {
   private nextAlertId = 1;
   private liquidations: Liquidation[] = [];
   private closedKlines = new Map<string, ClosedKline>();
+  // Binance drops idle/long-lived connections routinely (~24h) — without
+  // reconnect, subscribeKline's event-driven entry trigger silently goes
+  // dead until process restart (the REST poll in LivePaperRunner.tick()
+  // still catches exits/stops either way, but entries stop firing promptly).
+  // Tracked per stream key so unsubscribe/closeAll can suppress the retry.
+  private closedIntentionally = new Set<string>();
+  private reconnectDelay = new Map<string, number>();
+
+  // Shared connect-with-reconnect helper. Resolves/rejects on the FIRST
+  // connection attempt only (preserves the original subscribe*() contract);
+  // any drop after that reconnects silently in the background with
+  // exponential backoff, capped at MAX_RECONNECT_DELAY_MS.
+  private connect(streamKey: string, url: string, onMessage: (data: Buffer) => void): Promise<void> {
+    this.closedIntentionally.delete(streamKey);
+    return new Promise((resolve, reject) => {
+      const attempt = (isFirst: boolean) => {
+        const ws = new WebSocket(url);
+        const onOpenError = (err: Error) => {
+          if (isFirst) {
+            this.sockets.delete(streamKey);
+            reject(err);
+          }
+        };
+        ws.once("error", onOpenError);
+        ws.once("open", () => {
+          ws.off("error", onOpenError);
+          this.reconnectDelay.set(streamKey, 1000);
+          if (isFirst) resolve();
+        });
+        ws.on("message", onMessage);
+        ws.on("error", () => {
+          // swallow post-open errors; close handler below drives reconnect
+        });
+        ws.on("close", () => {
+          if (this.closedIntentionally.has(streamKey)) return;
+          const delay = this.reconnectDelay.get(streamKey) ?? 1000;
+          this.reconnectDelay.set(streamKey, Math.min(delay * 2, MAX_RECONNECT_DELAY_MS));
+          setTimeout(() => attempt(false), delay);
+        });
+        this.sockets.set(streamKey, ws);
+      };
+      attempt(true);
+    });
+  }
 
   subscribe(symbol: string): Promise<void> {
     const sym = symbol.toUpperCase();
     const stream = `${sym.toLowerCase()}@ticker`;
     if (this.sockets.has(stream)) return Promise.resolve();
 
-    return new Promise((resolve, reject) => {
-      const ws = new WebSocket(`${STREAM_BASE}/${stream}`);
-      const onError = (err: Error) => {
-        this.sockets.delete(stream);
-        reject(err);
-      };
-      ws.once("error", onError);
-      ws.once("open", () => {
-        ws.off("error", onError);
-        resolve();
-      });
-      ws.on("message", (data: Buffer) => {
-        const msg = JSON.parse(data.toString());
-        const tick: Tick = { symbol: sym, price: Number(msg.c), time: Date.now(), changePct24h: Number(msg.P) };
-        this.latest.set(sym, tick);
-        this.checkAlerts(tick);
-      });
-      ws.on("error", () => {
-        // swallow post-open errors; getLatest()/isSubscribed() reflect staleness naturally
-      });
-      this.sockets.set(stream, ws);
+    return this.connect(stream, `${STREAM_BASE}/${stream}`, (data: Buffer) => {
+      const msg = JSON.parse(data.toString());
+      const tick: Tick = { symbol: sym, price: Number(msg.c), time: Date.now(), changePct24h: Number(msg.P) };
+      this.latest.set(sym, tick);
+      this.checkAlerts(tick);
     });
   }
 
@@ -88,6 +117,7 @@ export class BinanceStreamManager {
     const stream = `${sym.toLowerCase()}@ticker`;
     const ws = this.sockets.get(stream);
     if (!ws) return false;
+    this.closedIntentionally.add(stream);
     ws.terminate();
     this.sockets.delete(stream);
     this.latest.delete(sym);
@@ -147,33 +177,19 @@ export class BinanceStreamManager {
     const stream = `${sym.toLowerCase()}@kline_${interval}`;
     if (this.sockets.has(stream)) return Promise.resolve();
 
-    return new Promise((resolve, reject) => {
-      const ws = new WebSocket(`${STREAM_BASE}/${stream}`);
-      const onError = (err: Error) => {
-        this.sockets.delete(stream);
-        reject(err);
+    return this.connect(stream, `${STREAM_BASE}/${stream}`, (data: Buffer) => {
+      const msg = JSON.parse(data.toString());
+      const k = msg.k;
+      if (!k || !k.x) return; // only store closed candles
+      const key = `${sym}:${interval}`;
+      const closed: ClosedKline = {
+        symbol: sym, interval,
+        openTime: Number(k.t), closeTime: Number(k.T),
+        open: Number(k.o), high: Number(k.h), low: Number(k.l), close: Number(k.c),
+        volume: Number(k.v),
       };
-      ws.once("error", onError);
-      ws.once("open", () => {
-        ws.off("error", onError);
-        resolve();
-      });
-      ws.on("message", (data: Buffer) => {
-        const msg = JSON.parse(data.toString());
-        const k = msg.k;
-        if (!k || !k.x) return; // only store closed candles
-        const key = `${sym}:${interval}`;
-        const closed: ClosedKline = {
-          symbol: sym, interval,
-          openTime: Number(k.t), closeTime: Number(k.T),
-          open: Number(k.o), high: Number(k.h), low: Number(k.l), close: Number(k.c),
-          volume: Number(k.v),
-        };
-        this.closedKlines.set(key, closed);
-        onClose?.(closed);
-      });
-      ws.on("error", () => {});
-      this.sockets.set(stream, ws);
+      this.closedKlines.set(key, closed);
+      onClose?.(closed);
     });
   }
 
@@ -182,6 +198,7 @@ export class BinanceStreamManager {
     const stream = `${sym.toLowerCase()}@kline_${interval}`;
     const ws = this.sockets.get(stream);
     if (!ws) return false;
+    this.closedIntentionally.add(stream);
     ws.terminate();
     this.sockets.delete(stream);
     this.closedKlines.delete(`${sym}:${interval}`);
@@ -199,32 +216,19 @@ export class BinanceStreamManager {
   subscribeLiquidations(): Promise<void> {
     if (this.sockets.has(LIQUIDATIONS_STREAM)) return Promise.resolve();
 
-    return new Promise((resolve, reject) => {
-      const ws = new WebSocket(`${FUTURES_STREAM_BASE}/${LIQUIDATIONS_STREAM}`);
-      const onError = (err: Error) => {
-        this.sockets.delete(LIQUIDATIONS_STREAM);
-        reject(err);
-      };
-      ws.once("error", onError);
-      ws.once("open", () => {
-        ws.off("error", onError);
-        resolve();
-      });
-      ws.on("message", (data: Buffer) => {
-        const msg = JSON.parse(data.toString());
-        const o = msg.o;
-        if (!o) return;
-        this.liquidations.push({ symbol: o.s, side: o.S, price: Number(o.ap), quantity: Number(o.q), time: Number(o.T) });
-        if (this.liquidations.length > MAX_LIQUIDATIONS_BUFFERED) this.liquidations.shift();
-      });
-      ws.on("error", () => {});
-      this.sockets.set(LIQUIDATIONS_STREAM, ws);
+    return this.connect(LIQUIDATIONS_STREAM, `${FUTURES_STREAM_BASE}/${LIQUIDATIONS_STREAM}`, (data: Buffer) => {
+      const msg = JSON.parse(data.toString());
+      const o = msg.o;
+      if (!o) return;
+      this.liquidations.push({ symbol: o.s, side: o.S, price: Number(o.ap), quantity: Number(o.q), time: Number(o.T) });
+      if (this.liquidations.length > MAX_LIQUIDATIONS_BUFFERED) this.liquidations.shift();
     });
   }
 
   unsubscribeLiquidations(): boolean {
     const ws = this.sockets.get(LIQUIDATIONS_STREAM);
     if (!ws) return false;
+    this.closedIntentionally.add(LIQUIDATIONS_STREAM);
     ws.terminate();
     this.sockets.delete(LIQUIDATIONS_STREAM);
     return true;
@@ -240,6 +244,7 @@ export class BinanceStreamManager {
   }
 
   closeAll(): void {
+    for (const key of this.sockets.keys()) this.closedIntentionally.add(key);
     for (const ws of this.sockets.values()) ws.terminate();
     this.sockets.clear();
     this.latest.clear();

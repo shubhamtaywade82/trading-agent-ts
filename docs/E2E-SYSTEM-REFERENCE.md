@@ -246,3 +246,12 @@ npm run paper-trade:daemon   # scripts/autonomous-trading-daemon.ts — the real
 5. Daily-loss halt and volatility-scaled sizing are realized-PnL-only (no unrealized/mark-to-market component) — acceptable given per-trade stops bound open risk, but worth stating explicitly if a reviewer asks about intraday drawdown between candle closes.
 6. Single-process, single-machine deployment — no redundancy/failover beyond the watchdog script restarting a crashed process. Fine for a retail bot at this trade frequency; would need addressing before any "institutional-grade" framing.
 7. The strategy pool's own backtested metrics come from a small sample by professional-quant standards (17 strategies, 3 symbols, ~1–3 years of history) — appropriate confidence intervals should scale accordingly when discussing expected live performance.
+
+---
+
+## 9. Changelog
+
+Dated notes on functional changes to this system, kept so this document stays a live reference rather than a one-time snapshot.
+
+- **2026-07-17** — Added 3 risk controls to the live paper-trading engine (§5.4, §5.5): portfolio-wide daily-loss halt (`StrategyCircuitBreaker`, `dailyMaxLossPct` 3%), volatility-aware position sizing (`volScale`, downsize-only ATR-based), and real Binance funding-rate PnL on exits (`fundingPnl`). All three are covered by `tests/paper-trading/risk-controls.test.ts`.
+- **2026-07-17** — Fixed intermittent `FETCH ERROR ...: fetch failed` entries in the live-runner journal (visible in the paper-trading TUI's Recent Fills panel). Root cause: `fetchCandlesRange` (`src/tools/backtest-tools.ts`) had no retry — a transient network blip (DNS hiccup, connection reset) on any single paginated Binance kline request aborted that entire tick's fetch for the affected (symbol, timeframe) group, and the underlying cause (`e.cause` on Node's `fetch failed`) was discarded rather than logged. Fixed once in the shared `fetchCandlesRange`/`fetchWithRetry` path (3 retries, exponential backoff 500ms→1s→2s; real Binance 4xx/5xx responses still fail immediately, no retry) since every caller (live-runner, backtest tool, research pipeline, trade evaluator) routes through this one function. Requires a daemon restart to pick up.
