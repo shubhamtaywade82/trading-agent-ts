@@ -767,7 +767,12 @@ export function buildSignalEvaluator(
 // ── Futures backtest engine (shared between the two tools above) ──
 export function runFuturesBacktest(
   candles: Candle[],
-  entryConditions: { type: string; period?: number; value?: number }[],
+  // Either a raw condition array (dispatched through buildSignalEvaluator,
+  // the default) or an already-built per-bar evaluator — e.g.
+  // `new ConceptsEngine(candles, { htfContext }).evaluator(strat.entry)` —
+  // so concepts_*-based and HTF-gated candidates can be validated through
+  // this exact same simulation engine without duplicating it.
+  entryConditions: { type: string; period?: number; value?: number }[] | ((i: number) => boolean),
   direction: "long" | "short",
   stopPct: number, targetPct: number, feeBps: number, maxHoldBars: number,
   initialCapital: number, leverage: number, marginPerTradePct: number,
@@ -793,7 +798,9 @@ export function runFuturesBacktest(
     }
   }
 
-  const evaluator = buildSignalEvaluator(candles, entryConditions);
+  const evaluator = typeof entryConditions === "function"
+    ? entryConditions
+    : buildSignalEvaluator(candles, entryConditions);
   const slipFrac = slippageBps / 10000;
   const feeFrac = feeBps / 10000;
   let capital = initialCapital;
