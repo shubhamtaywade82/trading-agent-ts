@@ -5,10 +5,10 @@ import { resolveOllamaCloudKeys } from "./ollama-cloud.js";
 
 // Read-only LLM analyst over the paper-trading journal. It NEVER touches
 // LivePaperRunner, never sees strategies.json as anything but reference
-// data, and has no tool-calling surface — it can only produce text. Every
-// entry/exit decision still comes exclusively from buildSignalEvaluator
-// (src/tools/backtest-tools.ts), matching the backtest bar-for-bar. This
-// module's only effect on the world is appending to a log file.
+// data, and has no tool-calling surface — it can only produce text. Entry/
+// exit decisions come from buildSignalEvaluator or ConceptsEngine (rules),
+// optionally gated by AiEntryGate — never from this module. This module's
+// only effect on the world is appending to a log file.
 //
 // "Learning" here means: periodically look at accumulated real trade
 // history, compare it against what the backtest predicted, and write down
@@ -17,10 +17,11 @@ import { resolveOllamaCloudKeys } from "./ollama-cloud.js";
 // existing pattern of every past finding being written down with its
 // evidence, never applied automatically).
 
-interface JournalEvent {
+interface PositionFillEvent {
   ts: string; type: string; strategyId?: string; symbol?: string; tf?: string;
-  direction?: "long" | "short"; entryPrice?: number; exitPrice?: number;
-  reason?: string; pnl?: number; message?: string;
+  direction?: "long" | "short"; action?: string;
+  price?: number; entryPriceAtFill?: number; entryTimeAtFill?: number | null;
+  reason?: string; realizedPnl?: number;
 }
 
 export interface ClosedTrade {
@@ -29,27 +30,23 @@ export interface ClosedTrade {
   reason: string; pnl: number;
 }
 
+const CLOSING_ACTIONS = new Set(["reduce", "close", "flip_close"]);
+
 export function reconstructClosedTrades(journalFile: string): ClosedTrade[] {
   if (!existsSync(journalFile)) return [];
   const lines = readFileSync(journalFile, "utf-8").trim().split("\n").filter(Boolean);
-  const pending = new Map<string, JournalEvent>();
   const closed: ClosedTrade[] = [];
   for (const line of lines) {
-    let e: JournalEvent;
+    let e: PositionFillEvent;
     try { e = JSON.parse(line); } catch { continue; }
-    if (e.type === "entry" && e.strategyId) pending.set(e.strategyId, e);
-    else if (e.type === "exit" && e.strategyId) {
-      const entry = pending.get(e.strategyId);
-      if (entry) {
-        closed.push({
-          strategyId: e.strategyId, symbol: entry.symbol ?? "", tf: entry.tf ?? "",
-          direction: entry.direction ?? "short", entryPrice: entry.entryPrice ?? 0,
-          exitPrice: e.exitPrice ?? 0, entryTime: entry.ts, exitTime: e.ts,
-          reason: e.reason ?? "unknown", pnl: e.pnl ?? 0,
-        });
-        pending.delete(e.strategyId);
-      }
-    }
+    if (e.type !== "position_fill" || !e.action || !CLOSING_ACTIONS.has(e.action) || !e.strategyId) continue;
+    closed.push({
+      strategyId: e.strategyId, symbol: e.symbol ?? "", tf: e.tf ?? "",
+      direction: e.direction ?? "short", entryPrice: e.entryPriceAtFill ?? 0,
+      exitPrice: e.price ?? 0,
+      entryTime: e.entryTimeAtFill != null ? new Date(e.entryTimeAtFill).toISOString() : e.ts,
+      exitTime: e.ts, reason: e.reason ?? "unknown", pnl: e.realizedPnl ?? 0,
+    });
   }
   return closed;
 }
