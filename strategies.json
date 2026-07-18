@@ -13,6 +13,12 @@
     "initialCapital": 10000,
     "leverage": 5,
     "marginPerTradePct": 0.05,
+    "aiGate": {
+      "mode": "no-ai",
+      "tier": "cloud",
+      "model": "gpt-oss:20b",
+      "timeoutMs": 20000
+    },
     "feeBps": 5,
     "slippageBps": 3,
     "note": "maxHoldBars and interval are now PER-STRATEGY (see each entry's tf/maxHoldBars) — this pool spans 30m to 4h, no longer a single fixed interval."
