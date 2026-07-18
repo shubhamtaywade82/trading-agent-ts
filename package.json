@@ -42,6 +42,7 @@
     "typescript": "^5.5.0"
   },
   "dependencies": {
+    "trading-concepts-ts": "file:../../trading-workspace/libraries/trading-concepts-ts",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "better-sqlite3": "^12.11.1",
     "boxen": "^5.1.2",

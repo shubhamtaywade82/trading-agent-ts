@@ -3,6 +3,7 @@ import { dirname } from "path";
 import { fetchCandlesRange, buildSignalEvaluator } from "../tools/backtest-tools.js";
 import { Candle } from "../backtest/types.js";
 import { BinanceStreamManager } from "../exchange/binance-stream.js";
+import { ConceptsEngine } from "../concepts/adapter.js";
 import { logCoinDcxBasis } from "./coindcx-shadow.js";
 
 // Autonomous paper-trading runner. Polls Binance REST for newly-closed
@@ -385,7 +386,10 @@ export class LivePaperRunner {
       // see circuit-breaker.ts; buildSignalEvaluator itself never changes).
       let fired = false;
       if (!st.position && isNew && !st.paused && !this.globalHalt) {
-        const evaluator = buildSignalEvaluator(candles, strat.entry);
+        const hasConceptsConditions = strat.entry.some(c => c.type.startsWith("concepts_"));
+        const evaluator = hasConceptsConditions
+          ? new ConceptsEngine(candles).evaluator(strat.entry)
+          : buildSignalEvaluator(candles, strat.entry);
         const i = candles.length - 1;
         fired = evaluator(i);
         if (fired) {

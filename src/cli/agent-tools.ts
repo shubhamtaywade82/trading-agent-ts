@@ -30,6 +30,7 @@ import {
   BinanceMultiTimeframeSweepTool,
 } from "../tools/backtest-tools.js";
 import { BinancePaperTradeTool } from "../tools/paper-trading-tools.js";
+import { BinanceConceptsBacktestTool, BinanceConceptsAnalyzeTool, BinanceConceptsMarketStateTool } from "../concepts/tools.js";
 import { PaperTradingManager } from "../exchange/paper-trading.js";
 import { connectMcpServer } from "../mcp/client.js";
 import { Tool } from "../tools/tool.js";
@@ -82,7 +83,10 @@ export class AgentToolManager {
       .register(new BinanceFuturesBacktestTool())
       .register(new BinanceFuturesSweepTool())
       .register(new BinanceSignalFusionTool())
-      .register(new BinanceMultiTimeframeSweepTool());
+      .register(new BinanceMultiTimeframeSweepTool())
+      .register(new BinanceConceptsBacktestTool())
+      .register(new BinanceConceptsAnalyzeTool())
+      .register(new BinanceConceptsMarketStateTool());
   }
 
   registerBinanceStreamTools(stream: BinanceStreamManager): void {
