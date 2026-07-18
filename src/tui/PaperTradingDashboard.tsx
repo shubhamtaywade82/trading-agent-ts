@@ -7,15 +7,21 @@ import { TradeAnalyst } from "../paper-trading/trade-analyst.js";
 import { ReadinessMonitor, StrategyReadiness, PortfolioReadiness } from "../paper-trading/readiness.js";
 import { FillNotifier } from "../paper-trading/notifier.js";
 import { TradeEvaluator, TradeEvaluation } from "../paper-trading/trade-evaluator.js";
+import { SymbolPosition } from "../paper-trading/symbol-position.js";
 
 interface RowStatus {
   id: string; symbol: string; tf: string; direction: "long" | "short";
-  capital: number; pnl: number; trades: number; wins: number; losses: number;
+  attributedPnl: number; trades: number; wins: number; losses: number;
   winRate: number | null;
-  openPosition: { entryPrice: number; entryTime: string; qty: number; notional: number; margin: number; stopPrice: number; targetPrice: number } | null;
 }
 
-interface FeedEvent { ts: string; type: string; strategyId?: string; symbol?: string; reason?: string; pnl?: number; entryPrice?: number; message?: string; }
+interface FeedEvent {
+  ts: string; type: string; strategyId?: string; symbol?: string; tf?: string;
+  action?: string; direction?: "long" | "short"; reason?: string; price?: number;
+  qty?: number; realizedPnl?: number; message?: string;
+  approved?: boolean; rationale?: string;
+  positionAfter?: { direction: "long" | "short" | null; qty: number };
+}
 interface EvalResult { strategyId: string; symbol: string; tf: string; checked: boolean; fired: boolean; lastClosedCandleTime: number }
 
 const UP = "▲", DOWN = "▼";
@@ -74,6 +80,7 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
   const [evaluations, setEvaluations] = useState<TradeEvaluation[]>(evaluator?.getRecentEvaluations(5) ?? []);
   const [evalQueueLen, setEvalQueueLen] = useState(0);
   const [rows, setRows] = useState<RowStatus[]>(runner.getStatus() as RowStatus[]);
+  const [symbolPositions, setSymbolPositions] = useState<SymbolPosition[]>(runner.getSymbolPositions());
   const [feed, setFeed] = useState<FeedEvent[]>(readLastJournalEvents(journalFile, 8));
   const [lastEval, setLastEval] = useState<EvalResult[]>([]);
   const [lastTick, setLastTick] = useState<Date | null>(null);
@@ -208,6 +215,7 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
         try {
           const result = await runner.tick();
           setRows(runner.getStatus() as RowStatus[]);
+          setSymbolPositions(runner.getSymbolPositions());
           setLastEval(result.evaluations);
           setLastTick(new Date());
           setError(null);
@@ -232,19 +240,17 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
     return () => { stopped = true; };
   }, [runner, pollMs]);
 
-  const unrealized = (r: RowStatus): number | null => {
-    if (!r.openPosition) return null;
-    const live = livePrices[r.symbol];
+  const unrealizedForSymbol = (symbol: string): number | null => {
+    const live = livePrices[symbol];
     if (!live) return null;
-    return runner.unrealizedPnl(r.id, live.price);
+    return runner.unrealizedPnl(symbol, live.price);
   };
 
   const portfolio = runner.getPortfolio();
-  const totalRealized = rows.reduce((s, r) => s + r.pnl, 0);
-  const totalUnrealized = rows.reduce((s, r) => s + (unrealized(r) ?? 0), 0);
+  const totalRealized = rows.reduce((s, r) => s + r.attributedPnl, 0);
+  const totalUnrealized = symbolPositions.reduce((s, p) => s + (unrealizedForSymbol(p.symbol) ?? 0), 0);
   const totalTrades = rows.reduce((s, r) => s + r.trades, 0);
   const totalWins = rows.reduce((s, r) => s + r.wins, 0);
-  const openPositions = rows.filter(r => r.openPosition);
   const firedThisTick = lastEval.filter(e => e.fired);
   const anyStale = Object.values(wsStatus).some(s => s !== "live");
 
@@ -254,6 +260,7 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
     if (arr) arr.push(r); else bySymbol.set(r.symbol, [r]);
   }
   const idW = Math.max(...rows.map(r => r.id.length), 24) + 1;
+  const capitalPerSymbol = portfolio.symbolCount > 0 ? portfolio.totalInitialCapital / portfolio.symbolCount : 0;
 
   return (
     <Box flexDirection="column" padding={1}>
@@ -313,9 +320,9 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
         </Box>
         <Box>
           <Text color="gray">
-            Starting Capital ${portfolio.totalInitialCapital.toLocaleString()} ({portfolio.strategyCount} × $10,000 isolated buckets)
+            Starting Capital ${portfolio.totalInitialCapital.toLocaleString()} ({portfolio.symbolCount} × ${capitalPerSymbol.toLocaleString()} per-symbol pools, {portfolio.strategyCount} strategies)
             {"   "}Leverage {portfolio.leverage}x{"  "}Margin/Trade {(portfolio.marginPerTradePct * 100).toFixed(0)}%
-            {"   "}Open {portfolio.openPositions}/{portfolio.strategyCount}
+            {"   "}Open {portfolio.openPositions}/{portfolio.symbolCount}
           </Text>
         </Box>
       </Panel>
@@ -340,41 +347,39 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
         {error && <Text color="red">⚠ tick error: {error}</Text>}
       </Panel>
 
-      {/* Open positions blotter */}
-      {openPositions.length > 0 && (
-        <Panel title={`OPEN POSITIONS (${openPositions.length})`} borderColor="yellow">
+      {/* Open positions blotter — one row per SYMBOL (shared net position
+          across every contributing strategy), not per strategy. */}
+      {symbolPositions.length > 0 && (
+        <Panel title={`OPEN POSITIONS (${symbolPositions.length})`} borderColor="yellow">
           <Box>
             <Col width={9} color="gray">SIDE</Col>
-            <Col width={idW} color="gray">STRATEGY</Col>
             <Col width={5} color="gray">SYM</Col>
             <Col width={10} align="right" color="gray">QTY</Col>
             <Col width={9} align="right" color="gray">MARGIN</Col>
-            <Col width={10} align="right" color="gray">ENTRY</Col>
+            <Col width={10} align="right" color="gray">AVG ENTRY</Col>
             <Col width={10} align="right" color="gray">SL</Col>
             <Col width={10} align="right" color="gray">TP</Col>
             <Col width={10} align="right" color="gray">CURRENT</Col>
             <Col width={10} align="right" color="gray">UNREAL</Col>
-            <Col width={10} align="right" color="gray">SINCE</Col>
+            <Col width={idW} color="gray">CONTRIBUTORS</Col>
           </Box>
-          {openPositions.map(r => {
-            const live = livePrices[r.symbol];
-            const u = unrealized(r);
-            const since = r.openPosition ? new Date(r.openPosition.entryTime) : null;
+          {symbolPositions.map(p => {
+            const live = livePrices[p.symbol];
+            const u = unrealizedForSymbol(p.symbol);
             return (
-              <Box key={r.id}>
-                <Col width={9} color={r.direction === "short" ? "red" : "green"}>
-                  {r.direction === "short" ? `${DOWN} SHORT` : `${UP} LONG`}
+              <Box key={p.symbol}>
+                <Col width={9} color={p.direction === "short" ? "red" : "green"}>
+                  {p.direction === "short" ? `${DOWN} SHORT` : `${UP} LONG`}
                 </Col>
-                <Col width={idW}>{r.id}</Col>
-                <Col width={5}>{r.symbol.replace("USDT", "")}</Col>
-                <Col width={10} align="right" color="gray">{r.openPosition?.qty.toFixed(4) ?? "-"}</Col>
-                <Col width={9} align="right" color="gray">{r.openPosition ? `$${r.openPosition.margin.toFixed(0)}` : "-"}</Col>
-                <Col width={10} align="right" color="gray">{r.openPosition?.entryPrice.toFixed(4) ?? "-"}</Col>
-                <Col width={10} align="right" color="red">{r.openPosition?.stopPrice.toFixed(4) ?? "-"}</Col>
-                <Col width={10} align="right" color="green">{r.openPosition?.targetPrice.toFixed(4) ?? "-"}</Col>
+                <Col width={5}>{p.symbol.replace("USDT", "")}</Col>
+                <Col width={10} align="right" color="gray">{p.qty.toFixed(4)}</Col>
+                <Col width={9} align="right" color="gray">${p.margin.toFixed(0)}</Col>
+                <Col width={10} align="right" color="gray">{p.avgEntryPrice.toFixed(4)}</Col>
+                <Col width={10} align="right" color="red">{p.governingStopPrice?.toFixed(4) ?? "-"}</Col>
+                <Col width={10} align="right" color="green">{p.governingTargetPrice?.toFixed(4) ?? "-"}</Col>
                 <Col width={10} align="right" bold>{live ? live.price.toFixed(4) : "-"}</Col>
                 <Col width={10} align="right" color={pnlColor(u ?? 0)} bold>{u !== null ? fmtMoney(u) : "-"}</Col>
-                <Col width={10} align="right" color="gray">{since ? since.toLocaleTimeString() : "-"}</Col>
+                <Col width={idW} color="gray">{p.contributingStrategyIds.join(", ")}</Col>
               </Box>
             );
           })}
@@ -390,11 +395,12 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
           off the top of the visible viewport (this is a real report from
           testing: content taller than the terminal scrolls the top out of
           view, same as any TUI without pagination). */}
-      <Panel title={`STRATEGIES (${rows.length})`} borderColor="magenta">
+      <Panel title={`STRATEGIES (${rows.length}) — Attributed PnL`} borderColor="magenta">
         {[...bySymbol.entries()].map(([symbol, symRows]) => {
-          const symPnl = symRows.reduce((s, r) => s + r.pnl + (unrealized(r) ?? 0), 0);
-          const active = symRows.filter(r => r.openPosition || r.trades > 0);
-          const idle = symRows.filter(r => !r.openPosition && r.trades === 0);
+          const contributors = new Set(symbolPositions.find(p => p.symbol === symbol)?.contributingStrategyIds ?? []);
+          const symPnl = symRows.reduce((s, r) => s + r.attributedPnl, 0) + (unrealizedForSymbol(symbol) ?? 0);
+          const active = symRows.filter(r => contributors.has(r.id) || r.trades > 0);
+          const idle = symRows.filter(r => !contributors.has(r.id) && r.trades === 0);
           return (
             <Box key={symbol} flexDirection="column" marginBottom={1}>
               <Text bold color="cyan">{symbol}  <Text color={pnlColor(symPnl)}>{fmtMoney(symPnl)}</Text></Text>
@@ -403,10 +409,10 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
                   <Col width={2} color={r.direction === "short" ? "red" : "green"}>{r.direction === "short" ? DOWN : UP}</Col>
                   <Col width={idW}>{r.id}</Col>
                   <Col width={4} color="gray">{r.tf}</Col>
-                  <Col width={11} align="right" color={pnlColor(r.pnl)}>{fmtMoney(r.pnl)}</Col>
+                  <Col width={11} align="right" color={pnlColor(r.attributedPnl)}>{fmtMoney(r.attributedPnl)}</Col>
                   <Col width={7} color="gray">{`${r.trades} tr`}</Col>
                   <Col width={6} color="gray">{r.winRate !== null ? `${(r.winRate * 100).toFixed(0)}%WR` : ""}</Col>
-                  <Col width={8} color="yellow">{r.openPosition ? `${BULLET.live} OPEN` : ""}</Col>
+                  <Col width={8} color="yellow">{contributors.has(r.id) ? `${BULLET.live} OPEN` : ""}</Col>
                 </Box>
               ))}
               {idle.length > 0 && (
@@ -422,17 +428,31 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
       {/* Activity feed */}
       {feed.length > 0 && (
         <Panel title="RECENT FILLS" borderColor="cyan">
-          {feed.map((e, i) => (
-            <Box key={i}>
-              <Text color="gray">
-                {new Date(e.ts).toLocaleTimeString()}{"  "}
-                {e.type === "entry" && <Text color="yellow">ENTRY {e.strategyId} @ {e.entryPrice?.toFixed(4)}</Text>}
-                {e.type === "exit" && <Text color={pnlColor(e.pnl ?? 0)}>EXIT {e.strategyId} ({e.reason}) {fmtMoney(e.pnl ?? 0)}</Text>}
-                {e.type === "fetch_error" && <Text color="red">FETCH ERROR {e.symbol}: {e.message}</Text>}
-                {e.type === "tick_error" && <Text color="red">TICK ERROR: {e.message}</Text>}
-              </Text>
-            </Box>
-          ))}
+          {feed.map((e, i) => {
+            const isOpenLike = e.action === "open" || e.action === "add" || e.action === "flip_open";
+            const isCloseLike = e.action === "reduce" || e.action === "close" || e.action === "flip_close";
+            const verb = e.action === "add" ? "ADD" : e.action === "flip_open" ? "FLIP→OPEN"
+              : e.action === "reduce" ? "REDUCE" : e.action === "flip_close" ? "FLIP→CLOSE"
+              : e.action === "close" ? "CLOSE" : "OPEN";
+            return (
+              <Box key={i}>
+                <Text color="gray">
+                  {new Date(e.ts).toLocaleTimeString()}{"  "}
+                  {e.type === "position_fill" && isOpenLike && (
+                    <Text color="yellow">{verb} {e.symbol} {e.strategyId} @ {e.price?.toFixed(4)} qty {e.qty?.toFixed(4)}</Text>
+                  )}
+                  {e.type === "position_fill" && isCloseLike && (
+                    <Text color={pnlColor(e.realizedPnl ?? 0)}>{verb} {e.symbol} {e.strategyId} ({e.reason}) {fmtMoney(e.realizedPnl ?? 0)}</Text>
+                  )}
+                  {e.type === "ai_gate_decision" && (
+                    <Text color={e.approved ? "green" : "magenta"}>AI GATE {e.strategyId}: {e.approved ? "APPROVED" : "REJECTED"} — {e.rationale ?? ""}</Text>
+                  )}
+                  {e.type === "fetch_error" && <Text color="red">FETCH ERROR {e.symbol}: {e.message}</Text>}
+                  {e.type === "tick_error" && <Text color="red">TICK ERROR: {e.message}</Text>}
+                </Text>
+              </Box>
+            );
+          })}
         </Panel>
       )}
 
