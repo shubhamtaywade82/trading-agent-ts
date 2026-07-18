@@ -35,13 +35,15 @@ console.log(`Strategies loaded: ${runner.getStatus().length}\n`);
 function printStatus() {
   const rows = runner.getStatus();
   const p = runner.getPortfolio();
-  console.log(`\n[${new Date().toISOString()}] Portfolio: equity=$${(p.totalInitialCapital + p.totalRealizedPnl).toFixed(2)} available=$${p.availableBalance.toFixed(2)} usedMargin=$${p.usedMargin.toFixed(2)} open=${p.openPositions}/${p.strategyCount}`);
+  console.log(`\n[${new Date().toISOString()}] Portfolio: equity=$${(p.totalInitialCapital + p.totalRealizedPnl).toFixed(2)} available=$${p.availableBalance.toFixed(2)} usedMargin=$${p.usedMargin.toFixed(2)} open=${p.openPositions}/${p.symbolCount} symbols`);
   for (const r of rows) {
-    const posStr = r.openPosition ? ` | OPEN @ ${r.openPosition.entryPrice.toFixed(4)} since ${r.openPosition.entryTime}` : "";
-    console.log(`  ${r.symbol.padEnd(9)} ${r.id.padEnd(28)} cap=$${r.capital.toFixed(2).padStart(10)} pnl=$${r.pnl.toFixed(2).padStart(9)} trades=${String(r.trades).padStart(3)} WR=${r.winRate !== null ? (r.winRate*100).toFixed(0)+"%" : " -"}${posStr}`);
+    console.log(`  ${r.symbol.padEnd(9)} ${r.id.padEnd(28)} attributedPnl=$${r.attributedPnl.toFixed(2).padStart(9)} trades=${String(r.trades).padStart(3)} WR=${r.winRate !== null ? (r.winRate*100).toFixed(0)+"%" : " -"}`);
   }
-  const totalPnl = rows.reduce((s, r) => s + r.pnl, 0);
-  console.log(`  TOTAL realized PnL across ${rows.length} strategies: $${totalPnl.toFixed(2)}`);
+  for (const pos of runner.getSymbolPositions()) {
+    console.log(`  OPEN ${pos.symbol}: ${pos.direction} ${pos.qty.toFixed(4)} @ avg ${pos.avgEntryPrice.toFixed(4)} (contributors: ${pos.contributingStrategyIds.join(", ")})`);
+  }
+  const totalPnl = rows.reduce((s, r) => s + r.attributedPnl, 0);
+  console.log(`  TOTAL attributed realized PnL across ${rows.length} strategies: $${totalPnl.toFixed(2)}`);
 }
 
 let stopping = false;

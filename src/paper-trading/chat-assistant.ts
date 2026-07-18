@@ -3,7 +3,7 @@ import { Provider, OllamaToolSchema, ChatMessage } from "../provider/provider.js
 import { resolveOllamaCloudKeys } from "./ollama-cloud.js";
 import { assessReadiness, DEFAULT_READINESS_CRITERIA } from "./readiness.js";
 import { TradeEvaluator } from "./trade-evaluator.js";
-import { TradeAnalyst } from "./trade-analyst.js";
+import { TradeAnalyst, reconstructClosedTrades } from "./trade-analyst.js";
 
 // Read-only conversational assistant over the paper-trading system's on-disk
 // state. Every tool below wraps an existing read function — no new business
@@ -16,16 +16,18 @@ import { TradeAnalyst } from "./trade-analyst.js";
 // journal/state files LivePaperRunner and friends write. No in-process
 // coupling to a running bot — works whether or not one is currently active.
 
+// Matches LivePaperRunner's RunnerState (live-runner.ts) -- one net position
+// per symbol (shared across strategies), one capital pool per symbol.
 interface PaperState {
-  [strategyId: string]: {
-    capital: number;
-    position: {
-      entryPrice: number; entryTime: number; qty: number; margin: number; notional: number;
-      stopPrice: number; targetPrice: number; liqPrice: number;
-    } | null;
-    trades: number; wins: number; losses: number;
-  };
+  strategyStats: Record<string, { trades: number; wins: number; losses: number; paused?: boolean }>;
+  symbolCapital: Record<string, number>;
+  symbolPositions: Record<string, {
+    symbol: string; direction: "long" | "short" | null; qty: number; avgEntryPrice: number;
+    notional: number; margin: number; contributingStrategyIds: string[];
+  }>;
 }
+
+const EMPTY_STATE: PaperState = { strategyStats: {}, symbolCapital: {}, symbolPositions: {} };
 
 export interface ChatAssistantConfig {
   stateFile: string;
@@ -49,8 +51,8 @@ export const DEFAULT_CHAT_CONFIG: ChatAssistantConfig = {
 };
 
 function loadPaperState(stateFile: string): PaperState {
-  if (!existsSync(stateFile)) return {};
-  try { return JSON.parse(readFileSync(stateFile, "utf-8")); } catch { return {}; }
+  if (!existsSync(stateFile)) return EMPTY_STATE;
+  try { return JSON.parse(readFileSync(stateFile, "utf-8")); } catch { return EMPTY_STATE; }
 }
 
 function loadPool(poolPath: string): any {
@@ -104,36 +106,51 @@ export class ChatAssistant {
       case "get_portfolio_status": {
         const state = loadPaperState(this.cfg.stateFile);
         const pool = loadPool(this.cfg.poolPath);
-        const perStrategyCapital = pool.config?.initialCapital ?? 10000;
-        let totalCapital = 0, usedMargin = 0, openCount = 0, strategyCount = 0;
-        for (const st of Object.values(state)) {
-          strategyCount++;
-          totalCapital += st.capital;
-          if (st.position) { usedMargin += st.position.margin; openCount++; }
+        const perSymbolCapital = pool.config?.initialCapital ?? 10000;
+        const symbolCount = Object.keys(state.symbolCapital).length;
+        const totalCapital = Object.values(state.symbolCapital).reduce((s, c) => s + c, 0);
+        let usedMargin = 0, openCount = 0;
+        for (const pos of Object.values(state.symbolPositions)) {
+          if (pos.direction) { usedMargin += pos.margin; openCount++; }
         }
-        const totalInitial = strategyCount * perStrategyCapital;
+        const totalInitial = symbolCount * perSymbolCapital;
         return {
           totalInitialCapital: totalInitial,
           totalRealizedPnl: totalCapital - totalInitial,
           usedMargin, availableBalance: totalCapital - usedMargin,
-          openPositions: openCount, strategyCount,
+          openPositions: openCount, symbolCount,
           leverage: pool.config?.leverage, marginPerTradePct: pool.config?.marginPerTradePct,
         };
       }
       case "get_open_positions": {
         const state = loadPaperState(this.cfg.stateFile);
-        return Object.entries(state)
-          .filter(([, st]) => st.position)
-          .map(([id, st]) => ({ strategyId: id, ...st.position, sinceEntryTime: new Date(st.position!.entryTime).toISOString() }));
+        // One row per SYMBOL now (shared position, not per-strategy) -- see
+        // LivePaperRunner's class header comment for why.
+        return Object.values(state.symbolPositions).filter(pos => pos.direction);
       }
       case "get_strategy_status": {
         const state = loadPaperState(this.cfg.stateFile);
+        const pool = loadPool(this.cfg.poolPath);
+        const symbolOf: Record<string, string> = {};
+        for (const [symbol, strats] of Object.entries(pool.symbols) as [string, any[]][]) {
+          for (const s of strats) symbolOf[s.id] = symbol;
+        }
+        const closed = reconstructClosedTrades(this.cfg.journalFile);
+        const rowFor = (sid: string) => {
+          const st = state.strategyStats[sid];
+          if (!st) return { error: `no state for strategy ${sid}` };
+          const own = closed.filter(t => t.strategyId === sid);
+          const attributedPnl = Math.round(own.reduce((s, t) => s + t.pnl, 0) * 100) / 100;
+          const symbol = symbolOf[sid];
+          const contributesToOpenPosition = symbol ? state.symbolPositions[symbol]?.contributingStrategyIds.includes(sid) ?? false : false;
+          return {
+            strategyId: sid, symbol, attributedPnl, trades: st.trades, wins: st.wins, losses: st.losses,
+            winRate: st.trades > 0 ? st.wins / st.trades : null, contributesToOpenPosition,
+          };
+        };
         const id = args.strategyId as string | undefined;
-        if (id) return state[id] ?? { error: `no state for strategy ${id}` };
-        return Object.entries(state).map(([sid, st]) => ({
-          strategyId: sid, capital: st.capital, trades: st.trades, wins: st.wins, losses: st.losses,
-          winRate: st.trades > 0 ? st.wins / st.trades : null, hasOpenPosition: !!st.position,
-        }));
+        if (id) return rowFor(id);
+        return Object.keys(state.strategyStats).map(rowFor);
       }
       case "get_recent_fills":
         return tailJournal(this.cfg.journalFile, Number(args.count ?? 10));

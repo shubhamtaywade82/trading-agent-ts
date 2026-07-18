@@ -5,19 +5,29 @@ import { Candle } from "../backtest/types.js";
 import { BinanceStreamManager } from "../exchange/binance-stream.js";
 import { ConceptsEngine } from "../concepts/adapter.js";
 import { logCoinDcxBasis } from "./coindcx-shadow.js";
+import {
+  SymbolPositionManager, SymbolPosition, PositionFill, StrategyIntent, flatPosition,
+} from "./symbol-position.js";
+import { AiEntryGate, AiGateConfig, DEFAULT_AI_GATE_CONFIG } from "./ai-gate.js";
+import { reconstructClosedTrades } from "./trade-analyst.js";
 
 // Autonomous paper-trading runner. Polls Binance REST for newly-closed
 // candles per (symbol, timeframe) group, evaluates every pool strategy's
-// entry condition via buildSignalEvaluator — the SAME function
-// runFuturesBacktest uses — and simulates fills/exits with the strategy's
-// own stated stop/target/maxHoldBars. Each strategy trades its own isolated
-// virtual capital bucket (not a shared/fusion pool — matches how every
-// strategy's numbers in strategies.json were individually validated, so
-// live results are directly comparable to the backtest per strategy).
+// entry condition via buildSignalEvaluator (or ConceptsEngine's evaluator
+// for concepts_* strategies) — the SAME functions runFuturesBacktest uses —
+// and simulates fills/exits with the strategy's own stated
+// stop/target/maxHoldBars. A fired entry is an *intent*, not a position
+// owner: SymbolPositionManager decides whether it opens, adds to (averages
+// into), reduces, closes, or flips the symbol's ONE net position — one
+// position per symbol, shared capital pool per symbol, true cross-timeframe
+// netting. Only the strategy that opened a position ever governs its
+// stop/target/maxHoldBars; later adds change qty/avgEntryPrice only (see
+// symbol-position.ts's class header for the rationale).
 //
-// State persists to disk so a restart resumes cleanly. Every fill (entry or
-// exit) is appended to a JSONL trade journal for post-hoc comparison against
-// the backtested WR/PF/Sharpe.
+// State persists to disk so a restart resumes cleanly. Every position state
+// change (open/add/reduce/close/flip) is appended to a JSONL trade journal
+// for post-hoc comparison against the backtested WR/PF/Sharpe, and for
+// per-strategy PnL attribution (see getStatus()).
 
 export interface StrategyDef {
   id: string; symbol: string; tf: string; direction: "long" | "short";
@@ -25,22 +35,20 @@ export interface StrategyDef {
   stopPct: number; targetPct: number; maxHoldBars: number;
 }
 
-interface OpenPosition {
-  entryPrice: number; entryTime: number; entryBarIdx: number;
-  qty: number; margin: number; notional: number;
-  stopPrice: number; targetPrice: number; liqPrice: number;
-}
-
-interface StratState {
-  capital: number;
-  position: OpenPosition | null;
+interface StrategyStats {
   trades: number; wins: number; losses: number;
   lastEvalOpenTime: number; // last candle openTime this strategy was evaluated against
   paused?: boolean; // set externally (circuit-breaker); blocks new entries only, exits still managed
 }
 
+interface RunnerState {
+  strategyStats: Record<string, StrategyStats>;
+  symbolCapital: Record<string, number>;
+  symbolPositions: Record<string, SymbolPosition>;
+}
+
 export interface RunnerConfig {
-  initialCapitalPerStrategy: number;
+  initialCapitalPerSymbol: number;
   leverage: number;
   marginPerTradePct: number;
   feeBps: number;
@@ -53,10 +61,13 @@ export interface RunnerConfig {
   stateFile: string;
   journalFile: string;
   lookbackDaysByTf: Record<string, number>;
+  aiMode: "ai" | "no-ai";
+  aiGate: AiGateConfig;
+  htfCacheTtlMs: number;
 }
 
 export const DEFAULT_RUNNER_CONFIG: RunnerConfig = {
-  initialCapitalPerStrategy: 10000,
+  initialCapitalPerSymbol: 10000,
   leverage: 5,
   marginPerTradePct: 0.05,
   feeBps: 5,
@@ -70,7 +81,15 @@ export const DEFAULT_RUNNER_CONFIG: RunnerConfig = {
   journalFile: ".trading-agent/paper-trades.jsonl",
   // generous warmup margin over the longest indicator lookback in the pool (ichimoku=52 bars)
   lookbackDaysByTf: { "15m": 8, "30m": 15, "1h": 25, "2h": 50, "4h": 100, "1d": 400 },
+  aiMode: (process.env.TRADINGAGENT_AI_MODE === "ai" ? "ai" : "no-ai"),
+  aiGate: DEFAULT_AI_GATE_CONFIG,
+  htfCacheTtlMs: 5 * 60_000,
 };
+
+// Next timeframe up, for the HTF structure-alignment gate
+// (concepts_htf_aligned_bullish/bearish). Only covers timeframes actually
+// used by the strategy pool.
+const HTF_FOR_TF: Record<string, string> = { "15m": "1h", "30m": "4h", "1h": "4h", "2h": "1d", "4h": "1d" };
 
 // Ratio of recent ATR% (last `period` true ranges) to the average over the
 // whole candle window — >1 means current volatility is running hot relative
@@ -118,7 +137,7 @@ export function fundingPnl(rates: number[], notional: number, direction: "long" 
   return (direction === "long" ? -1 : 1) * sum * notional;
 }
 
-function loadStrategiesFromPool(poolPath = "strategies.json"): StrategyDef[] {
+function loadStrategiesFromPool(poolPath = "strategies.json"): { strategies: StrategyDef[]; aiGate?: Partial<AiGateConfig>; aiModeOverride?: "ai" | "no-ai" } {
   const cfg = JSON.parse(readFileSync(poolPath, "utf-8"));
   const out: StrategyDef[] = [];
   for (const [symbol, strats] of Object.entries(cfg.symbols) as [string, any[]][]) {
@@ -130,14 +149,29 @@ function loadStrategiesFromPool(poolPath = "strategies.json"): StrategyDef[] {
       });
     }
   }
-  return out;
+  const aiGateCfg = cfg.config?.aiGate as { mode?: "ai" | "no-ai" } & Partial<AiGateConfig> | undefined;
+  return { strategies: out, aiGate: aiGateCfg, aiModeOverride: aiGateCfg?.mode };
+}
+
+// A short human-readable summary of a symbol's current net position, for
+// the AI gate's prompt context and for dashboard/log display.
+function describePosition(pos: SymbolPosition | undefined): string {
+  if (!pos || !pos.direction || pos.qty === 0) return "flat";
+  return `${pos.direction} ${pos.qty.toFixed(4)} ${pos.symbol} @ ${pos.avgEntryPrice.toFixed(4)}, contributors: [${pos.contributingStrategyIds.join(", ")}]`;
+}
+
+function formatRecentCandles(candles: Candle[], bars: number): string {
+  return candles.slice(-bars).map(c => `${new Date(c.openTime).toISOString()} O${c.open} H${c.high} L${c.low} C${c.close}`).join(" | ");
 }
 
 export class LivePaperRunner {
   private strategies: StrategyDef[];
-  private state: Record<string, StratState> = {};
+  private state: RunnerState = { strategyStats: {}, symbolCapital: {}, symbolPositions: {} };
   private cfg: RunnerConfig;
   private running = false;
+  private positionManager: SymbolPositionManager;
+  private aiGate: AiEntryGate | null = null;
+  private htfCache = new Map<string, { candles: Candle[]; fetchedAt: number }>();
   // Portfolio-wide daily-loss halt, set by StrategyCircuitBreaker. Blocks
   // new entries only; exits still managed. In-memory on purpose: the breaker
   // recomputes today's realized loss from the journal every check, so a
@@ -145,8 +179,19 @@ export class LivePaperRunner {
   private globalHalt = false;
 
   constructor(cfg: Partial<RunnerConfig> = {}, poolPath = "strategies.json") {
-    this.cfg = { ...DEFAULT_RUNNER_CONFIG, ...cfg };
-    this.strategies = loadStrategiesFromPool(poolPath);
+    const pool = loadStrategiesFromPool(poolPath);
+    this.strategies = pool.strategies;
+    this.cfg = {
+      ...DEFAULT_RUNNER_CONFIG,
+      ...cfg,
+      aiGate: { ...DEFAULT_RUNNER_CONFIG.aiGate, ...pool.aiGate, ...cfg.aiGate },
+      // env var takes precedence over strategies.json, which takes precedence over the hardcoded default
+      aiMode: cfg.aiMode ?? (process.env.TRADINGAGENT_AI_MODE === "ai" ? "ai"
+        : process.env.TRADINGAGENT_AI_MODE === "no-ai" ? "no-ai"
+        : pool.aiModeOverride ?? DEFAULT_RUNNER_CONFIG.aiMode),
+    };
+    this.positionManager = new SymbolPositionManager(this.cfg.leverage, this.cfg.feeBps);
+    if (this.cfg.aiMode === "ai") this.aiGate = new AiEntryGate(this.cfg.aiGate);
     this.loadState();
   }
 
@@ -155,12 +200,20 @@ export class LivePaperRunner {
       try {
         this.state = JSON.parse(readFileSync(this.cfg.stateFile, "utf-8"));
       } catch {
-        this.state = {};
+        this.state = { strategyStats: {}, symbolCapital: {}, symbolPositions: {} };
       }
     }
     for (const s of this.strategies) {
-      if (!this.state[s.id]) {
-        this.state[s.id] = { capital: this.cfg.initialCapitalPerStrategy, position: null, trades: 0, wins: 0, losses: 0, lastEvalOpenTime: 0 };
+      if (!this.state.strategyStats[s.id]) {
+        this.state.strategyStats[s.id] = { trades: 0, wins: 0, losses: 0, lastEvalOpenTime: 0 };
+      }
+    }
+    for (const symbol of this.getSymbols()) {
+      if (this.state.symbolCapital[symbol] === undefined) {
+        this.state.symbolCapital[symbol] = this.cfg.initialCapitalPerSymbol;
+      }
+      if (!this.state.symbolPositions[symbol]) {
+        this.state.symbolPositions[symbol] = flatPosition(symbol);
       }
     }
   }
@@ -177,20 +230,28 @@ export class LivePaperRunner {
     appendFileSync(this.cfg.journalFile, JSON.stringify({ ts: new Date().toISOString(), ...event }) + "\n");
   }
 
+  private journalFills(symbol: string, tf: string, fills: PositionFill[]) {
+    for (const f of fills) {
+      this.journal({ type: "position_fill", symbol, tf, positionAfter: this.summarizePosition(symbol), ...f });
+    }
+  }
+
+  private summarizePosition(symbol: string) {
+    const pos = this.state.symbolPositions[symbol];
+    return { qty: pos.qty, avgEntryPrice: pos.avgEntryPrice, direction: pos.direction, contributingStrategyIds: pos.contributingStrategyIds };
+  }
+
   getStatus() {
+    const closed = reconstructClosedTrades(this.cfg.journalFile);
     return this.strategies.map(s => {
-      const st = this.state[s.id];
+      const st = this.state.strategyStats[s.id];
+      const own = closed.filter(t => t.strategyId === s.id);
+      const attributedPnl = Math.round(own.reduce((sum, t) => sum + t.pnl, 0) * 100) / 100;
       return {
         id: s.id, symbol: s.symbol, tf: s.tf, direction: s.direction,
-        capital: Math.round(st.capital * 100) / 100,
-        pnl: Math.round((st.capital - this.cfg.initialCapitalPerStrategy) * 100) / 100,
+        attributedPnl,
         trades: st.trades, wins: st.wins, losses: st.losses,
         winRate: st.trades > 0 ? st.wins / st.trades : null,
-        openPosition: st.position ? {
-          entryPrice: st.position.entryPrice, entryTime: new Date(st.position.entryTime).toISOString(),
-          qty: st.position.qty, notional: st.position.notional, margin: st.position.margin,
-          stopPrice: st.position.stopPrice, targetPrice: st.position.targetPrice,
-        } : null,
       };
     });
   }
@@ -199,20 +260,28 @@ export class LivePaperRunner {
     return [...new Set(this.strategies.map(s => s.symbol))];
   }
 
+  // One row per symbol's current net position, for the dashboard's
+  // positions blotter (replaces the old per-strategy openPosition list).
+  getSymbolPositions(): SymbolPosition[] {
+    return this.getSymbols()
+      .map(sym => this.state.symbolPositions[sym])
+      .filter(p => p.direction !== null && p.qty > 0);
+  }
+
   // Called by CircuitBreaker (in-process, same daemon) to pause/resume new
   // entries for a strategy. Mutates in-memory state directly and persists —
   // going through the file would race with this class's own saveState()
   // calls on every tick. Blocks new entries only; open positions still exit
   // normally (see processGroup()'s exit-management block, unconditional).
   setPaused(strategyId: string, paused: boolean): void {
-    const st = this.state[strategyId];
+    const st = this.state.strategyStats[strategyId];
     if (!st) return;
     st.paused = paused;
     this.saveState();
   }
 
   isPaused(strategyId: string): boolean {
-    return !!this.state[strategyId]?.paused;
+    return !!this.state.strategyStats[strategyId]?.paused;
   }
 
   setGlobalHalt(on: boolean): void {
@@ -226,33 +295,38 @@ export class LivePaperRunner {
   // Picks up strategies newly appended to strategies.json (e.g. by
   // ResearchPipeline's auto-promotion) without a process restart. Only
   // ADDS — never removes or mutates an existing strategy's definition or
-  // state, so open positions and history are untouched. Each newly-added
-  // strategy starts with its own fresh isolated capital bucket, same as
-  // every strategy already does.
+  // state, so open positions and history are untouched.
   reloadPool(poolPath = "strategies.json"): number {
-    const fresh = loadStrategiesFromPool(poolPath);
+    const fresh = loadStrategiesFromPool(poolPath).strategies;
     const existingIds = new Set(this.strategies.map(s => s.id));
     const added = fresh.filter(s => !existingIds.has(s.id));
     for (const s of added) {
       this.strategies.push(s);
-      this.state[s.id] = { capital: this.cfg.initialCapitalPerStrategy, position: null, trades: 0, wins: 0, losses: 0, lastEvalOpenTime: 0 };
+      if (!this.state.strategyStats[s.id]) {
+        this.state.strategyStats[s.id] = { trades: 0, wins: 0, losses: 0, lastEvalOpenTime: 0 };
+      }
+      if (this.state.symbolCapital[s.symbol] === undefined) {
+        this.state.symbolCapital[s.symbol] = this.cfg.initialCapitalPerSymbol;
+      }
+      if (!this.state.symbolPositions[s.symbol]) {
+        this.state.symbolPositions[s.symbol] = flatPosition(s.symbol);
+      }
     }
     if (added.length > 0) this.saveState();
     return added.length;
   }
 
-  // Portfolio-level rollup across every strategy's isolated capital bucket —
-  // each strategy still trades its own $10k slice (see class comment above),
-  // this just sums them into the account-level numbers a broker UI shows.
+  // Portfolio-level rollup across every symbol's shared capital pool — one
+  // pool per symbol (not per-strategy, not account-wide), matching how
+  // positions are now shared per symbol too.
   getPortfolio() {
-    let totalCapital = 0, usedMargin = 0;
-    let openCount = 0;
-    for (const s of this.strategies) {
-      const st = this.state[s.id];
-      totalCapital += st.capital;
-      if (st.position) { usedMargin += st.position.margin; openCount++; }
+    let totalCapital = 0, usedMargin = 0, openCount = 0;
+    for (const symbol of this.getSymbols()) {
+      totalCapital += this.state.symbolCapital[symbol];
+      const pos = this.state.symbolPositions[symbol];
+      if (pos.direction) { usedMargin += pos.margin; openCount++; }
     }
-    const totalInitial = this.strategies.length * this.cfg.initialCapitalPerStrategy;
+    const totalInitial = this.getSymbols().length * this.cfg.initialCapitalPerSymbol;
     const totalRealizedPnl = totalCapital - totalInitial;
     return {
       totalInitialCapital: totalInitial,
@@ -260,6 +334,7 @@ export class LivePaperRunner {
       usedMargin,
       availableBalance: totalCapital - usedMargin,
       openPositions: openCount,
+      symbolCount: this.getSymbols().length,
       strategyCount: this.strategies.length,
       leverage: this.cfg.leverage,
       marginPerTradePct: this.cfg.marginPerTradePct,
@@ -274,27 +349,25 @@ export class LivePaperRunner {
   // matching the backtest engine bar-for-bar. This exists purely so the
   // dashboard can show unrealized PnL between candle closes without the
   // live price ever influencing what the bot does.
-  unrealizedPnl(strategyId: string, livePrice: number): number | null {
-    const s = this.strategies.find(x => x.id === strategyId);
-    const st = s && this.state[s.id];
-    if (!s || !st?.position) return null;
+  unrealizedPnl(symbol: string, livePrice: number): number | null {
+    const pos = this.state.symbolPositions[symbol];
+    if (!pos || !pos.direction) return null;
     const feeFrac = this.cfg.feeBps / 10000;
-    const raw = (livePrice - st.position.entryPrice) * (s.direction === "long" ? 1 : -1) * st.position.qty;
-    return raw - st.position.notional * feeFrac;
+    const raw = (livePrice - pos.avgEntryPrice) * (pos.direction === "long" ? 1 : -1) * pos.qty;
+    return raw - pos.notional * feeFrac;
   }
 
-  // Sum of unrealized PnL across every open position, priced off the
+  // Sum of unrealized PnL across every open symbol position, priced off the
   // stream's latest ticker tick per symbol. Display/risk-check only — same
   // rule as unrealizedPnl() above, never used by any entry/exit decision.
-  // Positions whose symbol has no live tick yet are skipped (best-effort).
   totalUnrealizedPnl(stream: BinanceStreamManager): number {
     let sum = 0;
-    for (const s of this.strategies) {
-      const st = this.state[s.id];
-      if (!st.position) continue;
-      const tick = stream.getLatest(s.symbol);
+    for (const symbol of this.getSymbols()) {
+      const pos = this.state.symbolPositions[symbol];
+      if (!pos.direction) continue;
+      const tick = stream.getLatest(symbol);
       if (!tick) continue;
-      const u = this.unrealizedPnl(s.id, tick.price);
+      const u = this.unrealizedPnl(symbol, tick.price);
       if (u !== null) sum += u;
     }
     return sum;
@@ -308,6 +381,22 @@ export class LivePaperRunner {
       if (arr) arr.push(s); else groups.set(key, [s]);
     }
     return groups;
+  }
+
+  private async getHtfCandles(symbol: string, tf: string): Promise<Candle[]> {
+    const htfTf = HTF_FOR_TF[tf];
+    if (!htfTf) return [];
+    const key = `${symbol}:${htfTf}`;
+    const cached = this.htfCache.get(key);
+    if (cached && Date.now() - cached.fetchedAt < this.cfg.htfCacheTtlMs) return cached.candles;
+
+    const lookbackDays = this.cfg.lookbackDaysByTf[htfTf] ?? 100;
+    const endTime = Date.now();
+    const startTime = endTime - lookbackDays * 24 * 60 * 60 * 1000;
+    const fetched = await fetchCandlesRange(symbol, htfTf, startTime, endTime);
+    if ("error" in fetched) return cached?.candles ?? [];
+    this.htfCache.set(key, { candles: fetched.candles, fetchedAt: Date.now() });
+    return fetched.candles;
   }
 
   // Fetch + evaluate/manage every strategy in one (symbol, tf) group. Shared
@@ -334,62 +423,98 @@ export class LivePaperRunner {
 
     let fills = 0;
     const evaluations: { strategyId: string; symbol: string; tf: string; checked: boolean; fired: boolean; lastClosedCandleTime: number }[] = [];
+
+    // Exit-management for the symbol's ONE shared position only runs from
+    // the tf group that currently governs it — avoids two different tf
+    // groups double-checking the same governing stop/target at different
+    // candle resolutions.
+    // ponytail: a governing stop could theoretically be crossed intra-bar on
+    // a faster co-located tf before the governing tf's own candle closes;
+    // acceptable since the stop/target were validated at the governing tf's
+    // resolution. Upgrade: also check against every other active tf's
+    // closes if tighter resolution is ever needed.
+    const pos = this.state.symbolPositions[symbol];
+    const governingHere = pos.direction !== null && strats.some(s => s.id === pos.governingStrategyId) && lastClosed.openTime > (this.state.strategyStats[pos.governingStrategyId!]?.lastEvalOpenTime ?? 0);
+    if (governingHere) {
+      const bar = lastClosed;
+      const dir = pos.direction!;
+      const hitLiq = dir === "long" ? bar.low <= pos.liqPrice! : bar.high >= pos.liqPrice!;
+      const hitStop = dir === "long" ? bar.low <= pos.governingStopPrice! : bar.high >= pos.governingStopPrice!;
+      const hitTarget = dir === "long" ? bar.high >= pos.governingTargetPrice! : bar.low <= pos.governingTargetPrice!;
+      const barsHeld = candles.length - 1 - (pos.governingEntryBarIdx ?? candles.length - 1);
+      const timedOut = barsHeld >= (pos.governingMaxHoldBars ?? Infinity);
+
+      if (hitLiq || hitStop || hitTarget || timedOut) {
+        let exitPrice: number, reason: "liquidation" | "stop" | "target" | "timeout";
+        if (hitLiq) { exitPrice = pos.liqPrice!; reason = "liquidation"; }
+        else if (hitStop) { exitPrice = pos.governingStopPrice!; reason = "stop"; }
+        else if (hitTarget) { exitPrice = pos.governingTargetPrice!; reason = "target"; }
+        else { exitPrice = bar.close; reason = "timeout"; }
+
+        // Funding accrues to the position as a whole; applied once here on
+        // the same weighted-avg-cost basis as everything else, then folded
+        // into every attributed fill proportionally by the position manager's
+        // own realized-PnL math (funding is added to price via an
+        // equivalent-notional adjustment before closing).
+        // ponytail: charged against the position's CURRENT total notional
+        // from the EARLIEST contributing lot's entry time — a position built
+        // up via several adds didn't actually hold that full notional for
+        // the whole window, so this over-counts funding on the portion added
+        // later. Real per-lot notional-over-time accrual would fix this;
+        // acceptable approximation for now (same spirit as this file's
+        // pre-existing "entry notional, not per-event mark notional" note).
+        let funding = 0;
+        const heldFrom = (pos.governingEntryBarIdx !== null ? pos.lots.reduce((min, l) => Math.min(min, l.entryBarOpenTime), Infinity) : bar.openTime) + tfMs;
+        const heldTo = bar.openTime + tfMs;
+        if (this.cfg.funding && Math.floor(heldTo / EIGHT_H) > Math.floor(heldFrom / EIGHT_H)) {
+          try {
+            const rates = await fetchFundingRates(symbol, heldFrom, heldTo);
+            funding = fundingPnl(rates, pos.notional, dir);
+          } catch (e) {
+            this.journal({ type: "funding_fetch_error", symbol, message: (e as Error).message });
+          }
+        }
+        // Fold funding into the exit price as an equivalent price adjustment
+        // so it flows through the position manager's single realized-PnL
+        // computation (and its per-strategy FIFO attribution) rather than a
+        // second bolt-on adjustment after the fact.
+        const fundingPriceAdj = pos.qty !== 0 ? (dir === "long" ? funding / pos.qty : -funding / pos.qty) : 0;
+        const adjustedExitPrice = exitPrice + fundingPriceAdj;
+
+        const triggerStrategyId = pos.governingStrategyId!;
+        const { position: newPos, fills: closeFills } = this.positionManager.closePosition(pos, triggerStrategyId, adjustedExitPrice, reason);
+        this.state.symbolPositions[symbol] = newPos;
+        this.journalFills(symbol, tf, closeFills);
+        for (const f of closeFills) {
+          const st = this.state.strategyStats[f.strategyId];
+          if (st) { st.trades++; if (f.realizedPnl > 0) st.wins++; else st.losses++; }
+          this.state.symbolCapital[symbol] += f.realizedPnl;
+        }
+        fills += closeFills.length;
+        if (this.cfg.coindcxShadow) void logCoinDcxBasis(this.cfg.coindcxShadowFile, symbol, "exit", dir, exitPrice);
+      }
+    }
+
     for (const strat of strats) {
-      const st = this.state[strat.id];
+      const st = this.state.strategyStats[strat.id];
       const isNew = lastClosed.openTime > st.lastEvalOpenTime;
 
-      // Manage an open position against the newest closed candle (same
-      // per-bar check the backtest engine does). Runs regardless of pause
-      // state — pause only blocks NEW entries, never exits.
-      if (st.position && isNew) {
-        const pos = st.position;
-        const bar = lastClosed;
-        const dir = strat.direction;
-        const hitLiq = dir === "long" ? bar.low <= pos.liqPrice : bar.high >= pos.liqPrice;
-        const hitStop = dir === "long" ? bar.low <= pos.stopPrice : bar.high >= pos.stopPrice;
-        const hitTarget = dir === "long" ? bar.high >= pos.targetPrice : bar.low <= pos.targetPrice;
-        const barsHeld = candles.length - 1 - pos.entryBarIdx;
-        const timedOut = barsHeld >= strat.maxHoldBars;
-
-        if (hitLiq || hitStop || hitTarget || timedOut) {
-          let exitPrice: number, reason: string;
-          if (hitLiq) { exitPrice = pos.liqPrice; reason = "liquidation"; }
-          else if (hitStop) { exitPrice = pos.stopPrice; reason = "stop"; }
-          else if (hitTarget) { exitPrice = pos.targetPrice; reason = "target"; }
-          else { exitPrice = bar.close; reason = "timeout"; }
-          const feeFrac = this.cfg.feeBps / 10000;
-          let pnl = (exitPrice - pos.entryPrice) * (dir === "long" ? 1 : -1) * pos.qty - pos.notional * feeFrac;
-          // Position lives from entry-candle close to exit-bar close; charge
-          // any funding events (every 8h) that fell inside that span.
-          let funding = 0;
-          const heldFrom = pos.entryTime + tfMs, heldTo = bar.openTime + tfMs;
-          if (this.cfg.funding && Math.floor(heldTo / EIGHT_H) > Math.floor(heldFrom / EIGHT_H)) {
-            try {
-              const rates = await fetchFundingRates(symbol, heldFrom, heldTo);
-              funding = fundingPnl(rates, pos.notional, dir);
-              pnl += funding;
-            } catch (e) {
-              this.journal({ type: "funding_fetch_error", strategyId: strat.id, symbol, message: (e as Error).message });
-            }
-          }
-          st.capital += pnl;
-          st.trades++; if (pnl > 0) st.wins++; else st.losses++;
-          st.position = null;
-          fills++;
-          this.journal({ type: "exit", strategyId: strat.id, symbol, tf, direction: dir, reason, exitPrice, pnl: Math.round(pnl * 100) / 100, funding: Math.round(funding * 100) / 100, capitalAfter: Math.round(st.capital * 100) / 100 });
-          if (this.cfg.coindcxShadow) void logCoinDcxBasis(this.cfg.coindcxShadowFile, symbol, "exit", dir, exitPrice);
-        }
-      }
-
-      // Look for a new entry only if flat, this candle hasn't been checked
-      // yet, and the strategy isn't paused (circuit-breaker sets this flag —
-      // see circuit-breaker.ts; buildSignalEvaluator itself never changes).
+      // Look for a new entry only if this candle hasn't been checked yet and
+      // the strategy isn't paused (circuit-breaker sets this flag).
+      // Multiple strategies CAN fire on the same symbol — SymbolPositionManager
+      // decides open/add/reduce/flip, there is no per-strategy "already in a
+      // position" gate anymore (that's the whole point of the shared position).
       let fired = false;
-      if (!st.position && isNew && !st.paused && !this.globalHalt) {
+      if (isNew && !st.paused && !this.globalHalt) {
         const hasConceptsConditions = strat.entry.some(c => c.type.startsWith("concepts_"));
-        const evaluator = hasConceptsConditions
-          ? new ConceptsEngine(candles).evaluator(strat.entry)
-          : buildSignalEvaluator(candles, strat.entry);
+        const needsHtf = strat.entry.some(c => c.type.startsWith("concepts_htf_aligned_"));
+        let evaluator: (i: number) => boolean;
+        if (hasConceptsConditions) {
+          const htfContext = needsHtf ? new ConceptsEngine(await this.getHtfCandles(symbol, tf)).toHTFContext() : undefined;
+          evaluator = new ConceptsEngine(candles, htfContext ? { htfContext } : undefined).evaluator(strat.entry);
+        } else {
+          evaluator = buildSignalEvaluator(candles, strat.entry);
+        }
         const i = candles.length - 1;
         fired = evaluator(i);
         if (fired) {
@@ -398,15 +523,51 @@ export class LivePaperRunner {
           const rawEntry = candles[i].close;
           const entryPrice = strat.direction === "long" ? rawEntry * (1 + slipFrac) : rawEntry * (1 - slipFrac);
           const scale = this.cfg.volSizing ? volScale(candles) : 1;
-          const margin = st.capital * this.cfg.marginPerTradePct * scale;
+          const margin = this.state.symbolCapital[symbol] * this.cfg.marginPerTradePct * scale;
           const notional = margin * this.cfg.leverage;
-          const qty = notional / entryPrice;
-          const stopPrice = strat.direction === "long" ? entryPrice * (1 - strat.stopPct) : entryPrice * (1 + strat.stopPct);
-          const targetPrice = strat.direction === "long" ? entryPrice * (1 + strat.targetPct) : entryPrice * (1 - strat.targetPct);
-          const liqPrice = strat.direction === "long" ? entryPrice * (1 - 1 / this.cfg.leverage + 0.005) : entryPrice * (1 + 1 / this.cfg.leverage - 0.005);
-          st.position = { entryPrice, entryTime: candles[i].openTime, entryBarIdx: i, qty, margin, notional, stopPrice, targetPrice, liqPrice };
-          fills++;
-          this.journal({ type: "entry", strategyId: strat.id, symbol, tf, direction: strat.direction, entryPrice, stopPrice, targetPrice, margin: Math.round(margin * 100) / 100, volScale: Math.round(scale * 100) / 100, slipMult: Math.round(slipMult * 100) / 100 });
+          let qty = notional / entryPrice;
+
+          const intent: StrategyIntent = {
+            strategyId: strat.id, symbol, tf, direction: strat.direction,
+            stopPct: strat.stopPct, targetPct: strat.targetPct, maxHoldBars: strat.maxHoldBars,
+            entryBarIdx: i, entryBarOpenTime: candles[i].openTime,
+          };
+
+          if (this.cfg.aiMode === "ai" && this.aiGate) {
+            const rawStop = strat.direction === "long" ? entryPrice * (1 - strat.stopPct) : entryPrice * (1 + strat.stopPct);
+            const rawTarget = strat.direction === "long" ? entryPrice * (1 + strat.targetPct) : entryPrice * (1 - strat.targetPct);
+            const decision = await this.aiGate.review({
+              strategyId: strat.id, symbol, tf, direction: strat.direction,
+              entryPrice, stopPrice: rawStop, targetPrice: rawTarget,
+              candleContext: formatRecentCandles(candles, 20),
+              symbolPositionSummary: describePosition(this.state.symbolPositions[symbol]),
+            });
+            this.journal({ type: "ai_gate_decision", strategyId: strat.id, symbol, tf, approved: decision.approved, sizeMultiplier: decision.sizeMultiplier, rationale: decision.rationale });
+            if (!decision.approved) {
+              evaluations.push({ strategyId: strat.id, symbol, tf, checked: isNew, fired, lastClosedCandleTime: lastClosed.openTime });
+              if (isNew) st.lastEvalOpenTime = lastClosed.openTime;
+              continue;
+            }
+            qty *= decision.sizeMultiplier;
+          }
+
+          const currentPos = this.state.symbolPositions[symbol];
+          const { position: newPos, fills: openFills } = this.positionManager.applyIntent(currentPos, intent, entryPrice, qty);
+          this.state.symbolPositions[symbol] = newPos;
+          this.journalFills(symbol, tf, openFills);
+          for (const f of openFills) {
+            const isExitLike = f.action === "reduce" || f.action === "close" || f.action === "flip_close";
+            if (isExitLike) {
+              const fst = this.state.strategyStats[f.strategyId];
+              if (fst) { fst.trades++; if (f.realizedPnl > 0) fst.wins++; else fst.losses++; }
+              // realizedPnl already has this fill's fee subtracted (see symbol-position.ts).
+              this.state.symbolCapital[symbol] += f.realizedPnl;
+            } else {
+              // open/add: no PnL yet, but the fee is a real cash cost.
+              this.state.symbolCapital[symbol] -= f.feeUsd;
+            }
+          }
+          fills += openFills.length;
           if (this.cfg.coindcxShadow) void logCoinDcxBasis(this.cfg.coindcxShadowFile, symbol, "entry", strat.direction, entryPrice);
         }
       }

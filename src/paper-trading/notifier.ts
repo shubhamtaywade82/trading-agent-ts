@@ -14,14 +14,10 @@ export function terminalBell(): void {
 }
 
 // Watches the paper-trading journal and sends a Telegram alert for every new
-// entry/exit fill — a live trade blotter in your pocket. Purely an observer:
-// reads the journal file, tracks how many lines it has already notified via
-// a persisted line count (so a restart doesn't re-blast every historical
-// fill), never touches trading state. Signal "fired but no position opened"
-// (e.g. FIFO lost the race in fusion mode — not applicable to the isolated-
-// bucket LivePaperRunner, every fired signal here does open) isn't logged as
-// a separate journal event type, so there's nothing to alert on beyond
-// entry/exit; if that changes, extend the switch below.
+// position_fill (open/add/reduce/close/flip) — a live trade blotter in your
+// pocket. Purely an observer: reads the journal file, tracks how many lines
+// it has already notified via a persisted line count (so a restart doesn't
+// re-blast every historical fill), never touches trading state.
 export class FillNotifier {
   private stateFile: string;
   private journalFile: string;
@@ -54,11 +50,16 @@ export class FillNotifier {
       let e: any;
       try { e = JSON.parse(line); } catch { continue; }
       let text: string | null = null;
-      if (e.type === "entry") {
-        text = `${e.direction === "short" ? "🔻" : "🔺"} ENTRY ${e.strategyId} (${e.symbol} ${e.tf})\n@ ${e.entryPrice?.toFixed(6)}  stop ${e.stopPrice?.toFixed(6)}  target ${e.targetPrice?.toFixed(6)}  margin $${e.margin?.toFixed(2)}`;
-      } else if (e.type === "exit") {
-        const emoji = (e.pnl ?? 0) > 0 ? "✅" : "🛑";
-        text = `${emoji} EXIT ${e.strategyId} (${e.reason})\n@ ${e.exitPrice?.toFixed(6)}  PnL $${e.pnl?.toFixed(2)}  capital $${e.capitalAfter?.toFixed(2)}`;
+      if (e.type === "position_fill") {
+        const posAfter = e.positionAfter ? ` | position now: ${e.positionAfter.direction ?? "flat"} ${e.positionAfter.qty ?? 0}` : "";
+        if (e.action === "open" || e.action === "add" || e.action === "flip_open") {
+          const verb = e.action === "add" ? "ADD" : e.action === "flip_open" ? "FLIP→OPEN" : "OPEN";
+          text = `${e.direction === "short" ? "🔻" : "🔺"} ${verb} ${e.symbol} ${e.tf} (${e.strategyId})\n@ ${e.price?.toFixed(6)}  qty ${e.qty?.toFixed(4)}${posAfter}`;
+        } else if (e.action === "reduce" || e.action === "close" || e.action === "flip_close") {
+          const emoji = (e.realizedPnl ?? 0) > 0 ? "✅" : "🛑";
+          const verb = e.action === "reduce" ? "REDUCE" : e.action === "flip_close" ? "FLIP→CLOSE" : "CLOSE";
+          text = `${emoji} ${verb} ${e.symbol} (${e.strategyId}, ${e.reason})\n@ ${e.price?.toFixed(6)}  realizedPnl $${e.realizedPnl?.toFixed(2)}${posAfter}`;
+        }
       }
       if (text && await sendTelegram(text)) sent++;
     }
