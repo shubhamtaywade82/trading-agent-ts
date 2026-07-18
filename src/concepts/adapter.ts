@@ -49,6 +49,18 @@ export interface PerBarSignals {
   cvdNegative: boolean[];
   aboveVWAP: boolean[];
   belowVWAP: boolean[];
+
+  // Most recent HTF structure signal (BOS/CHoCH/MSS) at-or-before this bar's
+  // time, direction-matched. Only populated when an htfContext was supplied
+  // (see ConceptsEngineOptions.htfContext) — all false otherwise, same as
+  // every other signal that depends on optional context.
+  htfAlignedBullish: boolean[];
+  htfAlignedBearish: boolean[];
+  // A liquidity sweep or judas swing occurred within LOOKAROUND_BARS of this
+  // bar — zone-relative "was there a sweep near here", distinct from
+  // buysideSweep/sellsideSweep above (which mark a sweep firing on ITS OWN
+  // bar, unrelated to any particular zone).
+  liquiditySweptNearZone: boolean[];
 }
 
 export interface ConceptsEngineOptions {
@@ -88,9 +100,14 @@ function computeCvdSeries(candles: Candle[]): number[] {
   });
 }
 
+// Matches trading-concepts-ts's own DEFAULT_CHECKLIST_SCORE_CONFIG.lookaroundBars —
+// the window (in bars) used to decide whether a sweep/structure event counts
+// as "near" a given zone/bar.
+const LOOKAROUND_BARS = 5;
+
 // ── Build per-bar signal arrays from AnalysisResult + indicators ──
 
-function buildPerBarSignals(candles: Candle[], ar: AnalysisResult): PerBarSignals {
+function buildPerBarSignals(candles: Candle[], ar: AnalysisResult, htfContext?: HTFContext): PerBarSignals {
   const n = candles.length;
   const closes = candles.map(c => c.close);
 
@@ -248,6 +265,42 @@ function buildPerBarSignals(candles: Candle[], ar: AnalysisResult): PerBarSignal
     }
   }
 
+  // HTF structure alignment — most recent HTF structure signal at-or-before
+  // each bar's own time, direction-matched. Time-filtered (not index-based,
+  // since HTF and LTF candle arrays have unrelated indices) so this can
+  // never see an HTF event that hadn't happened yet as of this LTF bar.
+  const htfAlignedBullish = new Array<boolean>(n).fill(false);
+  const htfAlignedBearish = new Array<boolean>(n).fill(false);
+  const htfStructure = htfContext?.structure;
+  if (htfStructure && htfStructure.length > 0) {
+    const sorted = [...htfStructure].sort((a, b) => a.time - b.time);
+    let cursor = 0;
+    for (let i = 0; i < n; i++) {
+      const t = candles[i].openTime;
+      while (cursor + 1 < sorted.length && sorted[cursor + 1].time <= t) cursor++;
+      if (sorted[cursor].time <= t) {
+        htfAlignedBullish[i] = sorted[cursor].direction === 'bullish';
+        htfAlignedBearish[i] = sorted[cursor].direction === 'bearish';
+      }
+    }
+  }
+
+  // Zone-relative liquidity sweep: a sweep (scored) or judas swing landed
+  // within LOOKAROUND_BARS of this bar. Applies uniformly to OB- and
+  // FVG-triggered signals since scoreLiquiditySweep/findJudasSwings work
+  // off liquidity zones generically, not order-block-scoped.
+  const liquiditySweptNearZone = new Array<boolean>(n).fill(false);
+  for (const sw of ar.liquiditySweepScores) {
+    for (let i = Math.max(0, sw.sweepIndex - LOOKAROUND_BARS); i <= Math.min(n - 1, sw.sweepIndex + LOOKAROUND_BARS); i++) {
+      liquiditySweptNearZone[i] = true;
+    }
+  }
+  for (const js of ar.judasSwings) {
+    for (let i = Math.max(0, js.sweepIndex - LOOKAROUND_BARS); i <= Math.min(n - 1, js.sweepIndex + LOOKAROUND_BARS); i++) {
+      liquiditySweptNearZone[i] = true;
+    }
+  }
+
   return {
     bullishMSS, bearishMSS, bullishCHoCH, bearishCHoCH, bullishBOS, bearishBOS,
     newBullishOB, newBearishOB, newBullishFVG, newBearishFVG,
@@ -260,6 +313,7 @@ function buildPerBarSignals(candles: Candle[], ar: AnalysisResult): PerBarSignal
     aboveHVN, belowHVN, atPOC, atLVN,
     cvdRising, cvdFalling, cvdPositive, cvdNegative,
     aboveVWAP, belowVWAP,
+    htfAlignedBullish, htfAlignedBearish, liquiditySweptNearZone,
   };
 }
 
@@ -271,6 +325,7 @@ export class ConceptsEngine {
   private analysis: AnalysisResult | null = null;
   private signals: PerBarSignals | null = null;
   private tc: TradingConcepts;
+  private htfContext?: HTFContext;
 
   constructor(candles: Candle[], options?: ConceptsEngineOptions) {
     this.candles = candles;
@@ -281,8 +336,9 @@ export class ConceptsEngine {
     } else {
       this.tc = new TradingConcepts(this.adapted, overrides);
     }
-    if (options?.htfContext) {
-      this.tc.setHTFContext(options.htfContext);
+    this.htfContext = options?.htfContext;
+    if (this.htfContext) {
+      this.tc.setHTFContext(this.htfContext);
     }
   }
 
@@ -307,7 +363,7 @@ export class ConceptsEngine {
   getSignals(): PerBarSignals {
     if (!this.signals) {
       this.analyze();
-      this.signals = buildPerBarSignals(this.candles, this.analysis!);
+      this.signals = buildPerBarSignals(this.candles, this.analysis!, this.htfContext);
     }
     return this.signals;
   }
@@ -382,6 +438,9 @@ export class ConceptsEngine {
         case 'concepts_below_hvn': return sig.belowHVN[i] ?? false;
         case 'concepts_at_poc': return sig.atPOC[i] ?? false;
         case 'concepts_at_lvn': return sig.atLVN[i] ?? false;
+        case 'concepts_htf_aligned_bullish': return sig.htfAlignedBullish[i] ?? false;
+        case 'concepts_htf_aligned_bearish': return sig.htfAlignedBearish[i] ?? false;
+        case 'concepts_liquidity_swept_near': return sig.liquiditySweptNearZone[i] ?? false;
         default:
           return false;
       }
