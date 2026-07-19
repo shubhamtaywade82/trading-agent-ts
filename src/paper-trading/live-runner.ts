@@ -33,6 +33,7 @@ export interface StrategyDef {
   id: string; symbol: string; tf: string; direction: "long" | "short";
   entry: { type: string; period?: number; value?: number }[];
   stopPct: number; targetPct: number; maxHoldBars: number;
+  sizeMultiplier: number; // from PnlAdaptor (pnl-adaptor.ts); 1 unless resized based on live PnL
 }
 
 interface StrategyStats {
@@ -142,10 +143,11 @@ function loadStrategiesFromPool(poolPath = "strategies.json"): { strategies: Str
   const out: StrategyDef[] = [];
   for (const [symbol, strats] of Object.entries(cfg.symbols) as [string, any[]][]) {
     for (const s of strats) {
+      if (s.enabled === false) continue; // permanently pruned by PnlAdaptor -- absent from the live pool
       out.push({
         id: s.id, symbol, tf: s.tf ?? "1h", direction: s.direction,
         entry: s.entry, stopPct: s.risk.stopPct, targetPct: s.risk.targetPct,
-        maxHoldBars: s.maxHoldBars ?? 48,
+        maxHoldBars: s.maxHoldBars ?? 48, sizeMultiplier: s.sizeMultiplier ?? 1,
       });
     }
   }
@@ -293,12 +295,45 @@ export class LivePaperRunner {
   }
 
   // Picks up strategies newly appended to strategies.json (e.g. by
-  // ResearchPipeline's auto-promotion) without a process restart. Only
-  // ADDS — never removes or mutates an existing strategy's definition or
-  // state, so open positions and history are untouched.
+  // ResearchPipeline's auto-promotion) without a process restart, and
+  // (as of PnlAdaptor, pnl-adaptor.ts) picks up a changed sizeMultiplier or
+  // an enabled:false prune for EXISTING ids too. For existing ids this only
+  // ever touches sizeMultiplier or removes the id from the active pool —
+  // entry/risk/maxHoldBars/direction are never mutated in place, and a
+  // pruned strategy's open position (if any) still exits normally, since
+  // exits are position-driven, not strategy-list-driven (see
+  // processGroup()'s governingStrategyId check, unconditional on pool
+  // membership).
   reloadPool(poolPath = "strategies.json"): number {
+    const rawCfg = JSON.parse(readFileSync(poolPath, "utf-8"));
+    const prunedIds = new Set<string>();
+    for (const strats of Object.values(rawCfg.symbols) as any[][]) {
+      for (const s of strats) if (s.enabled === false) prunedIds.add(s.id);
+    }
+
     const fresh = loadStrategiesFromPool(poolPath).strategies;
+    const freshById = new Map(fresh.map(s => [s.id, s]));
     const existingIds = new Set(this.strategies.map(s => s.id));
+    let changed = 0;
+
+    for (const existing of this.strategies) {
+      const updated = freshById.get(existing.id);
+      if (updated && updated.sizeMultiplier !== existing.sizeMultiplier) {
+        this.journal({ type: "size_multiplier_updated", strategyId: existing.id, from: existing.sizeMultiplier, to: updated.sizeMultiplier });
+        existing.sizeMultiplier = updated.sizeMultiplier;
+        changed++;
+      }
+    }
+    if (prunedIds.size > 0) {
+      const before = this.strategies.length;
+      this.strategies = this.strategies.filter(s => !prunedIds.has(s.id));
+      const removed = before - this.strategies.length;
+      if (removed > 0) {
+        for (const id of prunedIds) this.journal({ type: "strategy_pruned", strategyId: id });
+        changed += removed;
+      }
+    }
+
     const added = fresh.filter(s => !existingIds.has(s.id));
     for (const s of added) {
       this.strategies.push(s);
@@ -312,7 +347,7 @@ export class LivePaperRunner {
         this.state.symbolPositions[s.symbol] = flatPosition(s.symbol);
       }
     }
-    if (added.length > 0) this.saveState();
+    if (added.length > 0 || changed > 0) this.saveState();
     return added.length;
   }
 
@@ -525,7 +560,7 @@ export class LivePaperRunner {
           const scale = this.cfg.volSizing ? volScale(candles) : 1;
           const margin = this.state.symbolCapital[symbol] * this.cfg.marginPerTradePct * scale;
           const notional = margin * this.cfg.leverage;
-          let qty = notional / entryPrice;
+          let qty = (notional / entryPrice) * strat.sizeMultiplier;
 
           const intent: StrategyIntent = {
             strategyId: strat.id, symbol, tf, direction: strat.direction,

@@ -53,7 +53,7 @@ interface BreakerEntry {
 
 type BreakerState = Record<string, BreakerEntry>;
 
-function rollingPf(trades: ClosedTrade[]): number {
+export function rollingPf(trades: ClosedTrade[]): number {
   const grossProfit = trades.filter(t => t.pnl > 0).reduce((s, t) => s + t.pnl, 0);
   const grossLoss = Math.abs(trades.filter(t => t.pnl <= 0).reduce((s, t) => s + t.pnl, 0));
   return grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? Infinity : 0;

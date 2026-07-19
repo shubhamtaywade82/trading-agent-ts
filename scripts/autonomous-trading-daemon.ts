@@ -22,6 +22,7 @@ import { BinanceStreamManager } from "../src/exchange/binance-stream.js";
 import { StrategyCircuitBreaker } from "../src/paper-trading/circuit-breaker.js";
 import { DriftMonitor } from "../src/paper-trading/drift-monitor.js";
 import { ResearchPipeline } from "../src/paper-trading/research-pipeline.js";
+import { PnlAdaptor } from "../src/paper-trading/pnl-adaptor.js";
 
 const pollArg = process.argv.find(a => a.startsWith("--poll-seconds="));
 const pollSeconds = pollArg ? Number(pollArg.split("=")[1]) : 60;
@@ -40,6 +41,10 @@ const fillNotifier = telegramConfigured ? new FillNotifier({ journalFile: DEFAUL
 const circuitBreaker = new StrategyCircuitBreaker(runner, { notifyTelegram: telegramConfigured }, stream);
 const driftMonitor = new DriftMonitor({ notifyTelegram: telegramConfigured });
 const researchPipeline = new ResearchPipeline({ notifyTelegram: telegramConfigured }, runner);
+// dryRun-only until TRADINGAGENT_PNL_ADAPTOR_LIVE=true is explicitly set --
+// see pnl-adaptor.ts's header for why this ships conservative by default.
+const pnlAdaptorLive = process.env.TRADINGAGENT_PNL_ADAPTOR_LIVE === "true";
+const pnlAdaptor = new PnlAdaptor({ notifyTelegram: telegramConfigured, dryRun: !pnlAdaptorLive }, runner);
 
 let tickCount = 0;
 let lastFillCount = 0;
@@ -70,6 +75,7 @@ async function shutdown(reason: string) {
   evaluator.stop();
   circuitBreaker.stop();
   driftMonitor.stop();
+  pnlAdaptor.stop();
   stream.closeAll();
   writeHeartbeat();
   process.exit(0);
@@ -114,6 +120,10 @@ circuitBreaker.start(5 * 60 * 1000, (r) => {
 driftMonitor.start(5 * 60 * 1000, (r) => {
   for (const a of r.alerts) console.log(a);
 }).catch(e => console.error("Drift monitor loop crashed (trading unaffected):", e));
+pnlAdaptor.start(60 * 60 * 1000, (r) => {
+  for (const id of r.resized) console.log(`${pnlAdaptorLive ? "⚖️" : "⚖️ [dry-run]"} PNL ADAPTOR resized ${id}`);
+  for (const id of r.pruned) console.log(`${pnlAdaptorLive ? "🔴" : "🔴 [dry-run]"} PNL ADAPTOR pruned ${id}`);
+}).catch(e => console.error("PnL adaptor loop crashed (trading unaffected):", e));
 
 // Weekly research/promotion cycle — self-paced against a persisted
 // last-run timestamp so a restart doesn't re-trigger it early.
