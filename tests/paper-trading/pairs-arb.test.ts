@@ -1,7 +1,7 @@
 import { mkdtemp, rm, readFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
-import { PairsArbTracker, PairsArbCandidate, PairsArbDeps } from "../../src/paper-trading/pairs-arb.js";
+import { PairsArbTracker, PairsArbCandidate, PairsArbDeps, summarizePairsArbJournal } from "../../src/paper-trading/pairs-arb.js";
 
 describe("PairsArbTracker", () => {
   let dir: string;
@@ -81,5 +81,18 @@ describe("PairsArbTracker", () => {
     const journal = await readFile(journalFile, "utf-8");
     const opens = journal.split("\n").filter(l => l.includes('"type":"pairs_arb_open"'));
     expect(opens).toHaveLength(1);
+  });
+});
+
+describe("summarizePairsArbJournal", () => {
+  it("aggregates closed positions per pair id", () => {
+    const entries = [
+      { type: "pairs_arb_open", id: "XRPUSDT-ETHUSDT" },
+      { type: "pairs_arb_close", id: "XRPUSDT-ETHUSDT", reason: "target", pnlUsd: 40 },
+      { type: "pairs_arb_open", id: "XRPUSDT-ETHUSDT" },
+      { type: "pairs_arb_close", id: "XRPUSDT-ETHUSDT", reason: "stop", pnlUsd: -20 },
+    ];
+    const summary = summarizePairsArbJournal(entries);
+    expect(summary["XRPUSDT-ETHUSDT"]).toEqual({ closedCount: 2, totalPnlUsd: 20, winRate: 0.5 });
   });
 });

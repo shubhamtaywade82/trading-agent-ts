@@ -134,3 +134,20 @@ export class PairsArbTracker {
     this.running = false;
   }
 }
+
+export function summarizePairsArbJournal(
+  entries: { type: string; id: string; reason?: string; pnlUsd?: number }[],
+): Record<string, { closedCount: number; totalPnlUsd: number; winRate: number }> {
+  const byId = new Map<string, number[]>();
+  for (const e of entries) {
+    if (e.type !== "pairs_arb_close" || e.pnlUsd === undefined) continue;
+    if (!byId.has(e.id)) byId.set(e.id, []);
+    byId.get(e.id)!.push(e.pnlUsd);
+  }
+  const result: ReturnType<typeof summarizePairsArbJournal> = {};
+  for (const [id, pnls] of byId) {
+    const wins = pnls.filter(p => p > 0).length;
+    result[id] = { closedCount: pnls.length, totalPnlUsd: pnls.reduce((s, p) => s + p, 0), winRate: wins / pnls.length };
+  }
+  return result;
+}
