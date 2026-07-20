@@ -60,6 +60,12 @@ const { waitUntilExit } = render(
     journalFile: DEFAULT_RUNNER_CONFIG.journalFile,
     onExit: () => cleanExit(0),
   }),
+  // incrementalRendering: rewrite only changed lines each tick instead of
+  // erasing+redrawing the whole frame — this is the actual fix for the
+  // flicker (visible only when scrolled to the bottom, i.e. watching the
+  // live redraw zone). Normal screen buffer (no alt-screen) is unchanged,
+  // so terminal scrollback still works.
+  { incrementalRendering: true },
 );
 
 await waitUntilExit();
