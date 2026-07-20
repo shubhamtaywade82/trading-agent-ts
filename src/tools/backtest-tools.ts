@@ -25,6 +25,7 @@ const CONDITION_SCHEMA = {
         "ichimoku_above_cloud_long", "ichimoku_below_cloud_short",
         "volume_spike_long", "volume_spike_short",
         "ob_retest_long", "ob_retest_short",
+        "oi_bearish_divergence", "oi_bullish_divergence",
       ],
     },
     period: { type: "number", description: "Indicator period, e.g. 14 for RSI, 20 for SMA/EMA/Bollinger" },
@@ -659,6 +660,7 @@ export class BinanceFuturesSweepTool extends Tool {
 export function buildSignalEvaluator(
   candles: Candle[],
   entryConditions: { type: string; period?: number; value?: number }[],
+  extraSeries?: { oi?: number[] },
 ): (i: number) => boolean {
   const closes = candles.map(c => c.close);
   const smaP = new Set<number>(); const emaP = new Set<number>(); const rsiP = new Set<number>();
@@ -803,6 +805,26 @@ export function buildSignalEvaluator(
         case "volume_spike_short": return !Number.isNaN(volSma20[i]) && candles[i].volume > volSma20[i] * 2 && candles[i].close < candles[i].open;
         case "ob_retest_long": return obRetest?.long[i] ?? false;
         case "ob_retest_short": return obRetest?.short[i] ?? false;
+        case "oi_bearish_divergence": {
+          const oi = extraSeries?.oi;
+          const period = c.period ?? 10;
+          if (!oi || i < period) return false;
+          const oiNow = oi[i], oiPast = oi[i - period];
+          if (Number.isNaN(oiNow) || Number.isNaN(oiPast) || oiPast === 0) return false;
+          const oiChange = (oiNow - oiPast) / oiPast;
+          const priorHigh = Math.max(...closes.slice(i - period, i));
+          return closes[i] > priorHigh && oiChange < -(c.value ?? 0.03);
+        }
+        case "oi_bullish_divergence": {
+          const oi = extraSeries?.oi;
+          const period = c.period ?? 10;
+          if (!oi || i < period) return false;
+          const oiNow = oi[i], oiPast = oi[i - period];
+          if (Number.isNaN(oiNow) || Number.isNaN(oiPast) || oiPast === 0) return false;
+          const oiChange = (oiNow - oiPast) / oiPast;
+          const priorLow = Math.min(...closes.slice(i - period, i));
+          return closes[i] < priorLow && oiChange < -(c.value ?? 0.03);
+        }
         default: return false;
       }
   });

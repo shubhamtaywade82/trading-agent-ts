@@ -173,6 +173,43 @@ describe("alignOiToCandles", () => {
   });
 });
 
+describe("buildSignalEvaluator: OI divergence", () => {
+  function candlesWithCloses(closes: number[]): Candle[] {
+    return closes.map((c, i) => ({ openTime: 1000 + i * 3600000, open: c, high: c, low: c, close: c, volume: 1 }));
+  }
+
+  it("fires oi_bearish_divergence when price makes a new high but OI fell", () => {
+    const closes = [...Array(10).fill(100), 105]; // bar 10 is a new high over the prior 10
+    const candles = candlesWithCloses(closes);
+    const oi = [...Array(10).fill(1000), 900]; // -10% vs bar 0
+    const evaluator = buildSignalEvaluator(candles, [{ type: "oi_bearish_divergence", period: 10, value: 0.05 }], { oi });
+    expect(evaluator(10)).toBe(true);
+  });
+
+  it("does not fire oi_bearish_divergence when OI rose", () => {
+    const closes = [...Array(10).fill(100), 105];
+    const candles = candlesWithCloses(closes);
+    const oi = [...Array(10).fill(1000), 1100];
+    const evaluator = buildSignalEvaluator(candles, [{ type: "oi_bearish_divergence", period: 10, value: 0.05 }], { oi });
+    expect(evaluator(10)).toBe(false);
+  });
+
+  it("fires oi_bullish_divergence when price makes a new low and OI fell", () => {
+    const closes = [...Array(10).fill(100), 95];
+    const candles = candlesWithCloses(closes);
+    const oi = [...Array(10).fill(1000), 900];
+    const evaluator = buildSignalEvaluator(candles, [{ type: "oi_bullish_divergence", period: 10, value: 0.05 }], { oi });
+    expect(evaluator(10)).toBe(true);
+  });
+
+  it("is a no-op when extraSeries is not supplied", () => {
+    const closes = [...Array(10).fill(100), 105];
+    const candles = candlesWithCloses(closes);
+    const evaluator = buildSignalEvaluator(candles, [{ type: "oi_bearish_divergence" }]);
+    expect(evaluator(10)).toBe(false);
+  });
+});
+
 describe("Backtest tools (real network)", () => {
   it("backtests a real BTCUSDT strategy against real Binance history", async () => {
     const tool = new BinanceBacktestTool();
