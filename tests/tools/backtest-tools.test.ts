@@ -210,6 +210,51 @@ describe("buildSignalEvaluator: OI divergence", () => {
   });
 });
 
+describe("BinanceFuturesBacktestTool: OI conditions", () => {
+  const originalFetch = global.fetch;
+  afterEach(() => { (globalThis as any).fetch = originalFetch; });
+
+  it("fetches and aligns OI history when entry includes an oi_* condition", async () => {
+    (globalThis as any).fetch = jest.fn().mockImplementation((url: URL) => {
+      const href = url.toString();
+      if (href.includes("/futures/data/openInterestHist")) {
+        return Promise.resolve({
+          ok: true, status: 200,
+          json: async () => RISING.map((_, i) => ({
+            symbol: "BTCUSDT", sumOpenInterest: String(1000 - i), sumOpenInterestValue: "1",
+            timestamp: 1700000000000 + i * 3600000,
+          })),
+        });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => fakeKlines(RISING) });
+    });
+    const tool = new BinanceFuturesBacktestTool();
+    const result = await tool.call({
+      symbol: "BTCUSDT", interval: "1h", limit: 200, direction: "short",
+      entry: [{ type: "oi_bearish_divergence", period: 10, value: 0.01 }],
+      stopPct: 0.02, targetPct: 0.04,
+    });
+    expect(result.error).toBeUndefined();
+    expect(typeof result.totalTrades).toBe("number");
+  });
+
+  it("propagates an OI fetch error instead of silently returning zero trades", async () => {
+    (globalThis as any).fetch = jest.fn().mockImplementation((url: URL) => {
+      const href = url.toString();
+      if (href.includes("/futures/data/openInterestHist")) {
+        return Promise.resolve({ ok: false, status: 400, json: async () => ({ msg: "bad symbol" }) });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => fakeKlines(RISING) });
+    });
+    const tool = new BinanceFuturesBacktestTool();
+    const result = await tool.call({
+      symbol: "BADSYM", interval: "1h", limit: 200, direction: "short",
+      entry: [{ type: "oi_bearish_divergence" }], stopPct: 0.02, targetPct: 0.04,
+    });
+    expect(result.error).toBe("BinanceApiError");
+  });
+});
+
 describe("Backtest tools (real network)", () => {
   it("backtests a real BTCUSDT strategy against real Binance history", async () => {
     const tool = new BinanceBacktestTool();

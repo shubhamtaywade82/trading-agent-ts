@@ -434,7 +434,17 @@ export class BinanceFuturesBacktestTool extends Tool {
       candles = fetched.candles;
     }
 
-    const result = runFuturesBacktest(candles, entry, direction, stopPct, targetPct, feeBps, maxHoldBars, initialCapital, leverage, marginPerTradePct, slippageBps) as any;
+    let evaluatorOrEntry: typeof entry | ((i: number) => boolean) = entry;
+    if (entry.some(c => c.type.startsWith("oi_"))) {
+      const oiStart = candles[0].openTime;
+      const oiEnd = candles[candles.length - 1].openTime + 1;
+      const oiResult = await fetchOpenInterestHist(symbol, interval, oiStart, oiEnd);
+      if ("error" in oiResult) return oiResult;
+      const oiSeries = alignOiToCandles(candles, oiResult.points);
+      evaluatorOrEntry = buildSignalEvaluator(candles, entry, { oi: oiSeries });
+    }
+
+    const result = runFuturesBacktest(candles, evaluatorOrEntry, direction, stopPct, targetPct, feeBps, maxHoldBars, initialCapital, leverage, marginPerTradePct, slippageBps) as any;
     return { symbol, interval, candles: candles.length, direction, leverage, initialCapital, ...(result.metrics as Record<string, unknown>) };
   }
 }
