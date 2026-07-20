@@ -765,6 +765,12 @@ export function buildSignalEvaluator(
 }
 
 // ── Futures backtest engine (shared between the two tools above) ──
+export interface TradeRecord {
+  entryTime: number; exitTime: number; holdBars: number; holdMs: number;
+  direction: "long" | "short"; pnlUsd: number; pnlPct: number;
+  exitReason: "liq" | "stop" | "target" | "timeout";
+}
+
 export function runFuturesBacktest(
   candles: Candle[],
   // Either a raw condition array (dispatched through buildSignalEvaluator,
@@ -808,6 +814,7 @@ export function runFuturesBacktest(
   const returns: number[] = [];
   let trades = 0; let wins = 0; let losses = 0;
   let grossProfit = 0; let grossLoss = 0;
+  const tradeLog: TradeRecord[] = [];
 
   let i = 0;
   while (i < candles.length) {
@@ -825,6 +832,7 @@ export function runFuturesBacktest(
 
     let exitIdx = candles.length - 1;
     let exitPrice = candles[exitIdx].close;
+    let exitReason: TradeRecord["exitReason"] = "timeout";
     for (let j = i + 1; j < candles.length && j <= i + maxHoldBars; j++) {
       const b = candles[j];
       const subs = subBars ? subMap.get(b.openTime) : undefined;
@@ -834,24 +842,29 @@ export function runFuturesBacktest(
         // conservative liq→stop→target order at 1/12th the bar size).
         let resolved = false;
         for (const s of subs) {
-          if (direction === "long" ? s.low <= liqPrice : s.high >= liqPrice) { exitIdx = j; exitPrice = liqPrice; resolved = true; break; }
-          if (direction === "long" ? s.low <= stopPrice : s.high >= stopPrice) { exitIdx = j; exitPrice = direction === "long" ? stopPrice * (1 - slipFrac) : stopPrice * (1 + slipFrac); resolved = true; break; }
-          if (direction === "long" ? s.high >= targetPrice : s.low <= targetPrice) { exitIdx = j; exitPrice = targetPrice; resolved = true; break; }
+          if (direction === "long" ? s.low <= liqPrice : s.high >= liqPrice) { exitIdx = j; exitPrice = liqPrice; exitReason = "liq"; resolved = true; break; }
+          if (direction === "long" ? s.low <= stopPrice : s.high >= stopPrice) { exitIdx = j; exitPrice = direction === "long" ? stopPrice * (1 - slipFrac) : stopPrice * (1 + slipFrac); exitReason = "stop"; resolved = true; break; }
+          if (direction === "long" ? s.high >= targetPrice : s.low <= targetPrice) { exitIdx = j; exitPrice = targetPrice; exitReason = "target"; resolved = true; break; }
         }
         if (resolved) break;
-        if (j === i + maxHoldBars) { exitIdx = j; exitPrice = direction === "long" ? b.close * (1 - slipFrac) : b.close * (1 + slipFrac); }
+        if (j === i + maxHoldBars) { exitIdx = j; exitPrice = direction === "long" ? b.close * (1 - slipFrac) : b.close * (1 + slipFrac); exitReason = "timeout"; }
         continue;
       }
-      if (direction === "long" ? b.low <= liqPrice : b.high >= liqPrice) { exitIdx = j; exitPrice = liqPrice; break; }
-      if (direction === "long" ? b.low <= stopPrice : b.high >= stopPrice) { exitIdx = j; exitPrice = direction === "long" ? stopPrice * (1 - slipFrac) : stopPrice * (1 + slipFrac); break; }
-      if (direction === "long" ? b.high >= targetPrice : b.low <= targetPrice) { exitIdx = j; exitPrice = targetPrice; break; }
-      if (j === i + maxHoldBars) { exitIdx = j; exitPrice = direction === "long" ? b.close * (1 - slipFrac) : b.close * (1 + slipFrac); }
+      if (direction === "long" ? b.low <= liqPrice : b.high >= liqPrice) { exitIdx = j; exitPrice = liqPrice; exitReason = "liq"; break; }
+      if (direction === "long" ? b.low <= stopPrice : b.high >= stopPrice) { exitIdx = j; exitPrice = direction === "long" ? stopPrice * (1 - slipFrac) : stopPrice * (1 + slipFrac); exitReason = "stop"; break; }
+      if (direction === "long" ? b.high >= targetPrice : b.low <= targetPrice) { exitIdx = j; exitPrice = targetPrice; exitReason = "target"; break; }
+      if (j === i + maxHoldBars) { exitIdx = j; exitPrice = direction === "long" ? b.close * (1 - slipFrac) : b.close * (1 + slipFrac); exitReason = "timeout"; }
     }
     const pnl = (exitPrice - entryPrice) * (direction === "long" ? 1 : -1) * qty - notional * feeFrac;
     capital += pnl; eq.push(capital);
     const ret = pnl / margin;
     returns.push(ret);
     trades++; if (pnl > 0) { wins++; grossProfit += pnl; } else { losses++; grossLoss += Math.abs(pnl); }
+    tradeLog.push({
+      entryTime: candles[i].openTime, exitTime: candles[exitIdx].openTime,
+      holdBars: exitIdx - i, holdMs: candles[exitIdx].openTime - candles[i].openTime,
+      direction, pnlUsd: pnl, pnlPct: ret, exitReason,
+    });
     i = exitIdx + 1;
   }
 
@@ -883,6 +896,7 @@ export function runFuturesBacktest(
       sharpeRatio,
     },
     equityCurve: eq,
+    trades: tradeLog,
   };
 }
 
