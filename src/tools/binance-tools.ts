@@ -34,6 +34,13 @@ async function fetchBinance(market: string, path: string, params: Record<string,
   }
 }
 
+export async function fetchSpotPrice(symbol: string): Promise<{ price: number } | { error: string; message: string }> {
+  const result = await fetchBinance("spot", "/api/v3/ticker/price", { symbol });
+  if (result.error) return result as { error: string; message: string };
+  const body = result.body as { price: string };
+  return { price: Number(body.price) };
+}
+
 // ponytail: GET-only + no API key ever sent, so this is structurally incapable of
 // trading/account access regardless of path — no need for a per-endpoint allowlist.
 export class BinancePublicApiTool extends Tool {

@@ -2,7 +2,7 @@ import {
   BinancePublicApiTool, BinanceTechnicalIndicatorsTool, BinanceOrderBookTool,
   BinanceFuturesStatsTool, BinanceScreenerTool, BinanceWatchPriceTool,
   BinanceUnwatchPriceTool, BinancePriceAlertTool, BinanceLiquidationsTool,
-  fetchOrderBookImbalance,
+  fetchOrderBookImbalance, fetchSpotPrice,
 } from "../../src/tools/binance-tools.js";
 import { BinanceStreamManager } from "../../src/exchange/binance-stream.js";
 
@@ -190,6 +190,25 @@ describe("BinanceOrderBookTool", () => {
     const tool = new BinanceOrderBookTool();
     const result = await tool.call({ symbol: "BTCUSDT", market: "notamarket" });
     expect(result.error).toBe("InvalidMarket");
+  });
+});
+
+describe("fetchSpotPrice", () => {
+  const originalFetch = global.fetch;
+  afterEach(() => { (globalThis as any).fetch = originalFetch; });
+
+  it("fetches and parses the spot ticker price", async () => {
+    (globalThis as any).fetch = jest.fn().mockResolvedValue({
+      ok: true, status: 200, json: async () => ({ symbol: "BTCUSDT", price: "64123.45" }),
+    });
+    const result = await fetchSpotPrice("BTCUSDT");
+    expect(result).toEqual({ price: 64123.45 });
+  });
+
+  it("propagates a fetch error", async () => {
+    (globalThis as any).fetch = jest.fn().mockRejectedValue(new Error("network down"));
+    const result = await fetchSpotPrice("BTCUSDT");
+    expect(result).toEqual({ error: "RequestError", message: "network down" });
   });
 });
 
