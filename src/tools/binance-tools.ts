@@ -41,6 +41,13 @@ export async function fetchSpotPrice(symbol: string): Promise<{ price: number } 
   return { price: Number(body.price) };
 }
 
+export async function fetchRecentCloses(symbol: string, tf: string, barsNeeded: number): Promise<{ closes: number[] } | { error: string; message: string }> {
+  const result = await fetchBinance("spot", KLINES_PATH.spot, { symbol, interval: tf, limit: barsNeeded });
+  if (result.error) return result as { error: string; message: string };
+  const rows = result.body as unknown[][];
+  return { closes: rows.map(row => Number(row[4])) };
+}
+
 // ponytail: GET-only + no API key ever sent, so this is structurally incapable of
 // trading/account access regardless of path — no need for a per-endpoint allowlist.
 export class BinancePublicApiTool extends Tool {

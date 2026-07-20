@@ -697,7 +697,7 @@ export async function fetchFundingRates(symbol: string, startTime: number, endTi
   return rows.map(r => Number(r.fundingRate));
 }
 
-function tfToMs(tf: string): number {
+export function tfToMs(tf: string): number {
   const unit = tf.slice(-1);
   const n = Number(tf.slice(0, -1));
   const mult = unit === "m" ? 60_000 : unit === "h" ? 3_600_000 : unit === "d" ? 86_400_000 : 60_000;

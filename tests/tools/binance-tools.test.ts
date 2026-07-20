@@ -2,7 +2,7 @@ import {
   BinancePublicApiTool, BinanceTechnicalIndicatorsTool, BinanceOrderBookTool,
   BinanceFuturesStatsTool, BinanceScreenerTool, BinanceWatchPriceTool,
   BinanceUnwatchPriceTool, BinancePriceAlertTool, BinanceLiquidationsTool,
-  fetchOrderBookImbalance, fetchSpotPrice, fetchFuturesStats,
+  fetchOrderBookImbalance, fetchSpotPrice, fetchFuturesStats, fetchRecentCloses,
 } from "../../src/tools/binance-tools.js";
 import { BinanceStreamManager } from "../../src/exchange/binance-stream.js";
 
@@ -208,6 +208,36 @@ describe("fetchSpotPrice", () => {
   it("propagates a fetch error", async () => {
     (globalThis as any).fetch = jest.fn().mockRejectedValue(new Error("network down"));
     const result = await fetchSpotPrice("BTCUSDT");
+    expect(result).toEqual({ error: "RequestError", message: "network down" });
+  });
+});
+
+describe("fetchRecentCloses", () => {
+  const originalFetch = global.fetch;
+  afterEach(() => { (globalThis as any).fetch = originalFetch; });
+
+  it("fetches candles and returns the last N closes", async () => {
+    // The mock simulates the real API's server-side `limit` truncation
+    // (Binance returns at most `limit` most-recent klines) — a static
+    // mockResolvedValue would ignore the requested limit entirely and make
+    // this assertion pass or fail for the wrong reason.
+    const allCloses = Array.from({ length: 20 }, (_, i) => 100 + i);
+    (globalThis as any).fetch = jest.fn().mockImplementation((url: URL) => {
+      const limit = Number(url.searchParams.get("limit"));
+      const kept = allCloses.slice(-limit);
+      return Promise.resolve({ ok: true, status: 200, json: async () => kept.map((c, i) => fakeKline(c, i)) });
+    });
+    const result = await fetchRecentCloses("BTCUSDT", "1h", 5);
+    expect("error" in result).toBe(false);
+    if (!("error" in result)) {
+      expect(result.closes).toHaveLength(5);
+      expect(result.closes[result.closes.length - 1]).toBe(119); // last close of the 20-point series
+    }
+  });
+
+  it("propagates a fetch error", async () => {
+    (globalThis as any).fetch = jest.fn().mockRejectedValue(new Error("network down"));
+    const result = await fetchRecentCloses("BTCUSDT", "1h", 5);
     expect(result).toEqual({ error: "RequestError", message: "network down" });
   });
 });
