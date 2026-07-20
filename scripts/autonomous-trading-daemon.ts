@@ -23,6 +23,8 @@ import { StrategyCircuitBreaker } from "../src/paper-trading/circuit-breaker.js"
 import { DriftMonitor } from "../src/paper-trading/drift-monitor.js";
 import { ResearchPipeline } from "../src/paper-trading/research-pipeline.js";
 import { PnlAdaptor } from "../src/paper-trading/pnl-adaptor.js";
+import { ShadowSignalTracker, CandidateSignal } from "../src/paper-trading/shadow-signal-tracker.js";
+import { fetchOrderBookImbalance } from "../src/tools/binance-tools.js";
 
 const pollArg = process.argv.find(a => a.startsWith("--poll-seconds="));
 const pollSeconds = pollArg ? Number(pollArg.split("=")[1]) : 60;
@@ -45,6 +47,24 @@ const researchPipeline = new ResearchPipeline({ notifyTelegram: telegramConfigur
 // see pnl-adaptor.ts's header for why this ships conservative by default.
 const pnlAdaptorLive = process.env.TRADINGAGENT_PNL_ADAPTOR_LIVE === "true";
 const pnlAdaptor = new PnlAdaptor({ notifyTelegram: telegramConfigured, dryRun: !pnlAdaptorLive }, runner);
+
+const OBI_SYMBOLS = ["XRPUSDT", "ETHUSDT", "SOLUSDT"];
+const obiCandidates: CandidateSignal[] = OBI_SYMBOLS.map(symbol => ({
+  id: `obi-${symbol}`,
+  symbol,
+  shadow: true,
+  stopPct: 0.015,
+  targetPct: 0.03,
+  maxHoldMs: 4 * 60 * 60 * 1000,
+  checkFire: async () => {
+    const result = await fetchOrderBookImbalance(symbol, "usdm", 50);
+    if ("error" in result) return null;
+    if (result.imbalance > 0.3) return "long";
+    if (result.imbalance < -0.3) return "short";
+    return null;
+  },
+}));
+const shadowTracker = new ShadowSignalTracker(obiCandidates, stream);
 
 let tickCount = 0;
 let lastFillCount = 0;
@@ -76,6 +96,7 @@ async function shutdown(reason: string) {
   circuitBreaker.stop();
   driftMonitor.stop();
   pnlAdaptor.stop();
+  shadowTracker.stop();
   stream.closeAll();
   writeHeartbeat();
   process.exit(0);
@@ -117,6 +138,10 @@ circuitBreaker.start(5 * 60 * 1000, (r) => {
   for (const id of r.pausedNow) console.log(`🟠 CIRCUIT BREAKER paused ${id}`);
   for (const id of r.resumedNow) console.log(`🟢 CIRCUIT BREAKER resumed ${id}`);
 }).catch(e => console.error("Circuit breaker loop crashed (trading unaffected):", e));
+shadowTracker.start(pollSeconds * 1000, (r) => {
+  for (const id of r.opened) console.log(`🔍 SHADOW fired: ${id}`);
+  for (const c of r.closed) console.log(`🔍 SHADOW closed: ${c.id} (${c.reason})`);
+}).catch(e => console.error("Shadow tracker loop crashed (trading unaffected):", e));
 driftMonitor.start(5 * 60 * 1000, (r) => {
   for (const a of r.alerts) console.log(a);
 }).catch(e => console.error("Drift monitor loop crashed (trading unaffected):", e));
