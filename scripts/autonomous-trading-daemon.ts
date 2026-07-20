@@ -25,6 +25,7 @@ import { ResearchPipeline } from "../src/paper-trading/research-pipeline.js";
 import { PnlAdaptor } from "../src/paper-trading/pnl-adaptor.js";
 import { ShadowSignalTracker, CandidateSignal } from "../src/paper-trading/shadow-signal-tracker.js";
 import { FundingArbTracker } from "../src/paper-trading/funding-arb.js";
+import { PairsArbTracker, PairsArbCandidate } from "../src/paper-trading/pairs-arb.js";
 import { fetchOrderBookImbalance } from "../src/tools/binance-tools.js";
 
 const pollArg = process.argv.find(a => a.startsWith("--poll-seconds="));
@@ -78,6 +79,18 @@ const shadowCandidates: CandidateSignal[] = [...obiCandidates, ...liqClusterCand
 const shadowTracker = new ShadowSignalTracker(shadowCandidates, stream);
 const fundingArbTracker = new FundingArbTracker(SHADOW_SYMBOLS);
 
+// Empty until scripts/pairs-arb-sweep.ts finds a SURVIVES pair — unlike OBI/
+// liq-cluster (which had no backtest option), stat-arb CAN be backtested, so
+// it gets the same discipline as OI-divergence: no pair runs against paper
+// capital without evidence behind it first. The first real sweep (see
+// scripts/pairs-arb-sweep-output.json) found 0 survivors across all 3 pairs
+// — this list stays empty until a future sweep finds one. To activate a
+// validated pair, add an entry here, e.g.:
+//   { id: "XRPUSDT-ETHUSDT", symbolA: "XRPUSDT", symbolB: "ETHUSDT", tf: "1h",
+//     lookback: 30, entryZ: 2, exitZ: 0.5, stopZ: 3.5, maxHoldBars: 96 }
+const pairsArbCandidates: PairsArbCandidate[] = [];
+const pairsArbTracker = new PairsArbTracker(pairsArbCandidates);
+
 let tickCount = 0;
 let lastFillCount = 0;
 const startedAt = Date.now();
@@ -110,6 +123,7 @@ async function shutdown(reason: string) {
   pnlAdaptor.stop();
   shadowTracker.stop();
   fundingArbTracker.stop();
+  pairsArbTracker.stop();
   stream.closeAll();
   writeHeartbeat();
   process.exit(0);
@@ -160,6 +174,10 @@ fundingArbTracker.start(pollSeconds * 1000, (r) => {
   for (const symbol of r.opened) console.log(`💰 FUNDING ARB opened: ${symbol}`);
   for (const symbol of r.closed) console.log(`💰 FUNDING ARB closed: ${symbol}`);
 }).catch(e => console.error("Funding arb loop crashed (trading unaffected):", e));
+pairsArbTracker.start(pollSeconds * 1000, (r) => {
+  for (const id of r.opened) console.log(`📈 PAIRS ARB opened: ${id}`);
+  for (const id of r.closed) console.log(`📈 PAIRS ARB closed: ${id}`);
+}).catch(e => console.error("Pairs arb loop crashed (trading unaffected):", e));
 driftMonitor.start(5 * 60 * 1000, (r) => {
   for (const a of r.alerts) console.log(a);
 }).catch(e => console.error("Drift monitor loop crashed (trading unaffected):", e));
