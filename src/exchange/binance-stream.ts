@@ -267,3 +267,15 @@ export class BinanceStreamManager {
     this.closedKlines.clear();
   }
 }
+
+export function detectLiquidationCluster(
+  stream: Pick<BinanceStreamManager, "getLiquidations">,
+  symbol: string, windowMs: number, threshold: number, now: number = Date.now(),
+): "long" | "short" | null {
+  const recent = stream.getLiquidations(symbol).filter(l => now - l.time <= windowMs);
+  const sells = recent.filter(l => l.side === "SELL").length;
+  const buys = recent.filter(l => l.side === "BUY").length;
+  if (sells >= threshold) return "long";
+  if (buys >= threshold) return "short";
+  return null;
+}
