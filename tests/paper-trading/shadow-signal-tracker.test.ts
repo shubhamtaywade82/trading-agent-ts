@@ -2,7 +2,7 @@ import { mkdtemp, rm, readFile, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { BinanceStreamManager } from "../../src/exchange/binance-stream.js";
-import { ShadowSignalTracker, CandidateSignal } from "../../src/paper-trading/shadow-signal-tracker.js";
+import { ShadowSignalTracker, CandidateSignal, summarizeShadowJournal } from "../../src/paper-trading/shadow-signal-tracker.js";
 
 describe("ShadowSignalTracker (real network)", () => {
   let dir: string;
@@ -94,4 +94,34 @@ describe("ShadowSignalTracker (real network)", () => {
     const opens = journal.split("\n").filter(l => l.includes('"type":"shadow_open"'));
     expect(opens).toHaveLength(1);
   }, 20000);
+});
+
+describe("summarizeShadowJournal", () => {
+  it("computes fires/wins/losses/winRate/pf/verdict per candidate id", () => {
+    const entries = [
+      { type: "shadow_open", id: "obi-XRPUSDT" },
+      { type: "shadow_close", id: "obi-XRPUSDT", reason: "target", pnlPct: 0.03 },
+      { type: "shadow_open", id: "obi-XRPUSDT" },
+      { type: "shadow_close", id: "obi-XRPUSDT", reason: "stop", pnlPct: -0.015 },
+      { type: "shadow_open", id: "obi-ETHUSDT" },
+      { type: "shadow_close", id: "obi-ETHUSDT", reason: "timeout", pnlPct: 0.005 },
+    ];
+    const summary = summarizeShadowJournal(entries);
+    expect(summary["obi-XRPUSDT"]).toEqual({
+      fires: 2, wins: 1, losses: 1, winRate: 0.5, pf: 0.03 / 0.015,
+      totalPnlPct: 0.03 - 0.015, verdict: "NOT_YET",
+    });
+    expect(summary["obi-ETHUSDT"].fires).toBe(1);
+  });
+
+  it("flags SURVIVES only at >=20 fires and net-positive totalPnlPct", () => {
+    const entries: { type: string; id: string; reason?: string; pnlPct?: number }[] = [];
+    for (let i = 0; i < 20; i++) {
+      entries.push({ type: "shadow_open", id: "obi-XRPUSDT" });
+      entries.push({ type: "shadow_close", id: "obi-XRPUSDT", reason: i % 2 === 0 ? "target" : "stop", pnlPct: i % 2 === 0 ? 0.03 : -0.01 });
+    }
+    const summary = summarizeShadowJournal(entries);
+    expect(summary["obi-XRPUSDT"].fires).toBe(20);
+    expect(summary["obi-XRPUSDT"].verdict).toBe("SURVIVES");
+  });
 });
