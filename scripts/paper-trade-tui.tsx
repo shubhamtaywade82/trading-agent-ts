@@ -1,7 +1,8 @@
 #!/usr/bin/env tsx
-// Autonomous paper trading, fullscreen terminal UI (alt-screen buffer, same
-// as vim/htop/the main devagent TUI) — takes over the whole viewport instead
-// of scrolling console text.
+// Autonomous paper trading terminal UI. Renders on the normal screen buffer
+// (not alt-screen) so the terminal's native scrollback keeps working —
+// alt-screen (vim/htop-style) was tried but its no-scrollback tradeoff isn't
+// worth it for a dashboard nobody needs to review history on by scrolling up.
 //
 // Usage: npx tsx scripts/paper-trade-tui.tsx [--poll-seconds=60] [--no-analyst] [--no-notify] [--no-eval]
 import "dotenv/config";
@@ -21,16 +22,14 @@ const notifyEnabled = !process.argv.includes("--no-notify");
 const evaluatorEnabled = !process.argv.includes("--no-eval");
 const telegramConfigured = !!process.env.TELEGRAM_BOT_TOKEN && !!process.env.TELEGRAM_CHAT_ID;
 
-const ALT_SCREEN_ON = "\x1b[?1049h";
-const ALT_SCREEN_OFF = "\x1b[?1049l";
 const CURSOR_HIDE = "\x1b[?25l";
 const CURSOR_SHOW = "\x1b[?25h";
 
-function enterFullscreen() {
-  if (process.stdout.isTTY) process.stdout.write(ALT_SCREEN_ON + CURSOR_HIDE);
+function hideCursor() {
+  if (process.stdout.isTTY) process.stdout.write(CURSOR_HIDE);
 }
-function exitFullscreen() {
-  if (process.stdout.isTTY) process.stdout.write(CURSOR_SHOW + ALT_SCREEN_OFF);
+function showCursor() {
+  if (process.stdout.isTTY) process.stdout.write(CURSOR_SHOW);
 }
 
 const runner = new LivePaperRunner();
@@ -39,7 +38,7 @@ const readiness = new ReadinessMonitor({ notifyTelegram: notifyEnabled && telegr
 const fillNotifier = notifyEnabled && telegramConfigured ? new FillNotifier({ journalFile: DEFAULT_RUNNER_CONFIG.journalFile }) : null;
 const evaluator = evaluatorEnabled ? new TradeEvaluator() : null;
 
-enterFullscreen();
+hideCursor();
 
 let exited = false;
 function cleanExit(code = 0) {
@@ -48,12 +47,12 @@ function cleanExit(code = 0) {
   runner.stop();
   analyst?.stop();
   evaluator?.stop();
-  exitFullscreen();
+  showCursor();
   process.exit(code);
 }
 process.on("SIGINT", () => cleanExit(0));
 process.on("SIGTERM", () => cleanExit(0));
-process.on("uncaughtException", (e) => { exitFullscreen(); console.error(e); process.exit(1); });
+process.on("uncaughtException", (e) => { showCursor(); console.error(e); process.exit(1); });
 
 const { waitUntilExit } = render(
   React.createElement(PaperTradingDashboard, {
