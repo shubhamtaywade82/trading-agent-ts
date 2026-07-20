@@ -687,9 +687,9 @@ export class LivePaperRunner {
   }
 }
 
-const EIGHT_H = 8 * 3_600_000; // Binance funding interval
+export const EIGHT_H = 8 * 3_600_000; // Binance funding interval
 
-async function fetchFundingRates(symbol: string, startTime: number, endTime: number): Promise<number[]> {
+export async function fetchFundingRates(symbol: string, startTime: number, endTime: number): Promise<number[]> {
   const url = `https://fapi.binance.com/fapi/v1/fundingRate?symbol=${symbol}&startTime=${startTime}&endTime=${endTime}&limit=1000`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`fundingRate HTTP ${res.status}`);
