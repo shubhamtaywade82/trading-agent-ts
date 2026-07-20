@@ -329,6 +329,50 @@ export async function fetchCandlesRange(
   }
 }
 
+const OI_PERIODS = ["5m", "15m", "30m", "1h", "2h", "4h", "6h", "12h", "1d"];
+
+export async function fetchOpenInterestHist(
+  symbol: string, period: string, startTime: number, endTime: number,
+): Promise<{ points: { timestamp: number; sumOpenInterest: number }[] } | { error: string; message: string }> {
+  if (!OI_PERIODS.includes(period)) {
+    return { error: "InvalidPeriod", message: `period must be one of: ${OI_PERIODS.join(", ")}` };
+  }
+  const all: { timestamp: number; sumOpenInterest: number }[] = [];
+  let from = startTime;
+  try {
+    while (from < endTime) {
+      const url = new URL("/futures/data/openInterestHist", "https://fapi.binance.com");
+      url.searchParams.set("symbol", symbol);
+      url.searchParams.set("period", period);
+      url.searchParams.set("limit", "500");
+      url.searchParams.set("startTime", String(from));
+      url.searchParams.set("endTime", String(endTime));
+      const response = await fetchWithRetry(url);
+      const body = await response.json();
+      if (!response.ok) return { error: "BinanceApiError", message: JSON.stringify(body) };
+      const rows = body as { sumOpenInterest: string; timestamp: number }[];
+      if (rows.length === 0) break;
+      for (const r of rows) all.push({ timestamp: r.timestamp, sumOpenInterest: Number(r.sumOpenInterest) });
+      from = rows[rows.length - 1].timestamp + 1;
+      if (rows.length < 500) break;
+      await new Promise(r => setTimeout(r, 250));
+    }
+    return { points: all };
+  } catch (e) {
+    return { error: "RequestError", message: (e as Error).message };
+  }
+}
+
+export function alignOiToCandles(candles: Candle[], points: { timestamp: number; sumOpenInterest: number }[]): number[] {
+  const result: number[] = new Array(candles.length).fill(NaN);
+  let p = 0;
+  for (let i = 0; i < candles.length; i++) {
+    while (p < points.length - 1 && points[p + 1].timestamp <= candles[i].openTime) p++;
+    if (points[p] && points[p].timestamp <= candles[i].openTime) result[i] = points[p].sumOpenInterest;
+  }
+  return result;
+}
+
 export class BinanceFuturesBacktestTool extends Tool {
   get name(): string { return "binance_futures_backtest"; }
   get description(): string {

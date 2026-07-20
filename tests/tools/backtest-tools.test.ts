@@ -1,8 +1,9 @@
 import {
   BinanceBacktestTool, BinanceWalkForwardTool, BinanceMonteCarloTool, BinanceParamSweepTool,
-  BinancePortfolioBacktestTool,
+  BinancePortfolioBacktestTool, BinanceFuturesBacktestTool,
+  fetchOpenInterestHist, alignOiToCandles, buildSignalEvaluator,
 } from "../../src/tools/backtest-tools.js";
-import { StrategyConfig } from "../../src/backtest/types.js";
+import { StrategyConfig, Candle } from "../../src/backtest/types.js";
 
 function fakeKlines(closes: number[]): unknown[][] {
   return closes.map((c, i) => {
@@ -116,6 +117,59 @@ describe("BinancePortfolioBacktestTool", () => {
     expect(result.symbols).toEqual(["BTCUSDT", "ETHUSDT"]);
     expect(result.totalTradesExecuted).toBeGreaterThan(0);
     expect(result.finalCapital).toBeGreaterThan(10000);
+  });
+});
+
+describe("fetchOpenInterestHist", () => {
+  const originalFetch = global.fetch;
+  afterEach(() => { (globalThis as any).fetch = originalFetch; });
+
+  it("fetches and maps openInterestHist rows", async () => {
+    (globalThis as any).fetch = jest.fn().mockResolvedValue({
+      ok: true, status: 200,
+      json: async () => [
+        { symbol: "BTCUSDT", sumOpenInterest: "1000.5", sumOpenInterestValue: "1", timestamp: 1700000000000 },
+        { symbol: "BTCUSDT", sumOpenInterest: "1050.0", sumOpenInterestValue: "1", timestamp: 1700003600000 },
+      ],
+    });
+    const result = await fetchOpenInterestHist("BTCUSDT", "1h", 1700000000000, 1700003600000);
+    expect("error" in result).toBe(false);
+    if (!("error" in result)) {
+      expect(result.points).toEqual([
+        { timestamp: 1700000000000, sumOpenInterest: 1000.5 },
+        { timestamp: 1700003600000, sumOpenInterest: 1050.0 },
+      ]);
+    }
+  });
+
+  it("propagates a fetch error", async () => {
+    (globalThis as any).fetch = jest.fn().mockRejectedValue(new Error("network down"));
+    const result = await fetchOpenInterestHist("BTCUSDT", "1h", 0, 1);
+    expect(result).toEqual({ error: "RequestError", message: "network down" });
+  });
+
+  it("rejects an unsupported period", async () => {
+    const result = await fetchOpenInterestHist("BTCUSDT", "3m", 0, 1);
+    expect(result).toEqual({ error: "InvalidPeriod", message: "period must be one of: 5m, 15m, 30m, 1h, 2h, 4h, 6h, 12h, 1d" });
+  });
+});
+
+describe("alignOiToCandles", () => {
+  it("carries forward the last OI sample at or before each candle's openTime", () => {
+    const candles: Candle[] = [
+      { openTime: 1000, open: 1, high: 1, low: 1, close: 1, volume: 1 },
+      { openTime: 2000, open: 1, high: 1, low: 1, close: 1, volume: 1 },
+      { openTime: 3000, open: 1, high: 1, low: 1, close: 1, volume: 1 },
+    ];
+    const points = [
+      { timestamp: 1500, sumOpenInterest: 100 },
+      { timestamp: 2500, sumOpenInterest: 200 },
+    ];
+    expect(alignOiToCandles(candles, points)).toEqual([NaN, 100, 200]);
+  });
+
+  it("returns an empty array for empty candles", () => {
+    expect(alignOiToCandles([], [{ timestamp: 1, sumOpenInterest: 1 }])).toEqual([]);
   });
 });
 
