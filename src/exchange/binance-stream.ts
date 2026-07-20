@@ -7,6 +7,21 @@ export interface Tick {
   changePct24h?: number; // 24h % change from the @ticker stream, if available
 }
 
+export async function getLiveTick(stream: BinanceStreamManager, symbol: string): Promise<Tick | { error: string; message: string }> {
+  const sym = symbol.toUpperCase();
+  try {
+    if (!stream.isSubscribed(sym)) await stream.subscribe(sym);
+  } catch (e) {
+    return { error: "SubscribeError", message: (e as Error).message };
+  }
+  let tick = stream.getLatest(sym);
+  for (let i = 0; i < 20 && !tick; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    tick = stream.getLatest(sym);
+  }
+  return tick ?? { error: "NoPriceYet", message: "Subscribed but no live price received yet, try again" };
+}
+
 export type AlertCondition = "above" | "below";
 
 export interface Alert {

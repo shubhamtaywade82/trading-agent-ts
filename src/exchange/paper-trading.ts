@@ -1,4 +1,4 @@
-import { BinanceStreamManager } from "./binance-stream.js";
+import { BinanceStreamManager, getLiveTick } from "./binance-stream.js";
 
 export interface PaperPosition {
   id: number;
@@ -27,18 +27,8 @@ export class PaperTradingManager {
 
   async open(symbol: string, direction: "long" | "short", quantity: number, stopPrice?: number, targetPrice?: number): Promise<PaperPosition | { error: string; message: string }> {
     const sym = symbol.toUpperCase();
-    try {
-      if (!this.stream.isSubscribed(sym)) await this.stream.subscribe(sym);
-    } catch (e) {
-      return { error: "SubscribeError", message: (e as Error).message };
-    }
-
-    let tick = this.stream.getLatest(sym);
-    for (let i = 0; i < 20 && !tick; i++) {
-      await new Promise((resolve) => setTimeout(resolve, 250));
-      tick = this.stream.getLatest(sym);
-    }
-    if (!tick) return { error: "NoPriceYet", message: "Subscribed but no live price received yet, try again" };
+    const tick = await getLiveTick(this.stream, sym);
+    if ("error" in tick) return tick;
 
     const position: PaperPosition = {
       id: this.nextId++,
