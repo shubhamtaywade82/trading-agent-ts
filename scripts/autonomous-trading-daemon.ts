@@ -24,6 +24,7 @@ import { DriftMonitor } from "../src/paper-trading/drift-monitor.js";
 import { ResearchPipeline } from "../src/paper-trading/research-pipeline.js";
 import { PnlAdaptor } from "../src/paper-trading/pnl-adaptor.js";
 import { ShadowSignalTracker, CandidateSignal } from "../src/paper-trading/shadow-signal-tracker.js";
+import { FundingArbTracker } from "../src/paper-trading/funding-arb.js";
 import { fetchOrderBookImbalance } from "../src/tools/binance-tools.js";
 
 const pollArg = process.argv.find(a => a.startsWith("--poll-seconds="));
@@ -75,6 +76,7 @@ const liqClusterCandidates: CandidateSignal[] = SHADOW_SYMBOLS.map(symbol => ({
 }));
 const shadowCandidates: CandidateSignal[] = [...obiCandidates, ...liqClusterCandidates];
 const shadowTracker = new ShadowSignalTracker(shadowCandidates, stream);
+const fundingArbTracker = new FundingArbTracker(SHADOW_SYMBOLS);
 
 let tickCount = 0;
 let lastFillCount = 0;
@@ -107,6 +109,7 @@ async function shutdown(reason: string) {
   driftMonitor.stop();
   pnlAdaptor.stop();
   shadowTracker.stop();
+  fundingArbTracker.stop();
   stream.closeAll();
   writeHeartbeat();
   process.exit(0);
@@ -153,6 +156,10 @@ shadowTracker.start(pollSeconds * 1000, (r) => {
   for (const id of r.opened) console.log(`🔍 SHADOW fired: ${id}`);
   for (const c of r.closed) console.log(`🔍 SHADOW closed: ${c.id} (${c.reason})`);
 }).catch(e => console.error("Shadow tracker loop crashed (trading unaffected):", e));
+fundingArbTracker.start(pollSeconds * 1000, (r) => {
+  for (const symbol of r.opened) console.log(`💰 FUNDING ARB opened: ${symbol}`);
+  for (const symbol of r.closed) console.log(`💰 FUNDING ARB closed: ${symbol}`);
+}).catch(e => console.error("Funding arb loop crashed (trading unaffected):", e));
 driftMonitor.start(5 * 60 * 1000, (r) => {
   for (const a of r.alerts) console.log(a);
 }).catch(e => console.error("Drift monitor loop crashed (trading unaffected):", e));
