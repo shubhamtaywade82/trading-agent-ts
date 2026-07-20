@@ -18,7 +18,7 @@ import { TradeAnalyst } from "../src/paper-trading/trade-analyst.js";
 import { TradeEvaluator } from "../src/paper-trading/trade-evaluator.js";
 import { ReadinessMonitor } from "../src/paper-trading/readiness.js";
 import { FillNotifier, sendTelegram } from "../src/paper-trading/notifier.js";
-import { BinanceStreamManager } from "../src/exchange/binance-stream.js";
+import { BinanceStreamManager, detectLiquidationCluster } from "../src/exchange/binance-stream.js";
 import { StrategyCircuitBreaker } from "../src/paper-trading/circuit-breaker.js";
 import { DriftMonitor } from "../src/paper-trading/drift-monitor.js";
 import { ResearchPipeline } from "../src/paper-trading/research-pipeline.js";
@@ -48,8 +48,8 @@ const researchPipeline = new ResearchPipeline({ notifyTelegram: telegramConfigur
 const pnlAdaptorLive = process.env.TRADINGAGENT_PNL_ADAPTOR_LIVE === "true";
 const pnlAdaptor = new PnlAdaptor({ notifyTelegram: telegramConfigured, dryRun: !pnlAdaptorLive }, runner);
 
-const OBI_SYMBOLS = ["XRPUSDT", "ETHUSDT", "SOLUSDT"];
-const obiCandidates: CandidateSignal[] = OBI_SYMBOLS.map(symbol => ({
+const SHADOW_SYMBOLS = ["XRPUSDT", "ETHUSDT", "SOLUSDT"];
+const obiCandidates: CandidateSignal[] = SHADOW_SYMBOLS.map(symbol => ({
   id: `obi-${symbol}`,
   symbol,
   shadow: true,
@@ -64,7 +64,17 @@ const obiCandidates: CandidateSignal[] = OBI_SYMBOLS.map(symbol => ({
     return null;
   },
 }));
-const shadowTracker = new ShadowSignalTracker(obiCandidates, stream);
+const liqClusterCandidates: CandidateSignal[] = SHADOW_SYMBOLS.map(symbol => ({
+  id: `liq-cluster-${symbol}`,
+  symbol,
+  shadow: true,
+  stopPct: 0.02,
+  targetPct: 0.04,
+  maxHoldMs: 4 * 60 * 60 * 1000,
+  checkFire: async () => detectLiquidationCluster(stream, symbol, 5 * 60 * 1000, 5),
+}));
+const shadowCandidates: CandidateSignal[] = [...obiCandidates, ...liqClusterCandidates];
+const shadowTracker = new ShadowSignalTracker(shadowCandidates, stream);
 
 let tickCount = 0;
 let lastFillCount = 0;
@@ -116,6 +126,7 @@ await runner.attachStream(stream).catch(e => console.error("Kline stream attach 
 // loss halt, see circuit-breaker.ts) reads stream.getLatest() per symbol.
 await Promise.all(runner.getSymbols().map(sym => stream.subscribe(sym)))
   .catch(e => console.error("Ticker stream subscribe failed (daily halt falls back to realized-only):", e));
+await stream.subscribeLiquidations().catch(e => console.error("Liquidation stream subscribe failed (liq-cluster shadow signal will never fire):", e));
 
 runner.start(pollSeconds * 1000, async (result) => {
   tickCount++;
