@@ -164,6 +164,23 @@ export class BinanceTechnicalIndicatorsTool extends Tool {
 
 const DEPTH_PATH: Record<string, string> = { spot: "/api/v3/depth", usdm: "/fapi/v1/depth", coinm: "/dapi/v1/depth" };
 
+export async function fetchOrderBookImbalance(
+  symbol: string, market: string, limit: number,
+): Promise<{ bestBid: string | null; bestAsk: string | null; bidVolume: number; askVolume: number; imbalance: number } | { error: string; message: string }> {
+  const path = DEPTH_PATH[market];
+  if (!path) {
+    return { error: "InvalidMarket", message: `market must be one of: ${Object.keys(MARKETS).join(", ")}` };
+  }
+  const result = await fetchBinance(market, path, { symbol, limit });
+  if (result.error) return result as { error: string; message: string };
+
+  const body = result.body as { bids: [string, string][]; asks: [string, string][] };
+  const bidVolume = body.bids.reduce((sum, [, qty]) => sum + Number(qty), 0);
+  const askVolume = body.asks.reduce((sum, [, qty]) => sum + Number(qty), 0);
+  const imbalance = (bidVolume - askVolume) / (bidVolume + askVolume);
+  return { bestBid: body.bids[0]?.[0] ?? null, bestAsk: body.asks[0]?.[0] ?? null, bidVolume, askVolume, imbalance };
+}
+
 export class BinanceOrderBookTool extends Tool {
   get name(): string {
     return "binance_order_book";
@@ -193,28 +210,9 @@ export class BinanceOrderBookTool extends Tool {
     const market = typeof args.market === "string" ? args.market : "spot";
     const symbol = String(args.symbol ?? "");
     const limit = Number(args.limit ?? 50) || 50;
-    const path = DEPTH_PATH[market];
-    if (!path) {
-      return { error: "InvalidMarket", message: `market must be one of: ${Object.keys(MARKETS).join(", ")}` };
-    }
-
-    const result = await fetchBinance(market, path, { symbol, limit });
-    if (result.error) return result;
-
-    const body = result.body as { bids: [string, string][]; asks: [string, string][] };
-    const bidVolume = body.bids.reduce((sum, [, qty]) => sum + Number(qty), 0);
-    const askVolume = body.asks.reduce((sum, [, qty]) => sum + Number(qty), 0);
-    const imbalance = (bidVolume - askVolume) / (bidVolume + askVolume);
-
-    return {
-      symbol,
-      market,
-      bestBid: body.bids[0]?.[0] ?? null,
-      bestAsk: body.asks[0]?.[0] ?? null,
-      bidVolume,
-      askVolume,
-      imbalance,
-    };
+    const result = await fetchOrderBookImbalance(symbol, market, limit);
+    if ("error" in result) return result;
+    return { symbol, market, ...result };
   }
 }
 

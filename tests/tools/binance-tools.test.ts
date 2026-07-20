@@ -2,6 +2,7 @@ import {
   BinancePublicApiTool, BinanceTechnicalIndicatorsTool, BinanceOrderBookTool,
   BinanceFuturesStatsTool, BinanceScreenerTool, BinanceWatchPriceTool,
   BinanceUnwatchPriceTool, BinancePriceAlertTool, BinanceLiquidationsTool,
+  fetchOrderBookImbalance,
 } from "../../src/tools/binance-tools.js";
 import { BinanceStreamManager } from "../../src/exchange/binance-stream.js";
 
@@ -183,6 +184,36 @@ describe("BinanceOrderBookTool", () => {
     expect(result.imbalance).toBeCloseTo(0.5); // (15-5)/(15+5)
     expect(result.bestBid).toBe("100");
     expect(result.bestAsk).toBe("101");
+  });
+
+  it("rejects an invalid market", async () => {
+    const tool = new BinanceOrderBookTool();
+    const result = await tool.call({ symbol: "BTCUSDT", market: "notamarket" });
+    expect(result.error).toBe("InvalidMarket");
+  });
+});
+
+describe("fetchOrderBookImbalance", () => {
+  const originalFetch = global.fetch;
+  afterEach(() => { (globalThis as any).fetch = originalFetch; });
+
+  it("computes imbalance directly, without the Tool wrapper", async () => {
+    (globalThis as any).fetch = jest.fn().mockResolvedValue({
+      ok: true, status: 200,
+      json: async () => ({ bids: [["100", "10"]], asks: [["101", "3"], ["102", "2"]] }),
+    });
+    const result = await fetchOrderBookImbalance("BTCUSDT", "spot", 50);
+    expect("error" in result).toBe(false);
+    if (!("error" in result)) {
+      expect(result.bidVolume).toBe(10);
+      expect(result.askVolume).toBe(5);
+      expect(result.imbalance).toBeCloseTo((10 - 5) / 15);
+    }
+  });
+
+  it("rejects an invalid market before fetching", async () => {
+    const result = await fetchOrderBookImbalance("BTCUSDT", "notamarket", 50);
+    expect(result).toEqual({ error: "InvalidMarket", message: expect.stringContaining("market must be one of") });
   });
 });
 
