@@ -1,0 +1,62 @@
+{
+  "generatedAt": "2026-07-20T20:20:32.148Z",
+  "results": [
+    {
+      "pairA": "XRPUSDT",
+      "pairB": "ETHUSDT",
+      "correlation": 0.9628651020309175,
+      "trades": 370,
+      "winRate": 0.4945945945945946,
+      "pf": 0.5892949887731295,
+      "sharpe": -0.17804845850037987,
+      "pnlUsd": -2036.4307985545138,
+      "h1": {
+        "trades": 188,
+        "pnlUsd": -1025.5568620498964
+      },
+      "h2": {
+        "trades": 181,
+        "pnlUsd": -1035.8863992633783
+      },
+      "verdict": "REGIME_FRAGILE"
+    },
+    {
+      "pairA": "XRPUSDT",
+      "pairB": "SOLUSDT",
+      "correlation": 0.9575652536433334,
+      "trades": 387,
+      "winRate": 0.5503875968992248,
+      "pf": 0.6441459857810663,
+      "sharpe": -0.15284868184648215,
+      "pnlUsd": -1771.3163454860328,
+      "h1": {
+        "trades": 194,
+        "pnlUsd": -1039.8075950840266
+      },
+      "h2": {
+        "trades": 192,
+        "pnlUsd": -720.9914604006599
+      },
+      "verdict": "REGIME_FRAGILE"
+    },
+    {
+      "pairA": "ETHUSDT",
+      "pairB": "SOLUSDT",
+      "correlation": 0.9812433164609055,
+      "trades": 374,
+      "winRate": 0.5427807486631016,
+      "pf": 0.6893420889355154,
+      "sharpe": -0.12207876267679921,
+      "pnlUsd": -1312.0281266048933,
+      "h1": {
+        "trades": 184,
+        "pnlUsd": -380.6108711237621
+      },
+      "h2": {
+        "trades": 188,
+        "pnlUsd": -876.6413106254665
+      },
+      "verdict": "REGIME_FRAGILE"
+    }
+  ]
+}
