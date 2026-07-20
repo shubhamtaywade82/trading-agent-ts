@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from "fs";
 import { dirname } from "path";
-import { fetchCandlesRange, buildSignalEvaluator } from "../tools/backtest-tools.js";
+import { fetchCandlesRange, buildSignalEvaluator, fetchOpenInterestHist, alignOiToCandles } from "../tools/backtest-tools.js";
 import { Candle } from "../backtest/types.js";
 import { BinanceStreamManager } from "../exchange/binance-stream.js";
 import { ConceptsEngine } from "../concepts/adapter.js";
@@ -456,6 +456,21 @@ export class LivePaperRunner {
     if (candles.length === 0) return { hadCandles: false, fills: 0, evaluations: [] };
     const lastClosed = candles[candles.length - 1];
 
+    // OI is only fetched when a strategy actually needs it, and a fetch
+    // error just journals + leaves oi_* conditions evaluating false for this
+    // poll (buildSignalEvaluator's no-extraSeries no-op) rather than failing
+    // the whole group — unlike the one-shot backtest tool, a transient data
+    // hiccup here shouldn't block every other strategy's exit management.
+    let oiSeries: number[] | undefined;
+    if (strats.some(s => s.entry.some(c => c.type.startsWith("oi_")))) {
+      const oiResult = await fetchOpenInterestHist(symbol, tf, startTime, endTime);
+      if ("error" in oiResult) {
+        this.journal({ type: "oi_fetch_error", symbol, tf, message: oiResult.message });
+      } else {
+        oiSeries = alignOiToCandles(candles, oiResult.points);
+      }
+    }
+
     let fills = 0;
     const evaluations: { strategyId: string; symbol: string; tf: string; checked: boolean; fired: boolean; lastClosedCandleTime: number }[] = [];
 
@@ -548,7 +563,7 @@ export class LivePaperRunner {
           const htfContext = needsHtf ? new ConceptsEngine(await this.getHtfCandles(symbol, tf)).toHTFContext() : undefined;
           evaluator = new ConceptsEngine(candles, htfContext ? { htfContext } : undefined).evaluator(strat.entry);
         } else {
-          evaluator = buildSignalEvaluator(candles, strat.entry);
+          evaluator = buildSignalEvaluator(candles, strat.entry, oiSeries ? { oi: oiSeries } : undefined);
         }
         const i = candles.length - 1;
         fired = evaluator(i);
