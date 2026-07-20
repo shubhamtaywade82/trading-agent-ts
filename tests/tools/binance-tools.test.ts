@@ -2,7 +2,7 @@ import {
   BinancePublicApiTool, BinanceTechnicalIndicatorsTool, BinanceOrderBookTool,
   BinanceFuturesStatsTool, BinanceScreenerTool, BinanceWatchPriceTool,
   BinanceUnwatchPriceTool, BinancePriceAlertTool, BinanceLiquidationsTool,
-  fetchOrderBookImbalance, fetchSpotPrice,
+  fetchOrderBookImbalance, fetchSpotPrice, fetchFuturesStats,
 } from "../../src/tools/binance-tools.js";
 import { BinanceStreamManager } from "../../src/exchange/binance-stream.js";
 
@@ -257,6 +257,25 @@ describe("BinanceFuturesStatsTool", () => {
     expect(result.markPrice).toBe(60000.5);
     expect(result.lastFundingRate).toBe(0.0001);
     expect(result.openInterest).toBe(1234.5);
+  });
+});
+
+describe("fetchFuturesStats", () => {
+  const originalFetch = global.fetch;
+  afterEach(() => { (globalThis as any).fetch = originalFetch; });
+
+  it("combines premium index and open interest, without the Tool wrapper", async () => {
+    (globalThis as any).fetch = jest.fn().mockImplementation((url: URL) => {
+      if (url.toString().includes("premiumIndex")) {
+        return Promise.resolve({
+          ok: true, status: 200,
+          json: async () => ({ markPrice: "60000.5", lastFundingRate: "0.0001", nextFundingTime: 123 }),
+        });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({ openInterest: "1234.5" }) });
+    });
+    const result = await fetchFuturesStats("BTCUSDT");
+    expect(result).toEqual({ markPrice: 60000.5, lastFundingRate: 0.0001, nextFundingTime: 123, openInterest: 1234.5 });
   });
 });
 

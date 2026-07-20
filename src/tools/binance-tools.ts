@@ -223,6 +223,26 @@ export class BinanceOrderBookTool extends Tool {
   }
 }
 
+export async function fetchFuturesStats(
+  symbol: string,
+): Promise<{ markPrice: number; lastFundingRate: number; nextFundingTime: number; openInterest: number } | { error: string; message: string }> {
+  const [premium, openInterest] = await Promise.all([
+    fetchBinance("usdm", "/fapi/v1/premiumIndex", { symbol }),
+    fetchBinance("usdm", "/fapi/v1/openInterest", { symbol }),
+  ]);
+  if (premium.error) return premium as { error: string; message: string };
+  if (openInterest.error) return openInterest as { error: string; message: string };
+
+  const p = premium.body as { markPrice: string; lastFundingRate: string; nextFundingTime: number };
+  const oi = openInterest.body as { openInterest: string };
+  return {
+    markPrice: Number(p.markPrice),
+    lastFundingRate: Number(p.lastFundingRate),
+    nextFundingTime: p.nextFundingTime,
+    openInterest: Number(oi.openInterest),
+  };
+}
+
 export class BinanceFuturesStatsTool extends Tool {
   get name(): string {
     return "binance_futures_stats";
@@ -246,22 +266,9 @@ export class BinanceFuturesStatsTool extends Tool {
 
   async call(args: Record<string, unknown>): Promise<Record<string, unknown>> {
     const symbol = String(args.symbol ?? "");
-    const [premium, openInterest] = await Promise.all([
-      fetchBinance("usdm", "/fapi/v1/premiumIndex", { symbol }),
-      fetchBinance("usdm", "/fapi/v1/openInterest", { symbol }),
-    ]);
-    if (premium.error) return premium;
-    if (openInterest.error) return openInterest;
-
-    const p = premium.body as { markPrice: string; lastFundingRate: string; nextFundingTime: number };
-    const oi = openInterest.body as { openInterest: string };
-    return {
-      symbol,
-      markPrice: Number(p.markPrice),
-      lastFundingRate: Number(p.lastFundingRate),
-      nextFundingTime: p.nextFundingTime,
-      openInterest: Number(oi.openInterest),
-    };
+    const result = await fetchFuturesStats(symbol);
+    if ("error" in result) return result;
+    return { symbol, ...result };
   }
 }
 
