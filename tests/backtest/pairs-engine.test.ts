@@ -1,4 +1,4 @@
-import { alignPairCandles, pearsonCorrelation, computeZScoreSeries } from "../../src/backtest/pairs-engine.js";
+import { alignPairCandles, pearsonCorrelation, computeZScoreSeries, runPairsBacktest } from "../../src/backtest/pairs-engine.js";
 import { Candle } from "../../src/backtest/types.js";
 
 function candle(openTime: number, close: number): Candle {
@@ -53,5 +53,47 @@ describe("computeZScoreSeries", () => {
     const closesB = [100, 100, 100, 100, 100, 100];
     const z = computeZScoreSeries(closesA, closesB, 4);
     expect(z[5]).toBeLessThan(-2);
+  });
+});
+
+describe("runPairsBacktest", () => {
+  function candlesFrom(closes: number[]): Candle[] {
+    return closes.map((c, i) => candle(i, c));
+  }
+
+  const BASE_CONFIG = {
+    lookback: 4, entryZ: 2, exitZ: 0.5, stopZ: 3.5, maxHoldBars: 20,
+    notionalPerLeg: 2000, feeBps: 5, slippageBps: 3, initialCapital: 10000,
+  };
+
+  it("opens a short_a_long_b trade when A spikes far above B, and closes it on reversion", () => {
+    // Flat, slightly noisy history to build a real variance reference, then a
+    // spike in A (fires entry) which reverts back toward B a few bars later
+    // (fires exit).
+    const closesA = [100, 102, 98, 101, 99, 150, 140, 120, 105, 100, 100];
+    const closesB = new Array(closesA.length).fill(100);
+    const result = runPairsBacktest(candlesFrom(closesA), candlesFrom(closesB), BASE_CONFIG);
+    expect(result.trades.length).toBeGreaterThan(0);
+    const first = result.trades[0];
+    expect(first.direction).toBe("short_a_long_b");
+    expect(Number.isFinite(first.pnlUsd)).toBe(true);
+  });
+
+  it("opens a long_a_short_b trade when A drops far below B, and closes it on reversion", () => {
+    const closesA = [100, 102, 98, 101, 99, 60, 70, 85, 95, 100, 100];
+    const closesB = new Array(closesA.length).fill(100);
+    const result = runPairsBacktest(candlesFrom(closesA), candlesFrom(closesB), BASE_CONFIG);
+    expect(result.trades.length).toBeGreaterThan(0);
+    expect(result.trades[0].direction).toBe("long_a_short_b");
+  });
+
+  it("computes metrics with the expected field names", () => {
+    const closesA = [100, 102, 98, 101, 99, 150, 140, 120, 105, 100, 100];
+    const closesB = new Array(closesA.length).fill(100);
+    const result = runPairsBacktest(candlesFrom(closesA), candlesFrom(closesB), BASE_CONFIG);
+    expect(result.metrics).toEqual(expect.objectContaining({
+      totalTrades: expect.any(Number), winRate: expect.any(Number), profitFactor: expect.any(Number),
+      sharpeRatio: expect.any(Number), totalPnlUsd: expect.any(Number), maxDrawdownPct: expect.any(Number),
+    }));
   });
 });

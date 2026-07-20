@@ -39,3 +39,106 @@ export function computeZScoreSeries(closesA: number[], closesB: number[], lookba
   }
   return z;
 }
+
+export interface PairsBacktestConfig {
+  lookback: number; entryZ: number; exitZ: number; stopZ: number; maxHoldBars: number;
+  notionalPerLeg: number; feeBps: number; slippageBps: number; initialCapital: number;
+}
+
+export interface PairsTrade {
+  entryBarIdx: number; exitBarIdx: number;
+  direction: "short_a_long_b" | "long_a_short_b";
+  entryZ: number; exitZ: number;
+  pnlUsd: number;
+  exitReason: "target" | "stop" | "timeout";
+}
+
+export interface PairsBacktestMetrics {
+  totalTrades: number; winRate: number; profitFactor: number; sharpeRatio: number;
+  totalPnlUsd: number; maxDrawdownPct: number;
+}
+
+export function runPairsBacktest(
+  candlesA: Candle[], candlesB: Candle[], config: PairsBacktestConfig,
+): { trades: PairsTrade[]; metrics: PairsBacktestMetrics } {
+  const { a, b } = alignPairCandles(candlesA, candlesB);
+  const closesA = a.map(c => c.close);
+  const closesB = b.map(c => c.close);
+  const z = computeZScoreSeries(closesA, closesB, config.lookback);
+  const feeFrac = config.feeBps / 10000;
+  const slipFrac = config.slippageBps / 10000;
+
+  const trades: PairsTrade[] = [];
+  let pos: {
+    direction: "short_a_long_b" | "long_a_short_b"; entryBarIdx: number; entryZ: number;
+    qtyA: number; qtyB: number; fillA: number; fillB: number;
+  } | null = null;
+
+  for (let i = 0; i < closesA.length; i++) {
+    const zi = z[i];
+    if (Number.isNaN(zi)) continue;
+
+    if (pos) {
+      const barsHeld = i - pos.entryBarIdx;
+      const hitExit = Math.abs(zi) < config.exitZ;
+      const hitStop = Math.abs(zi) > config.stopZ;
+      const timedOut = barsHeld >= config.maxHoldBars;
+      if (hitExit || hitStop || timedOut) {
+        const short = pos.direction === "short_a_long_b";
+        const fillAExit = short ? closesA[i] * (1 + slipFrac) : closesA[i] * (1 - slipFrac);
+        const fillBExit = short ? closesB[i] * (1 - slipFrac) : closesB[i] * (1 + slipFrac);
+        const legAPnl = short ? pos.qtyA * (pos.fillA - fillAExit) : pos.qtyA * (fillAExit - pos.fillA);
+        const legBPnl = short ? pos.qtyB * (fillBExit - pos.fillB) : pos.qtyB * (pos.fillB - fillBExit);
+        const fees = 2 * config.notionalPerLeg * feeFrac; // feeBps already round-trip, x2 legs
+        const pnlUsd = legAPnl + legBPnl - fees;
+        trades.push({
+          entryBarIdx: pos.entryBarIdx, exitBarIdx: i, direction: pos.direction,
+          entryZ: pos.entryZ, exitZ: zi, pnlUsd,
+          exitReason: hitStop ? "stop" : hitExit ? "target" : "timeout",
+        });
+        pos = null;
+      }
+      continue;
+    }
+
+    if (Math.abs(zi) > config.entryZ) {
+      const direction: "short_a_long_b" | "long_a_short_b" = zi > 0 ? "short_a_long_b" : "long_a_short_b";
+      const short = direction === "short_a_long_b";
+      const qtyA = config.notionalPerLeg / closesA[i];
+      const qtyB = config.notionalPerLeg / closesB[i];
+      const fillA = short ? closesA[i] * (1 - slipFrac) : closesA[i] * (1 + slipFrac);
+      const fillB = short ? closesB[i] * (1 + slipFrac) : closesB[i] * (1 - slipFrac);
+      pos = { direction, entryBarIdx: i, entryZ: zi, qtyA, qtyB, fillA, fillB };
+    }
+  }
+
+  const wins = trades.filter(t => t.pnlUsd > 0);
+  const losses = trades.filter(t => t.pnlUsd <= 0);
+  const grossProfit = wins.reduce((s, t) => s + t.pnlUsd, 0);
+  const grossLoss = Math.abs(losses.reduce((s, t) => s + t.pnlUsd, 0));
+  const totalPnlUsd = grossProfit - grossLoss;
+
+  let equity = config.initialCapital, peak = equity, maxDrawdownPct = 0;
+  const returns: number[] = [];
+  for (const t of trades) {
+    equity += t.pnlUsd;
+    peak = Math.max(peak, equity);
+    maxDrawdownPct = Math.max(maxDrawdownPct, (peak - equity) / peak);
+    returns.push(t.pnlUsd / (2 * config.notionalPerLeg));
+  }
+  const meanReturn = returns.length ? returns.reduce((s, r) => s + r, 0) / returns.length : 0;
+  const variance = returns.length ? returns.reduce((s, r) => s + (r - meanReturn) ** 2, 0) / returns.length : 0;
+  const stdReturn = Math.sqrt(variance);
+
+  return {
+    trades,
+    metrics: {
+      totalTrades: trades.length,
+      winRate: trades.length ? wins.length / trades.length : 0,
+      profitFactor: grossLoss > 0 ? grossProfit / grossLoss : (grossProfit > 0 ? Infinity : 0),
+      sharpeRatio: stdReturn > 0 ? meanReturn / stdReturn : 0,
+      totalPnlUsd,
+      maxDrawdownPct,
+    },
+  };
+}
