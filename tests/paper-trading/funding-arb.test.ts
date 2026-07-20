@@ -1,7 +1,7 @@
 import { mkdtemp, rm, readFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
-import { FundingArbTracker, computeBasisPnl, FundingArbDeps } from "../../src/paper-trading/funding-arb.js";
+import { FundingArbTracker, computeBasisPnl, FundingArbDeps, summarizeFundingArbJournal } from "../../src/paper-trading/funding-arb.js";
 
 describe("computeBasisPnl", () => {
   it("short perp: profits when basis narrows (converges toward spot)", () => {
@@ -110,5 +110,20 @@ describe("FundingArbTracker", () => {
     const journal = await readFile(journalFile, "utf-8");
     const opens = journal.split("\n").filter(l => l.includes('"type":"funding_arb_open"'));
     expect(opens).toHaveLength(1);
+  });
+});
+
+describe("summarizeFundingArbJournal", () => {
+  it("aggregates closed positions per symbol", () => {
+    const entries = [
+      { type: "funding_arb_open", symbol: "XRPUSDT" },
+      { type: "funding_arb_close", symbol: "XRPUSDT", reason: "normalized", realizedPnlUsd: 12.5, accruedFundingUsd: 15, basisPnl: -2.5 },
+      { type: "funding_arb_open", symbol: "XRPUSDT" },
+      { type: "funding_arb_close", symbol: "XRPUSDT", reason: "timeout", realizedPnlUsd: -3, accruedFundingUsd: 8, basisPnl: -11 },
+    ];
+    const summary = summarizeFundingArbJournal(entries);
+    expect(summary["XRPUSDT"]).toEqual({
+      closedCount: 2, totalRealizedPnlUsd: 9.5, totalFundingCollected: 23, totalBasisPnl: -13.5,
+    });
   });
 });

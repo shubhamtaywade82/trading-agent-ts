@@ -159,3 +159,19 @@ export class FundingArbTracker {
     this.running = false;
   }
 }
+
+export function summarizeFundingArbJournal(
+  entries: { type: string; symbol: string; reason?: string; realizedPnlUsd?: number; accruedFundingUsd?: number; basisPnl?: number }[],
+): Record<string, { closedCount: number; totalRealizedPnlUsd: number; totalFundingCollected: number; totalBasisPnl: number }> {
+  const result: ReturnType<typeof summarizeFundingArbJournal> = {};
+  for (const e of entries) {
+    if (e.type !== "funding_arb_close") continue;
+    if (!result[e.symbol]) result[e.symbol] = { closedCount: 0, totalRealizedPnlUsd: 0, totalFundingCollected: 0, totalBasisPnl: 0 };
+    const s = result[e.symbol];
+    s.closedCount++;
+    s.totalRealizedPnlUsd += e.realizedPnlUsd ?? 0;
+    s.totalFundingCollected += e.accruedFundingUsd ?? 0;
+    s.totalBasisPnl += e.basisPnl ?? 0;
+  }
+  return result;
+}
