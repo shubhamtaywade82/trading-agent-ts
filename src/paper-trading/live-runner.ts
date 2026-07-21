@@ -69,7 +69,7 @@ export interface RunnerConfig {
 
 export const DEFAULT_RUNNER_CONFIG: RunnerConfig = {
   initialCapitalPerSymbol: 10000,
-  leverage: 5,
+  leverage: 10,
   marginPerTradePct: 0.05,
   feeBps: 5,
   slippageBps: 3,

@@ -74,7 +74,7 @@ tests/                Jest suite mirroring src/ structure
 | Default model | `qwen3.5:4b` (local); paper-trading LLM components default to `gpt-oss:20b` (cloud) |
 | Market data | Binance public REST + WebSocket (spot, USD-M futures, COIN-M futures) — no auth, no order endpoints |
 | Persistence | Flat JSON state files + JSONL append-only journals under `.trading-agent/`; `better-sqlite3` for the DevAgent's own conversation memory (unrelated to trading state) |
-| TUI | Ink (React for terminals) |
+| TUI | Ink 7 (React 19 for terminals) — `paper-trade-tui.tsx` renders with `incrementalRendering: true` to avoid full-frame flicker |
 | Testing | Jest + ts-jest (ESM preset), `tests/` mirrors `src/` |
 | Sandboxing | Docker container for shell-tool command execution (no network, resource limits) |
 | Notifications | Telegram Bot API (optional), terminal bell |
