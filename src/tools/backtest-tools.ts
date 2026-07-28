@@ -722,8 +722,6 @@ export function buildSignalEvaluator(
   let liqob_bull: boolean[] = [], liqob_bear: boolean[] = [], liqfvg_bull: boolean[] = [], liqfvg_bear: boolean[] = [];
   let htfShort: boolean[] = [], htfLong: boolean[] = [];
   if (needSmc) {
-    const sh = smcSwingHighs(closes, 5);
-    const sl = smcSwingLows(closes, 5);
     ob_bull = new Array(n).fill(false); ob_bear = new Array(n).fill(false);
     fvg_bull = new Array(n).fill(false); fvg_bear = new Array(n).fill(false);
     disp_bull = new Array(n).fill(false); disp_bear = new Array(n).fill(false);
@@ -1045,7 +1043,7 @@ export class BinanceSignalFusionTool extends Tool {
 
     // ── Pre-compute ALL indicator arrays per symbol (O(n) pass) ──
     type PreComputed = {
-      closes: number[]; sh: boolean[]; sl: boolean[];
+      closes: number[];
       rsi: Record<number, (number | undefined)[]>;
       macd: { macd: number; signal: number }[];
       bb: { upper: number; lower: number; middle: number }[];
@@ -1067,8 +1065,6 @@ export class BinanceSignalFusionTool extends Tool {
     for (const [sym, candles] of Object.entries(symbolData)) {
       const closes = candles.map(c => c.close);
       const n = closes.length;
-      const sh = smcSwingHighs(closes, 5);
-      const sl = smcSwingLows(closes, 5);
 
       const needRsi = new Set<number>();
       const needEma = new Set<number>();
@@ -1143,7 +1139,7 @@ export class BinanceSignalFusionTool extends Tool {
       if (needIchimoku) extra.ichimoku = ichimokuSeries(candles);
       if (needVolume) extra.volSma20 = smaSeries(candles.map(c => c.volume), 20);
 
-      pre[sym] = { closes, sh, sl, rsi, macd, bb, ema, ob_bull, ob_bear, fvg_bull, fvg_bear, disp_bull, disp_bear, liq_bull, liq_bear, liqob_bull, liqob_bear, liqfvg_bull, liqfvg_bear, ...extra };
+      pre[sym] = { closes, rsi, macd, bb, ema, ob_bull, ob_bear, fvg_bull, fvg_bear, disp_bull, disp_bear, liq_bull, liq_bear, liqob_bull, liqob_bear, liqfvg_bull, liqfvg_bear, ...extra };
     }
 
     const positions: Record<string, any> = {};
