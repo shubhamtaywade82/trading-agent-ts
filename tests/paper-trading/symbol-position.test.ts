@@ -130,4 +130,46 @@ describe("SymbolPositionManager", () => {
     const shortPos = mgr.applyIntent(flatPosition("XRPUSDT"), intent({ direction: "short" }), 100, 10).position;
     expect(shortPos.liqPrice).toBeCloseTo(119.5, 6); // 100*(1+1/5-0.005)
   });
+
+  describe("trailing config", () => {
+    const trailingCfg = {
+      enabled: true, breakevenAtrMult: 1, breakevenOffsetBps: 5,
+      activationAtrMult: 2, trailAtrMult: 1.5, minTrailPct: 0.005, maxTrailPct: 0.04,
+    };
+
+    it("initializes trailing state on open() when the governing strategy has trailing enabled", () => {
+      const openIntent = intent({ strategyId: "A", trailingConfig: trailingCfg });
+      const pos = mgr.applyIntent(flatPosition("XRPUSDT"), openIntent, 100, 10).position;
+
+      expect(pos.trailing).toEqual({ phase: "initial", extremePrice: 100 });
+      expect(pos.trailingConfig).toEqual(trailingCfg);
+    });
+
+    it("leaves trailing null when the governing strategy has no trailing config", () => {
+      const openIntent = intent({ strategyId: "A" }); // no trailingConfig
+      const pos = mgr.applyIntent(flatPosition("XRPUSDT"), openIntent, 100, 10).position;
+
+      expect(pos.trailing).toBeNull();
+      expect(pos.trailingConfig).toBeNull();
+    });
+
+    it("leaves trailing null when trailingConfig.enabled is false", () => {
+      const openIntent = intent({ strategyId: "A", trailingConfig: { ...trailingCfg, enabled: false } });
+      const pos = mgr.applyIntent(flatPosition("XRPUSDT"), openIntent, 100, 10).position;
+
+      expect(pos.trailing).toBeNull();
+      expect(pos.trailingConfig).toBeNull();
+    });
+
+    it("leaves the governing trailing config/state untouched by an add(), even if the adding strategy has its own trailing config", () => {
+      const openIntent = intent({ strategyId: "A", trailingConfig: trailingCfg });
+      let pos = mgr.applyIntent(flatPosition("XRPUSDT"), openIntent, 100, 10).position;
+
+      const otherCfg = { ...trailingCfg, trailAtrMult: 99 };
+      const addIntent = intent({ strategyId: "B", trailingConfig: otherCfg });
+      pos = mgr.applyIntent(pos, addIntent, 110, 5).position;
+
+      expect(pos.trailingConfig).toEqual(trailingCfg); // still A's config, not B's
+    });
+  });
 });

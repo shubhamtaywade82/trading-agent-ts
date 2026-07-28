@@ -10,6 +10,8 @@
 // Pure, side-effect-free: no fs/journal access. The caller (LivePaperRunner)
 // owns persistence and journaling of the PositionFill[] this returns.
 
+import { TrailingConfig, TrailingState, initTrailingState } from "./trailing.js";
+
 export type Direction = "long" | "short";
 
 export type FillAction = "open" | "add" | "reduce" | "close" | "flip_close" | "flip_open";
@@ -33,6 +35,7 @@ export interface StrategyIntent {
   maxHoldBars: number;
   entryBarIdx: number;
   entryBarOpenTime: number;
+  trailingConfig?: TrailingConfig; // governing strategy's trailing config, if any — see open()
 }
 
 export interface PositionFill {
@@ -76,6 +79,11 @@ export interface SymbolPosition {
   liqPrice: number | null;
   contributingStrategyIds: string[];
   lots: Lot[]; // FIFO, oldest first — attribution only, never affects P&L math
+  // Set once at open() from the governing strategy's config, untouched by
+  // add() — same rule as every other governing* field above. null when the
+  // governing strategy has no trailing config or it's disabled.
+  trailing: TrailingState | null;
+  trailingConfig: TrailingConfig | null;
 }
 
 const EPS = 1e-9;
@@ -96,6 +104,8 @@ export function flatPosition(symbol: string): SymbolPosition {
     liqPrice: null,
     contributingStrategyIds: [],
     lots: [],
+    trailing: null,
+    trailingConfig: null,
   };
 }
 
@@ -242,6 +252,8 @@ export class SymbolPositionManager {
       liqPrice,
       contributingStrategyIds: [intent.strategyId],
       lots: [{ strategyId: intent.strategyId, qty, entryBarOpenTime: intent.entryBarOpenTime }],
+      trailing: intent.trailingConfig?.enabled ? initTrailingState(entryPrice) : null,
+      trailingConfig: intent.trailingConfig?.enabled ? intent.trailingConfig : null,
     };
 
     const fill: PositionFill = {
