@@ -9,6 +9,8 @@ import {
   legacyObRetestLong, legacyObRetestShort,
 } from "../concepts/legacy-conditions.js";
 import { runPortfolioBacktest } from "../backtest/portfolio.js";
+import { computeLiqPrice } from "../paper-trading/symbol-position.js";
+import { TrailingConfig, initTrailingState, updateTrailingStop } from "../paper-trading/trailing.js";
 
 const CONDITION_SCHEMA = {
   type: "object",
@@ -881,6 +883,10 @@ export function runFuturesBacktest(
   // prudent to commit to one trade. Omit to keep the flat-% behavior every
   // existing caller already relies on.
   riskPerTradePct?: number,
+  // Optional ATR-adaptive trailing stop (src/paper-trading/trailing.ts) — same
+  // engine LivePaperRunner uses, so live and backtest never drift. Omit to
+  // keep every existing caller's fixed-stop/fixed-target behavior unchanged.
+  trailingConfig?: TrailingConfig,
 ): Record<string, unknown> {
 
   const subMap = new Map<number, Candle[]>();
@@ -917,15 +923,28 @@ export function runFuturesBacktest(
       : flatMargin;
     const notional = margin * leverage;
     const qty = notional / entryPrice;
-    const stopPrice = direction === "long" ? entryPrice * (1 - stopPct) : entryPrice * (1 + stopPct);
+    let stopPrice = direction === "long" ? entryPrice * (1 - stopPct) : entryPrice * (1 + stopPct);
     const targetPrice = direction === "long" ? entryPrice * (1 + targetPct) : entryPrice * (1 - targetPct);
-    const liqPrice = direction === "long" ? entryPrice * (1 - 1/leverage + 0.005) : entryPrice * (1 + 1/leverage - 0.005);
+    const liqPrice = computeLiqPrice(direction, entryPrice, leverage);
+    let trailState = trailingConfig?.enabled ? initTrailingState(entryPrice) : null;
+    let targetDisabled = false;
 
     let exitIdx = candles.length - 1;
     let exitPrice = candles[exitIdx].close;
     let exitReason: TradeRecord["exitReason"] = "timeout";
     for (let j = i + 1; j < candles.length && j <= i + maxHoldBars; j++) {
       const b = candles[j];
+
+      // Trailing update — once per native bar (not per sub-bar), same
+      // granularity LivePaperRunner uses. Causal: only candles up to and
+      // including this bar feed the ATR.
+      if (trailState && trailingConfig) {
+        const trailResult = updateTrailingStop(trailState, b, direction, entryPrice, stopPrice, trailingConfig, candles.slice(0, j + 1));
+        trailState = trailResult.state;
+        stopPrice = trailResult.stopPrice;
+        targetDisabled = trailResult.targetDisabled;
+      }
+
       const subs = subBars ? subMap.get(b.openTime) : undefined;
       if (subs && subs.length > 0) {
         // Sub-bar resolution: walk lower-TF candles chronologically, first
@@ -935,7 +954,7 @@ export function runFuturesBacktest(
         for (const s of subs) {
           if (direction === "long" ? s.low <= liqPrice : s.high >= liqPrice) { exitIdx = j; exitPrice = liqPrice; exitReason = "liq"; resolved = true; break; }
           if (direction === "long" ? s.low <= stopPrice : s.high >= stopPrice) { exitIdx = j; exitPrice = direction === "long" ? stopPrice * (1 - slipFrac) : stopPrice * (1 + slipFrac); exitReason = "stop"; resolved = true; break; }
-          if (direction === "long" ? s.high >= targetPrice : s.low <= targetPrice) { exitIdx = j; exitPrice = targetPrice; exitReason = "target"; resolved = true; break; }
+          if (!targetDisabled && (direction === "long" ? s.high >= targetPrice : s.low <= targetPrice)) { exitIdx = j; exitPrice = targetPrice; exitReason = "target"; resolved = true; break; }
         }
         if (resolved) break;
         if (j === i + maxHoldBars) { exitIdx = j; exitPrice = direction === "long" ? b.close * (1 - slipFrac) : b.close * (1 + slipFrac); exitReason = "timeout"; }
@@ -943,10 +962,13 @@ export function runFuturesBacktest(
       }
       if (direction === "long" ? b.low <= liqPrice : b.high >= liqPrice) { exitIdx = j; exitPrice = liqPrice; exitReason = "liq"; break; }
       if (direction === "long" ? b.low <= stopPrice : b.high >= stopPrice) { exitIdx = j; exitPrice = direction === "long" ? stopPrice * (1 - slipFrac) : stopPrice * (1 + slipFrac); exitReason = "stop"; break; }
-      if (direction === "long" ? b.high >= targetPrice : b.low <= targetPrice) { exitIdx = j; exitPrice = targetPrice; exitReason = "target"; break; }
+      if (!targetDisabled && (direction === "long" ? b.high >= targetPrice : b.low <= targetPrice)) { exitIdx = j; exitPrice = targetPrice; exitReason = "target"; break; }
       if (j === i + maxHoldBars) { exitIdx = j; exitPrice = direction === "long" ? b.close * (1 - slipFrac) : b.close * (1 + slipFrac); exitReason = "timeout"; }
     }
-    const pnl = (exitPrice - entryPrice) * (direction === "long" ? 1 : -1) * qty - notional * feeFrac;
+    const entryNotional = qty * entryPrice;
+    const exitNotional = qty * exitPrice;
+    const totalFee = (entryNotional + exitNotional) * feeFrac;
+    const pnl = (exitPrice - entryPrice) * (direction === "long" ? 1 : -1) * qty - totalFee;
     capital += pnl; eq.push(capital);
     const ret = pnl / margin;
     returns.push(ret);

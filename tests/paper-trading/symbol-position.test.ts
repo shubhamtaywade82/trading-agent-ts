@@ -125,10 +125,10 @@ describe("SymbolPositionManager", () => {
 
   it("computes the liquidation price consistently for long and short opens", () => {
     const longPos = mgr.applyIntent(flatPosition("XRPUSDT"), intent({ direction: "long" }), 100, 10).position;
-    expect(longPos.liqPrice).toBeCloseTo(80.5, 6); // 100*(1-1/5+0.005)
+    expect(longPos.liqPrice).toBeCloseTo(80.40201, 5); // 100*(1-1/5)/(1-0.005)
 
     const shortPos = mgr.applyIntent(flatPosition("XRPUSDT"), intent({ direction: "short" }), 100, 10).position;
-    expect(shortPos.liqPrice).toBeCloseTo(119.5, 6); // 100*(1+1/5-0.005)
+    expect(shortPos.liqPrice).toBeCloseTo(119.402985, 5); // 100*(1+1/5)/(1+0.005)
   });
 
   describe("trailing config", () => {

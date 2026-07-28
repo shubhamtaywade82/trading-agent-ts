@@ -115,10 +115,11 @@ function computeStopTarget(direction: Direction, entryPrice: number, stopPct: nu
   return { stopPrice, targetPrice };
 }
 
-function computeLiqPrice(direction: Direction, entryPrice: number, leverage: number): number {
+export function computeLiqPrice(direction: Direction, entryPrice: number, leverage: number, mmr = 0.005): number {
+  if (leverage <= 1 && direction === "long") return 0;
   return direction === "long"
-    ? entryPrice * (1 - 1 / leverage + 0.005)
-    : entryPrice * (1 + 1 / leverage - 0.005);
+    ? Math.max(0, (entryPrice * (1 - 1 / leverage)) / (1 - mmr))
+    : (entryPrice * (1 + 1 / leverage)) / (1 + mmr);
 }
 
 // Splits a reduce/close's total realized PnL/fee/notional/margin across the

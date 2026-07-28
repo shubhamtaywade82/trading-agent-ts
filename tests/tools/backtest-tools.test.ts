@@ -322,6 +322,58 @@ describe("runFuturesBacktest risk-based sizing (riskPerTradePct)", () => {
   });
 });
 
+describe("runFuturesBacktest trailing stop integration", () => {
+  const enterOnce = (i: number) => i === 0;
+  const TRAIL_CFG = {
+    enabled: true, breakevenAtrMult: 1.0, breakevenOffsetBps: 5,
+    activationAtrMult: 2.0, trailAtrMult: 1.0, minTrailPct: 0.001, maxTrailPct: 0.10,
+  };
+
+  // bar0: entry at 100. bar1: a big favorable jump (+10.5%) -- well past
+  // trailing's activation threshold on the atrPct fallback (2%, since fewer
+  // than 15 candles are in scope this early). bar2: a pullback that clears
+  // the fixed target (102) but stays above the trailing stop the jump
+  // established (~108.3) -- so a trailing-enabled run should NOT exit at
+  // bar1's target, and should exit later, at a much better price, than a
+  // fixed-stop/fixed-target baseline run on the identical candles.
+  function candles(): Candle[] {
+    return [
+      candle(0, 100, 100, 100, 100),
+      candle(3_600_000, 100, 110.5, 109.5, 110),
+      candle(7_200_000, 110, 109.5, 108, 109),
+      candle(10_800_000, 109, 109.2, 108.8, 109),
+      candle(14_400_000, 109, 109.2, 108.8, 109),
+      candle(18_000_000, 109, 109.2, 108.8, 109),
+    ];
+  }
+
+  it("extends a winning trade past the original fixed target once trailing activates", () => {
+    const CAP = 10000, LEVERAGE = 10, MARGIN_PCT = 0.05;
+
+    const baseline = runFuturesBacktest(candles(), enterOnce, "long", 0.03, 0.02, 0, 5, CAP, LEVERAGE, MARGIN_PCT, 0) as any;
+    const trailing = runFuturesBacktest(candles(), enterOnce, "long", 0.03, 0.02, 0, 5, CAP, LEVERAGE, MARGIN_PCT, 0, undefined, undefined, undefined, TRAIL_CFG) as any;
+
+    // Baseline hits the 2% fixed target on bar1's high (110.5 >= 102) immediately.
+    expect(baseline.trades[0]).toMatchObject({ exitReason: "target", holdBars: 1 });
+
+    // Trailing skips that same target (disabled once trailing activates on
+    // bar1) and instead rides the position until the trailing stop catches
+    // the bar2 pullback -- a later exit, at a meaningfully better price.
+    expect(trailing.trades[0].exitReason).toBe("stop");
+    expect(trailing.trades[0].holdBars).toBeGreaterThan(1);
+    expect(trailing.metrics.totalPnlUsd).toBeGreaterThan(baseline.metrics.totalPnlUsd);
+  });
+
+  it("behaves identically whether trailingConfig is omitted or explicitly disabled", () => {
+    const CAP = 10000, LEVERAGE = 10, MARGIN_PCT = 0.05;
+
+    const omitted = runFuturesBacktest(candles(), enterOnce, "long", 0.03, 0.02, 0, 5, CAP, LEVERAGE, MARGIN_PCT, 0) as any;
+    const disabled = runFuturesBacktest(candles(), enterOnce, "long", 0.03, 0.02, 0, 5, CAP, LEVERAGE, MARGIN_PCT, 0, undefined, undefined, undefined, { ...TRAIL_CFG, enabled: false }) as any;
+
+    expect(disabled.metrics).toEqual(omitted.metrics);
+  });
+});
+
 describe("buildSignalEvaluator SMC condition types route through ConceptsEngine", () => {
   it("bearish_fvg and ob_retest_short evaluate without throwing across a full candle series", () => {
     const candles = Array.from({ length: 60 }, (_, i) => {
