@@ -127,22 +127,26 @@ function buildPerBarSignals(candles: Candle[], ar: AnalysisResult, htfContext?: 
     if (s.type === 'BOS' && s.direction === 'bearish') bearishBOS[s.index] = true;
   }
 
+  // NOT gated on !mitigated: trading-concepts-ts computes `mitigated` by
+  // scanning forward from formation to the END of the whole candles array
+  // (findOrderBlocks/findFVGs in trading-concepts-ts). Gating "is this a
+  // fresh OB/FVG" on "and does it survive unfilled for the rest of history"
+  // is hindsight information in a batch backtest — a zone's own formation
+  // bar can never know its future mitigation status causally. These arrays
+  // mean "a zone formed here," matching the `new*` naming and the pre-
+  // ConceptsEngine behavior these condition types had.
   const newBullishOB = new Array<boolean>(n).fill(false);
   const newBearishOB = new Array<boolean>(n).fill(false);
   for (const ob of ar.orderBlocks) {
-    if (!ob.mitigated) {
-      if (ob.type === 'bullish') newBullishOB[ob.index] = true;
-      else newBearishOB[ob.index] = true;
-    }
+    if (ob.type === 'bullish') newBullishOB[ob.index] = true;
+    else newBearishOB[ob.index] = true;
   }
 
   const newBullishFVG = new Array<boolean>(n).fill(false);
   const newBearishFVG = new Array<boolean>(n).fill(false);
   for (const fvg of ar.fvgs) {
-    if (!fvg.mitigated) {
-      if (fvg.type === 'bullish') newBullishFVG[fvg.index] = true;
-      else newBearishFVG[fvg.index] = true;
-    }
+    if (fvg.type === 'bullish') newBullishFVG[fvg.index] = true;
+    else newBearishFVG[fvg.index] = true;
   }
 
   const newBullishBreaker = new Array<boolean>(n).fill(false);

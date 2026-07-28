@@ -89,3 +89,31 @@ describe("ConceptsEngine liquiditySweptNearZone", () => {
     expect(engine.evaluator([{ type: "concepts_liquidity_swept_near" }])(10)).toBe(false);
   });
 });
+
+describe("ConceptsEngine newBullishFVG/newBearishFVG — no hindsight mitigation gate", () => {
+  it("still marks a FVG as fresh at its formation bar even when later candles fill it back in", () => {
+    // 3-candle bullish gap: c1.high (102) sits below c3.low (104) -> FVG forms
+    // at index 1 (the middle candle). trading-concepts-ts computes `mitigated`
+    // by scanning ALL THE WAY to the end of the array for a later candle whose
+    // low dips back into the gap — that must never suppress the formation
+    // signal at index 1, since at bar 1 nothing about the future is knowable.
+    const candles: Candle[] = [
+      candle(0, 100, 101, 99, 100),
+      candle(3_600_000, 100, 102, 100, 101.5),    // c1: high 102
+      candle(7_200_000, 103, 105, 103, 104.5),    // gap candle (index 2, the FVG's own formation index is 1)
+      candle(10_800_000, 104.5, 106, 104, 105.5), // c3: low 104 > c1.high 102 -> bullish FVG confirmed, index = 1
+      candle(14_400_000, 105.5, 107, 105, 106),
+      candle(18_000_000, 106, 106.5, 101, 101.5), // dips back down through the gap -> mitigates it, much later
+    ];
+
+    const engine = new ConceptsEngine(candles);
+    const sig = engine.getSignals();
+
+    expect(sig.newBullishFVG[1]).toBe(true);
+    // Sanity: the underlying library did mark it mitigated (proves this test
+    // actually exercises the hindsight path, not a series with no mitigation at all).
+    const ar = engine.analyze();
+    const fvg = ar.fvgs.find(f => f.index === 1);
+    expect(fvg?.mitigated).toBe(true);
+  });
+});
