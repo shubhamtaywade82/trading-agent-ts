@@ -3,7 +3,11 @@ import { parseKlineRows, StrategyConfig, BacktestMetrics, Candle } from "../back
 import { runBacktest } from "../backtest/engine.js";
 import { walkForward, monteCarlo, paramSweep, ParamRange } from "../backtest/analysis.js";
 import { smaSeries, emaSeries, rsiSeries, macdSeries, bollingerSeries, superTrendSeries, adxSeries, ichimokuSeries } from "./indicators.js";
-import { detectOrderBlockZones, buildObRetestSignals } from "./orderblocks.js";
+import {
+  legacyBullishOb, legacyBearishOb, legacyBullishFvg, legacyBearishFvg,
+  legacyBullishLiqSweep, legacyBearishLiqSweep, legacyDisplacement,
+  legacyObRetestLong, legacyObRetestShort,
+} from "../concepts/legacy-conditions.js";
 import { runPortfolioBacktest } from "../backtest/portfolio.js";
 
 const CONDITION_SCHEMA = {
@@ -727,15 +731,15 @@ export function buildSignalEvaluator(
     liqob_bull = new Array(n).fill(false); liqob_bear = new Array(n).fill(false);
     liqfvg_bull = new Array(n).fill(false); liqfvg_bear = new Array(n).fill(false);
     for (let i = 0; i < n; i++) {
-      const oB = smcBullishOB(candles, i, 10) !== null;
-      const oS = smcBearishOB(candles, i, 10) !== null;
+      const oB = legacyBullishOb(candles, i);
+      const oS = legacyBearishOb(candles, i);
       ob_bull[i] = oB; ob_bear[i] = oS;
-      fvg_bull[i] = smcBullishFVG(candles, i);
-      fvg_bear[i] = smcBearishFVG(candles, i);
-      const d = smcDisplacement(candles, i);
+      fvg_bull[i] = legacyBullishFvg(candles, i);
+      fvg_bear[i] = legacyBearishFvg(candles, i);
+      const d = legacyDisplacement(candles, i);
       disp_bull[i] = d?.dir === "up"; disp_bear[i] = d?.dir === "down";
-      liq_bull[i] = smcBullishLiqSweep(candles, sl, i, 20);
-      liq_bear[i] = smcBearishLiqSweep(candles, sh, i, 20);
+      liq_bull[i] = legacyBullishLiqSweep(candles, i);
+      liq_bear[i] = legacyBearishLiqSweep(candles, i);
       liqob_bull[i] = liq_bull[i] && oB;
       liqob_bear[i] = liq_bear[i] && oS;
       liqfvg_bull[i] = liq_bull[i] && fvg_bull[i];
@@ -763,16 +767,6 @@ export function buildSignalEvaluator(
   const adx = needAdx ? adxSeries(candles, 14) : [];
   const ichimoku = needIchimoku ? ichimokuSeries(candles) : [];
   const volSma20 = needVolume ? smaSeries(candles.map(c => c.volume), 20) : [];
-
-  // OB zone-retest signals (mitigation entries — enter on retrace into a
-  // fresh order-block zone, not at the impulse bar like bullish_ob/bearish_ob).
-  // condition.value overrides the impulse threshold (× ATR), default 1.5.
-  let obRetest: { long: boolean[]; short: boolean[] } | null = null;
-  const obRetestCond = entryConditions.find(c => c.type === "ob_retest_long" || c.type === "ob_retest_short");
-  if (obRetestCond) {
-    const zones = detectOrderBlockZones(candles, { impulseThreshold: obRetestCond.value ?? 1.5 });
-    obRetest = buildObRetestSignals(candles, zones);
-  }
 
   return (i: number) => entryConditions.every(c => {
       const val = (m: Map<number, number[]>, p: number) => m.get(p)?.[i];
@@ -813,8 +807,8 @@ export function buildSignalEvaluator(
         case "adx_di_cross_short": { const a = adx[i]; const pv = adx[i - 1]; return i > 0 && !!a && !!pv && !Number.isNaN(a.adx) && a.adx > (c.value ?? 20) && a.minusDI > a.plusDI && pv.minusDI <= pv.plusDI; }
         case "volume_spike_long": return !Number.isNaN(volSma20[i]) && candles[i].volume > volSma20[i] * 2 && candles[i].close > candles[i].open;
         case "volume_spike_short": return !Number.isNaN(volSma20[i]) && candles[i].volume > volSma20[i] * 2 && candles[i].close < candles[i].open;
-        case "ob_retest_long": return obRetest?.long[i] ?? false;
-        case "ob_retest_short": return obRetest?.short[i] ?? false;
+        case "ob_retest_long": return legacyObRetestLong(candles, i);
+        case "ob_retest_short": return legacyObRetestShort(candles, i);
         case "oi_bearish_divergence": {
           const oi = extraSeries?.oi;
           const period = c.period ?? 10;
@@ -991,49 +985,15 @@ export function smcSwingLows(closes: number[], lookback: number): boolean[] {
     return true;
   });
 }
-function smcBullishOB(candles: Candle[], i: number, lb: number): number | null {
-  if (i < 2) return null;
-  const body = Math.abs(candles[i].close - candles[i].open);
-  const range = candles[i].high - candles[i].low;
-  if (!(body > range * 0.6 && candles[i].close > candles[i - 1].high)) return null;
-  for (let j = i - 1; j >= Math.max(1, i - lb); j--) if (candles[j].close < candles[j].open) return j;
-  return null;
+// Compat shims — scripts/ob-retest-test.ts (research scratch, not part of any
+// call site above) still imports these with the old (candles, swingArr, i, lb)
+// signature. Body now delegates to legacy-conditions.ts; swingArr/lb are
+// accepted but ignored.
+export function smcBullishLiqSweep(candles: Candle[], _lows: boolean[], i: number, _lb: number): boolean {
+  return legacyBullishLiqSweep(candles, i);
 }
-function smcBearishOB(candles: Candle[], i: number, lb: number): number | null {
-  if (i < 2) return null;
-  const body = Math.abs(candles[i].close - candles[i].open);
-  const range = candles[i].high - candles[i].low;
-  if (!(body > range * 0.6 && candles[i].close < candles[i - 1].low)) return null;
-  for (let j = i - 1; j >= Math.max(1, i - lb); j--) if (candles[j].close > candles[j].open) return j;
-  return null;
-}
-function smcBullishFVG(candles: Candle[], i: number): boolean {
-  if (i < 1 || i >= candles.length - 1) return false;
-  return candles[i - 1].high < candles[i + 1].low;
-}
-function smcBearishFVG(candles: Candle[], i: number): boolean {
-  if (i < 1 || i >= candles.length - 1) return false;
-  return candles[i - 1].low > candles[i + 1].high;
-}
-export function smcBullishLiqSweep(candles: Candle[], lows: boolean[], i: number, lb: number): boolean {
-  if (i < 1) return false;
-  for (let j = i - 1; j >= Math.max(0, i - lb); j--)
-    if (lows[j] && candles[i - 1].low < candles[j].low && candles[i].close > candles[j].low) return true;
-  return false;
-}
-export function smcBearishLiqSweep(candles: Candle[], highs: boolean[], i: number, lb: number): boolean {
-  if (i < 1) return false;
-  for (let j = i - 1; j >= Math.max(0, i - lb); j--)
-    if (highs[j] && candles[i - 1].high > candles[j].high && candles[i].close < candles[j].high) return true;
-  return false;
-}
-function smcDisplacement(candles: Candle[], i: number): { dir: "up" | "down"; strength: number } | null {
-  if (i < 1) return null;
-  const body = Math.abs(candles[i].close - candles[i].open);
-  const avg = candles.slice(Math.max(0, i - 20), i).reduce((s, c) => s + Math.abs(c.close - c.open), 0) / 20;
-  if (body > avg * 1.5 && candles[i].close > candles[i - 1].high) return { dir: "up", strength: body / avg };
-  if (body > avg * 1.5 && candles[i].close < candles[i - 1].low) return { dir: "down", strength: body / avg };
-  return null;
+export function smcBearishLiqSweep(candles: Candle[], _highs: boolean[], i: number, _lb: number): boolean {
+  return legacyBearishLiqSweep(candles, i);
 }
 
 export class BinanceSignalFusionTool extends Tool {
@@ -1142,15 +1102,15 @@ export class BinanceSignalFusionTool extends Tool {
       const liqfvg_bear = new Array<boolean>(n).fill(false);
 
       for (let i = 0; i < n; i++) {
-        const oB = smcBullishOB(candles, i, 10) !== null;
-        const oS = smcBearishOB(candles, i, 10) !== null;
+        const oB = legacyBullishOb(candles, i);
+        const oS = legacyBearishOb(candles, i);
         ob_bull[i] = oB; ob_bear[i] = oS;
-        fvg_bull[i] = smcBullishFVG(candles, i);
-        fvg_bear[i] = smcBearishFVG(candles, i);
-        const d = smcDisplacement(candles, i);
+        fvg_bull[i] = legacyBullishFvg(candles, i);
+        fvg_bear[i] = legacyBearishFvg(candles, i);
+        const d = legacyDisplacement(candles, i);
         disp_bull[i] = d?.dir === "up"; disp_bear[i] = d?.dir === "down";
-        liq_bull[i] = smcBullishLiqSweep(candles, sl, i, 20);
-        liq_bear[i] = smcBearishLiqSweep(candles, sh, i, 20);
+        liq_bull[i] = legacyBullishLiqSweep(candles, i);
+        liq_bear[i] = legacyBearishLiqSweep(candles, i);
         liqob_bull[i] = liq_bull[i] && oB;
         liqob_bear[i] = liq_bear[i] && oS;
         liqfvg_bull[i] = liq_bull[i] && fvg_bull[i];

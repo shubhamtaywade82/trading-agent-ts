@@ -263,3 +263,22 @@ describe("Backtest tools (real network)", () => {
     expect(typeof (result.metrics as any).totalTrades).toBe("number");
   }, 15000);
 });
+
+function candle(openTime: number, open: number, high: number, low: number, close: number, volume = 100): Candle {
+  return { openTime, open, high, low, close, volume };
+}
+
+describe("buildSignalEvaluator SMC condition types route through ConceptsEngine", () => {
+  it("bearish_fvg and ob_retest_short evaluate without throwing across a full candle series", () => {
+    const candles = Array.from({ length: 60 }, (_, i) => {
+      const px = 100 + Math.sin(i / 4) * 3;
+      return candle(i * 3_600_000, px, px + 1, px - 1, px + Math.sin(i / 3) * 0.5, 100);
+    });
+    const evalFvg = buildSignalEvaluator(candles, [{ type: "bearish_fvg" }]);
+    const evalRetest = buildSignalEvaluator(candles, [{ type: "ob_retest_short" }]);
+    for (let i = 0; i < candles.length; i++) {
+      expect(typeof evalFvg(i)).toBe("boolean");
+      expect(typeof evalRetest(i)).toBe("boolean");
+    }
+  });
+});
