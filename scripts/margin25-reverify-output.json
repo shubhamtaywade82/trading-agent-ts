@@ -1,0 +1,464 @@
+[
+  {
+    "symbol": "XRPUSDT",
+    "id": "xrp-bearish-fvg-1h",
+    "oldMetrics": {
+      "sharpe": 13.596895305574316,
+      "pf": 1.4993581490620111,
+      "winRate": 0.49608763693270735,
+      "trades": 639,
+      "pnlUsd": 41632.67383081756,
+      "returnPct": 4.163267383081756,
+      "maxDDPct": 0.3631373765419043
+    },
+    "fullMetrics": {
+      "totalTrades": 640,
+      "winRate": 0.4953125,
+      "avgWinPct": 0.39157427589378496,
+      "avgLossPct": -0.27554155537231956,
+      "expectancyPct": 0.054889254801673025,
+      "profitFactor": 1.4986357013170413,
+      "totalReturnPct": 4.159248248694036,
+      "maxDrawdownPct": 0.36313737654190414,
+      "totalPnlUsd": 41592.48248694036,
+      "sharpeRatio": 13.579897671574116
+    },
+    "trainMetrics": {
+      "totalTrades": 327,
+      "winRate": 0.4525993883792049,
+      "avgWinPct": 0.37428674829814335,
+      "avgLossPct": -0.27638591828259096,
+      "expectancyPct": 0.018108132646915912,
+      "profitFactor": 1.08095565461735,
+      "totalReturnPct": 0.27127183830001084,
+      "maxDrawdownPct": 0.36313737654190414,
+      "totalPnlUsd": 2712.7183830001086,
+      "sharpeRatio": 4.558228555326123
+    },
+    "testMetrics": {
+      "totalTrades": 313,
+      "winRate": 0.5399361022364217,
+      "avgWinPct": 0.4067136491728086,
+      "avgLossPct": -0.2744919653658022,
+      "expectancyPct": 0.09331553896974201,
+      "profitFactor": 1.7790931863537736,
+      "totalReturnPct": 3.0583359854751166,
+      "maxDrawdownPct": 0.15176741206994848,
+      "totalPnlUsd": 30583.359854751165,
+      "sharpeRatio": 22.876341466796433
+    },
+    "survives": true,
+    "ddFlagged": false
+  },
+  {
+    "symbol": "XRPUSDT",
+    "id": "xrp-adx-di-cross-30m",
+    "oldMetrics": {
+      "sharpe": 23,
+      "pf": 1.71,
+      "winRate": 0.54,
+      "trades": 156,
+      "pnlUsd": 2497,
+      "returnPct": 0.25,
+      "maxDDPct": 0.049,
+      "warn": "TRAIN_FAIL in the 2.5yr train window (-$1,931, DD 28.5%) — strongly recent-regime-dependent despite good 2026 forward (PF 1.64). Weakest structural claim in the pool. Size minimal or skip."
+    },
+    "fullMetrics": {
+      "totalTrades": 1060,
+      "winRate": 0.4367924528301887,
+      "avgWinPct": 0.25331061794352855,
+      "avgLossPct": -0.18486857189549916,
+      "expectancyPct": 0.006524791213435581,
+      "profitFactor": 1.0585303103032018,
+      "totalReturnPct": 0.39925407708442545,
+      "maxDrawdownPct": 0.5345402539334377,
+      "totalPnlUsd": 3992.5407708442544,
+      "sharpeRatio": 2.459703529838805
+    },
+    "trainMetrics": {
+      "totalTrades": 545,
+      "winRate": 0.41467889908256883,
+      "avgWinPct": 0.2437092680485614,
+      "avgLossPct": -0.1892502689347453,
+      "expectancyPct": -0.009711084791208965,
+      "profitFactor": 0.9019892053579531,
+      "totalReturnPct": -0.3876239140696115,
+      "maxDrawdownPct": 0.5017058499618416,
+      "totalPnlUsd": -3876.239140696115,
+      "sharpeRatio": -3.6749396525535425
+    },
+    "testMetrics": {
+      "totalTrades": 514,
+      "winRate": 0.4591439688715953,
+      "avgWinPct": 0.26190475224101406,
+      "avgLossPct": -0.1798406533504627,
+      "expectancyPct": 0.022984085403600387,
+      "profitFactor": 1.2681877342274381,
+      "totalReturnPct": 1.2192144901072879,
+      "maxDrawdownPct": 0.22328226892172467,
+      "totalPnlUsd": 12192.14490107288,
+      "sharpeRatio": 8.671933061477285
+    },
+    "survives": false,
+    "ddFlagged": false
+  },
+  {
+    "symbol": "ETHUSDT",
+    "id": "eth-bearish-fvg-1h",
+    "oldMetrics": {
+      "sharpe": 14.161407232406042,
+      "pf": 1.3665848674139576,
+      "winRate": 0.584390243902439,
+      "trades": 1025,
+      "pnlUsd": 32909.57750434549,
+      "returnPct": 3.2909577504345493,
+      "maxDDPct": 0.1200022210003965
+    },
+    "fullMetrics": {
+      "totalTrades": 1026,
+      "winRate": 0.5838206627680312,
+      "avgWinPct": 0.19082319415445845,
+      "avgLossPct": -0.19724622601931135,
+      "expectancyPct": 0.029316720066545413,
+      "profitFactor": 1.3665284880705406,
+      "totalReturnPct": 7.541291210376534,
+      "maxDrawdownPct": 0.1756919993111571,
+      "totalPnlUsd": 75412.91210376534,
+      "sharpeRatio": 14.135719459384697
+    },
+    "trainMetrics": {
+      "totalTrades": 465,
+      "winRate": 0.5655913978494623,
+      "avgWinPct": 0.18606935133279526,
+      "avgLossPct": -0.19433945894377516,
+      "expectancyPct": 0.020816491814801254,
+      "profitFactor": 1.2173927015784638,
+      "totalReturnPct": 0.967490606788093,
+      "maxDrawdownPct": 0.1756919993111571,
+      "totalPnlUsd": 9674.90606788093,
+      "sharpeRatio": 10.088780970536272
+    },
+    "testMetrics": {
+      "totalTrades": 561,
+      "winRate": 0.5989304812834224,
+      "avgWinPct": 0.19454420802974973,
+      "avgLossPct": -0.19985585690490243,
+      "expectancyPct": 0.03636236380462202,
+      "profitFactor": 1.4076906198646095,
+      "totalReturnPct": 3.3412106674908633,
+      "maxDrawdownPct": 0.14553694286215313,
+      "totalPnlUsd": 33412.10667490863,
+      "sharpeRatio": 17.468995434172065
+    },
+    "survives": true,
+    "ddFlagged": false
+  },
+  {
+    "symbol": "ETHUSDT",
+    "id": "eth-rsi-short-mr-1h",
+    "oldMetrics": {
+      "sharpe": 22,
+      "pf": 1.73,
+      "winRate": 0.57,
+      "trades": 30,
+      "pnlUsd": 646,
+      "returnPct": 0.065,
+      "maxDDPct": 0.021,
+      "warn": "TRAIN_FAIL in the 2.5yr train window (-$255) — edge only exists in the recent regime. 2026 forward is positive (PF 1.47) but tiny sample (13 trades). Size minimal."
+    },
+    "fullMetrics": {
+      "totalTrades": 72,
+      "winRate": 0.4444444444444444,
+      "avgWinPct": 0.32266718078397105,
+      "avgLossPct": -0.2688306355628434,
+      "expectancyPct": -0.005942717186481412,
+      "profitFactor": 0.9392930399206517,
+      "totalReturnPct": -0.031045341826067305,
+      "maxDrawdownPct": 0.17000856623630012,
+      "totalPnlUsd": -310.45341826067306,
+      "sharpeRatio": -1.6401097866163385
+    },
+    "trainMetrics": {
+      "totalTrades": 27,
+      "winRate": 0.3333333333333333,
+      "avgWinPct": 0.2661983318758224,
+      "avgLossPct": -0.25214149739474495,
+      "expectancyPct": -0.07936155430455584,
+      "profitFactor": 0.5307770391728821,
+      "totalReturnPct": -0.10428915687700464,
+      "maxDrawdownPct": 0.13386708650160056,
+      "totalPnlUsd": -1042.8915687700464,
+      "sharpeRatio": -25.341060742739984
+    },
+    "testMetrics": {
+      "totalTrades": 45,
+      "winRate": 0.5111111111111111,
+      "avgWinPct": 0.34476368687846404,
+      "avgLossPct": -0.2824853849731058,
+      "expectancyPct": 0.03810858508436324,
+      "profitFactor": 1.2533183120108038,
+      "totalReturnPct": 0.08177171864478623,
+      "maxDrawdownPct": 0.09629753578661035,
+      "totalPnlUsd": 817.7171864478623,
+      "sharpeRatio": 9.910738003272856
+    },
+    "survives": false,
+    "ddFlagged": false
+  },
+  {
+    "symbol": "SOLUSDT",
+    "id": "sol-bearish-fvg-1h",
+    "oldMetrics": {
+      "sharpe": 19.87762220948565,
+      "pf": 1.5161545149024773,
+      "winRate": 0.4658553076402975,
+      "trades": 1479,
+      "pnlUsd": 96222.3548483672,
+      "returnPct": 9.62223548483672,
+      "maxDDPct": 0.10206364856407316
+    },
+    "fullMetrics": {
+      "totalTrades": 1479,
+      "winRate": 0.4658553076402975,
+      "avgWinPct": 0.19499999999999937,
+      "avgLossPct": -0.10910211392405013,
+      "expectancyPct": 0.03256546991210313,
+      "profitFactor": 1.4123374654192566,
+      "totalReturnPct": 914.4817061549181,
+      "maxDrawdownPct": 0.28011715776723856,
+      "totalPnlUsd": 9144817.061549181,
+      "sharpeRatio": 19.87762220948565
+    },
+    "trainMetrics": {
+      "totalTrades": 725,
+      "winRate": 0.45655172413793105,
+      "avgWinPct": 0.19500000000000023,
+      "avgLossPct": -0.10802999999999958,
+      "expectancyPct": 0.03031886896551752,
+      "profitFactor": 1.428974378230975,
+      "totalReturnPct": 21.33127610422234,
+      "maxDrawdownPct": 0.2403140173387672,
+      "totalPnlUsd": 213312.7610422234,
+      "sharpeRatio": 18.78692068678588
+    },
+    "testMetrics": {
+      "totalTrades": 754,
+      "winRate": 0.47480106100795755,
+      "avgWinPct": 0.19500000000000017,
+      "avgLossPct": -0.11016881313131267,
+      "expectancyPct": 0.03472566312997381,
+      "profitFactor": 1.4119558865421948,
+      "totalReturnPct": 39.99549447520476,
+      "maxDrawdownPct": 0.28011715776723867,
+      "totalPnlUsd": 399954.9447520476,
+      "sharpeRatio": 20.891004289984902
+    },
+    "survives": true,
+    "ddFlagged": false
+  },
+  {
+    "symbol": "SOLUSDT",
+    "id": "sol-ichimoku-below-4h",
+    "oldMetrics": {
+      "sharpe": 7.6,
+      "pf": 1.17,
+      "winRate": 0.39,
+      "trades": 280,
+      "pnlUsd": 1283,
+      "returnPct": 0.128,
+      "maxDDPct": 0.099,
+      "note": "2yr full-window, all 3 OOS folds positive but declining trend ($931/$637/$158) — flag possible edge decay, recheck before sizing up."
+    },
+    "fullMetrics": {
+      "totalTrades": 388,
+      "winRate": 0.36597938144329895,
+      "avgWinPct": 0.5572267511692623,
+      "avgLossPct": -0.32259912205273944,
+      "expectancyPct": -0.0006009931931404904,
+      "profitFactor": 0.9718303778740833,
+      "totalReturnPct": -0.0995584850905836,
+      "maxDrawdownPct": 0.3640264373362614,
+      "totalPnlUsd": -995.584850905836,
+      "sharpeRatio": -0.12775879388109374
+    },
+    "trainMetrics": {
+      "totalTrades": 181,
+      "winRate": 0.3314917127071823,
+      "avgWinPct": 0.5633567145659227,
+      "avgLossPct": -0.3241290909090909,
+      "expectancyPct": -0.029934901248865345,
+      "profitFactor": 0.8457484770744397,
+      "totalReturnPct": -0.2686461117018487,
+      "maxDrawdownPct": 0.3640264373362614,
+      "totalPnlUsd": -2686.461117018487,
+      "sharpeRatio": -6.487704208449924
+    },
+    "testMetrics": {
+      "totalTrades": 202,
+      "winRate": 0.3910891089108911,
+      "avgWinPct": 0.5511366555959492,
+      "avgLossPct": -0.321329951422552,
+      "expectancyPct": 0.019882236470822347,
+      "profitFactor": 1.0713667046471067,
+      "totalReturnPct": 0.1630994230697197,
+      "maxDrawdownPct": 0.19438123496735915,
+      "totalPnlUsd": 1630.994230697197,
+      "sharpeRatio": 4.173756028514555
+    },
+    "survives": false,
+    "ddFlagged": false
+  },
+  {
+    "symbol": "BTCUSDT",
+    "id": "btc-bearish-fvg-4h",
+    "oldMetrics": {
+      "sharpe": 13.844890442956974,
+      "pf": 1.3530937123657938,
+      "winRate": 0.5274261603375527,
+      "trades": 237,
+      "pnlUsd": 7525.773947166312,
+      "returnPct": 0.7525773947166312,
+      "maxDDPct": 0.14510912894395187
+    },
+    "fullMetrics": {
+      "totalTrades": 237,
+      "winRate": 0.5274261603375527,
+      "avgWinPct": 0.36413349683942875,
+      "avgLossPct": -0.3000126222265341,
+      "expectancyPct": 0.050275415255513614,
+      "profitFactor": 1.3530937123657938,
+      "totalReturnPct": 0.7525773947166308,
+      "maxDrawdownPct": 0.14510912894395187,
+      "totalPnlUsd": 7525.773947166308,
+      "sharpeRatio": 13.844890442956974
+    },
+    "trainMetrics": {
+      "totalTrades": 117,
+      "winRate": 0.5213675213675214,
+      "avgWinPct": 0.3625923974495134,
+      "avgLossPct": -0.3034543004010983,
+      "expectancyPct": 0.043800815572297674,
+      "profitFactor": 1.3029038704540628,
+      "totalReturnPct": 0.2702198767867709,
+      "maxDrawdownPct": 0.14510912894395187,
+      "totalPnlUsd": 2702.1987678677087,
+      "sharpeRatio": 12.032355690757544
+    },
+    "testMetrics": {
+      "totalTrades": 120,
+      "winRate": 0.5333333333333333,
+      "avgWinPct": 0.36560235719544065,
+      "avgLossPct": -0.29657094405196993,
+      "expectancyPct": 0.05658814994664915,
+      "profitFactor": 1.3892228479584958,
+      "totalReturnPct": 0.3797433237701025,
+      "maxDrawdownPct": 0.11981228959842305,
+      "totalPnlUsd": 3797.433237701025,
+      "sharpeRatio": 15.56071707025035
+    },
+    "survives": true,
+    "ddFlagged": false
+  },
+  {
+    "symbol": "DOGEUSDT",
+    "id": "doge-bearish-fvg-1h",
+    "oldMetrics": {
+      "sharpe": 23.56878556825277,
+      "pf": 1.6194610162156293,
+      "winRate": 0.48723257418909593,
+      "trades": 1449,
+      "pnlUsd": 147374.87762181324,
+      "returnPct": 14.737487762181324,
+      "maxDDPct": 0.0742831497813372
+    },
+    "fullMetrics": {
+      "totalTrades": 1449,
+      "winRate": 0.48723257418909593,
+      "avgWinPct": 0.19424787382635325,
+      "avgLossPct": -0.10916993270524851,
+      "expectancyPct": 0.03866510622595336,
+      "profitFactor": 1.4674520770874286,
+      "totalReturnPct": 2977.019324931152,
+      "maxDrawdownPct": 0.21272558946474684,
+      "totalPnlUsd": 29770193.249311518,
+      "sharpeRatio": 23.568785568252775
+    },
+    "trainMetrics": {
+      "totalTrades": 709,
+      "winRate": 0.4894217207334274,
+      "avgWinPct": 0.1939917709537495,
+      "avgLossPct": -0.11036969613259633,
+      "expectancyPct": 0.03859141681375353,
+      "profitFactor": 1.535663352719611,
+      "totalReturnPct": 48.40962328113733,
+      "maxDrawdownPct": 0.21272558946474684,
+      "totalPnlUsd": 484096.2328113733,
+      "sharpeRatio": 23.181356711307977
+    },
+    "testMetrics": {
+      "totalTrades": 740,
+      "winRate": 0.4851351351351351,
+      "avgWinPct": 0.19449541615725588,
+      "avgLossPct": -0.10802999999999953,
+      "expectancyPct": 0.038735708649263643,
+      "profitFactor": 1.4664701972446483,
+      "totalReturnPct": 59.27205081055625,
+      "maxDrawdownPct": 0.20978358522816978,
+      "totalPnlUsd": 592720.5081055625,
+      "sharpeRatio": 23.93924380608386
+    },
+    "survives": true,
+    "ddFlagged": false
+  },
+  {
+    "symbol": "DOGEUSDT",
+    "id": "doge-liq-ob-short-15m",
+    "oldMetrics": {
+      "sharpe": 41.475822060592286,
+      "pf": 2.5566243512487454,
+      "winRate": 0.625,
+      "trades": 8,
+      "pnlUsd": 290.89299927547836,
+      "returnPct": 0.029089299927547836,
+      "maxDDPct": 0.01783531165955252
+    },
+    "fullMetrics": {
+      "totalTrades": 8,
+      "winRate": 0.625,
+      "avgWinPct": 0.18756151331186327,
+      "avgLossPct": -0.11954157610033816,
+      "expectancyPct": 0.07239785478228775,
+      "profitFactor": 2.500656469511549,
+      "totalReturnPct": 0.05842588381097794,
+      "maxDrawdownPct": 0.035479305029052007,
+      "totalPnlUsd": 584.2588381097794,
+      "sharpeRatio": 41.475822060592286
+    },
+    "trainMetrics": {
+      "totalTrades": 3,
+      "winRate": 1,
+      "avgWinPct": 0.1826025221864386,
+      "avgLossPct": 0,
+      "expectancyPct": 0.1826025221864386,
+      "profitFactor": null,
+      "totalReturnPct": 0.05578245679823121,
+      "maxDrawdownPct": 0,
+      "totalPnlUsd": 557.8245679823121,
+      "sharpeRatio": 795.9116430882538
+    },
+    "testMetrics": {
+      "totalTrades": 5,
+      "winRate": 0.4,
+      "avgWinPct": 0.19500000000000026,
+      "avgLossPct": -0.11954157610033818,
+      "expectancyPct": 0.0062750543397971925,
+      "profitFactor": 1.0678958637783484,
+      "totalReturnPct": 0.002503761069077518,
+      "maxDrawdownPct": 0.03547930502905213,
+      "totalPnlUsd": 25.037610690775182,
+      "sharpeRatio": 3.28807920058807
+    },
+    "survives": true,
+    "ddFlagged": false
+  }
+]

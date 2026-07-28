@@ -873,6 +873,14 @@ export function runFuturesBacktest(
   // pessimistic). barMs = the native timeframe's bar duration in ms; sub
   // candles are grouped into native bars by openTime.
   subBars?: { candles: Candle[]; barMs: number },
+  // Optional risk-based sizing: when set, margin is sized so a stop-out
+  // loses exactly riskPerTradePct of current capital (capital * riskPerTradePct
+  // / stopPct / leverage), instead of the flat marginPerTradePct fraction.
+  // marginPerTradePct still applies as a CEILING either way — risk-based
+  // sizing on a very tight stop can otherwise demand more margin than is
+  // prudent to commit to one trade. Omit to keep the flat-% behavior every
+  // existing caller already relies on.
+  riskPerTradePct?: number,
 ): Record<string, unknown> {
 
   const subMap = new Map<number, Candle[]>();
@@ -903,7 +911,10 @@ export function runFuturesBacktest(
 
     const rawEntry = candles[i].close;
     const entryPrice = direction === "long" ? rawEntry * (1 + slipFrac) : rawEntry * (1 - slipFrac);
-    const margin = capital * marginPerTradePct;
+    const flatMargin = capital * marginPerTradePct;
+    const margin = riskPerTradePct !== undefined
+      ? Math.min(flatMargin, (capital * riskPerTradePct) / stopPct / leverage)
+      : flatMargin;
     const notional = margin * leverage;
     const qty = notional / entryPrice;
     const stopPrice = direction === "long" ? entryPrice * (1 - stopPct) : entryPrice * (1 + stopPct);

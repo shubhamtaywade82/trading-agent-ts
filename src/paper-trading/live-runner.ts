@@ -51,7 +51,8 @@ interface RunnerState {
 export interface RunnerConfig {
   initialCapitalPerSymbol: number;
   leverage: number;
-  marginPerTradePct: number;
+  marginPerTradePct: number; // hard ceiling on margin committed to one trade, regardless of riskPerTradePct
+  riskPerTradePct: number;   // target fraction of capital lost on a stop-out; drives actual sizing, capped by marginPerTradePct
   feeBps: number;
   slippageBps: number;
   volSizing: boolean;   // scale margin down when current ATR% runs hot vs the lookback average
@@ -71,6 +72,7 @@ export const DEFAULT_RUNNER_CONFIG: RunnerConfig = {
   initialCapitalPerSymbol: 10000,
   leverage: 10,
   marginPerTradePct: 0.25,
+  riskPerTradePct: 0.015,
   feeBps: 5,
   slippageBps: 3,
   volSizing: true,
@@ -138,7 +140,7 @@ export function fundingPnl(rates: number[], notional: number, direction: "long" 
   return (direction === "long" ? -1 : 1) * sum * notional;
 }
 
-function loadStrategiesFromPool(poolPath = "strategies.json"): { strategies: StrategyDef[]; leverage?: number; marginPerTradePct?: number; aiGate?: Partial<AiGateConfig>; aiModeOverride?: "ai" | "no-ai" } {
+function loadStrategiesFromPool(poolPath = "strategies.json"): { strategies: StrategyDef[]; leverage?: number; marginPerTradePct?: number; riskPerTradePct?: number; aiGate?: Partial<AiGateConfig>; aiModeOverride?: "ai" | "no-ai" } {
   const cfg = JSON.parse(readFileSync(poolPath, "utf-8"));
   const out: StrategyDef[] = [];
   for (const [symbol, strats] of Object.entries(cfg.symbols) as [string, any[]][]) {
@@ -152,7 +154,7 @@ function loadStrategiesFromPool(poolPath = "strategies.json"): { strategies: Str
     }
   }
   const aiGateCfg = cfg.config?.aiGate as { mode?: "ai" | "no-ai" } & Partial<AiGateConfig> | undefined;
-  return { strategies: out, leverage: cfg.config?.leverage, marginPerTradePct: cfg.config?.marginPerTradePct, aiGate: aiGateCfg, aiModeOverride: aiGateCfg?.mode };
+  return { strategies: out, leverage: cfg.config?.leverage, marginPerTradePct: cfg.config?.marginPerTradePct, riskPerTradePct: cfg.config?.riskPerTradePct, aiGate: aiGateCfg, aiModeOverride: aiGateCfg?.mode };
 }
 
 // A short human-readable summary of a symbol's current net position, for
@@ -185,10 +187,12 @@ export class LivePaperRunner {
     this.strategies = pool.strategies;
     const baseLeverage = cfg.leverage ?? pool.leverage ?? DEFAULT_RUNNER_CONFIG.leverage;
     const baseMarginPerTradePct = cfg.marginPerTradePct ?? pool.marginPerTradePct ?? DEFAULT_RUNNER_CONFIG.marginPerTradePct;
+    const baseRiskPerTradePct = cfg.riskPerTradePct ?? pool.riskPerTradePct ?? DEFAULT_RUNNER_CONFIG.riskPerTradePct;
     this.cfg = {
       ...DEFAULT_RUNNER_CONFIG,
       leverage: baseLeverage,
       marginPerTradePct: baseMarginPerTradePct,
+      riskPerTradePct: baseRiskPerTradePct,
       ...cfg,
       aiGate: { ...DEFAULT_RUNNER_CONFIG.aiGate, ...pool.aiGate, ...cfg.aiGate },
       // env var takes precedence over strategies.json, which takes precedence over the hardcoded default
@@ -590,7 +594,14 @@ export class LivePaperRunner {
           const rawEntry = candles[i].close;
           const entryPrice = strat.direction === "long" ? rawEntry * (1 + slipFrac) : rawEntry * (1 - slipFrac);
           const scale = this.cfg.volSizing ? volScale(candles) : 1;
-          const margin = this.state.symbolCapital[symbol] * this.cfg.marginPerTradePct * scale;
+          // Risk-based sizing (see backtest-tools.ts's runFuturesBacktest,
+          // same formula, same "one shared engine" discipline): size so a
+          // stop-out loses riskPerTradePct of capital, capped by
+          // marginPerTradePct as a hard ceiling on any single trade's margin.
+          const symbolCapital = this.state.symbolCapital[symbol];
+          const flatMargin = symbolCapital * this.cfg.marginPerTradePct;
+          const riskMargin = (symbolCapital * this.cfg.riskPerTradePct) / strat.stopPct / this.cfg.leverage;
+          const margin = Math.min(flatMargin, riskMargin) * scale;
           const notional = margin * this.cfg.leverage;
           let qty = (notional / entryPrice) * strat.sizeMultiplier;
 

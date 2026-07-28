@@ -1,7 +1,7 @@
 import {
   BinanceBacktestTool, BinanceWalkForwardTool, BinanceMonteCarloTool, BinanceParamSweepTool,
   BinancePortfolioBacktestTool, BinanceFuturesBacktestTool,
-  fetchOpenInterestHist, alignOiToCandles, buildSignalEvaluator,
+  fetchOpenInterestHist, alignOiToCandles, buildSignalEvaluator, runFuturesBacktest,
 } from "../../src/tools/backtest-tools.js";
 import { StrategyConfig, Candle } from "../../src/backtest/types.js";
 
@@ -267,6 +267,60 @@ describe("Backtest tools (real network)", () => {
 function candle(openTime: number, open: number, high: number, low: number, close: number, volume = 100): Candle {
   return { openTime, open, high, low, close, volume };
 }
+
+describe("runFuturesBacktest risk-based sizing (riskPerTradePct)", () => {
+  // Long entry on bar 0, guaranteed stop-out on bar 1 (low dips well below
+  // stop, well above liquidation), zero fees/slippage so PnL is exact.
+  function stopOutCandles(entryPrice: number, stopPrice: number): Candle[] {
+    return [
+      candle(0, entryPrice, entryPrice, entryPrice, entryPrice),
+      candle(3_600_000, entryPrice, entryPrice, stopPrice - 0.5, entryPrice),
+    ];
+  }
+  const enterOnce = (i: number) => i === 0;
+
+  it("sizes a stop-out loss to exactly capital * riskPerTradePct, regardless of stopPct", () => {
+    const CAP = 10000, LEVERAGE = 10, RISK_PCT = 0.015, MARGIN_CEILING = 0.99; // ceiling effectively unbound here
+
+    const tight = runFuturesBacktest(
+      stopOutCandles(100, 99), enterOnce, "long", 0.01, 0.06, 0, 5,
+      CAP, LEVERAGE, MARGIN_CEILING, 0, undefined, undefined, RISK_PCT,
+    ) as any;
+    const wide = runFuturesBacktest(
+      stopOutCandles(100, 95), enterOnce, "long", 0.05, 0.06, 0, 5,
+      CAP, LEVERAGE, MARGIN_CEILING, 0, undefined, undefined, RISK_PCT,
+    ) as any;
+
+    expect(tight.metrics.totalPnlUsd).toBeCloseTo(-(CAP * RISK_PCT), 2);
+    expect(wide.metrics.totalPnlUsd).toBeCloseTo(-(CAP * RISK_PCT), 2);
+  });
+
+  it("caps risk-based margin at the marginPerTradePct ceiling for very tight stops", () => {
+    const CAP = 10000, LEVERAGE = 10, RISK_PCT = 0.5, MARGIN_PCT = 0.05; // risk target wants huge margin, ceiling bites
+
+    const result = runFuturesBacktest(
+      stopOutCandles(100, 99.9), enterOnce, "long", 0.001, 0.06, 0, 5,
+      CAP, LEVERAGE, MARGIN_PCT, 0, undefined, undefined, RISK_PCT,
+    ) as any;
+
+    // Ceiling engaged: loss = flatMargin * leverage * stopPct, NOT capital * riskPerTradePct
+    const expectedCeiledLoss = (CAP * MARGIN_PCT) * LEVERAGE * 0.001;
+    expect(result.metrics.totalPnlUsd).toBeCloseTo(-expectedCeiledLoss, 2);
+    expect(Math.abs(result.metrics.totalPnlUsd)).toBeLessThan(CAP * RISK_PCT);
+  });
+
+  it("omitting riskPerTradePct preserves the old flat marginPerTradePct behavior", () => {
+    const CAP = 10000, LEVERAGE = 10, MARGIN_PCT = 0.25;
+
+    const result = runFuturesBacktest(
+      stopOutCandles(100, 97), enterOnce, "long", 0.03, 0.06, 0, 5,
+      CAP, LEVERAGE, MARGIN_PCT, 0,
+    ) as any;
+
+    const expectedLoss = (CAP * MARGIN_PCT) * LEVERAGE * 0.03;
+    expect(result.metrics.totalPnlUsd).toBeCloseTo(-expectedLoss, 2);
+  });
+});
 
 describe("buildSignalEvaluator SMC condition types route through ConceptsEngine", () => {
   it("bearish_fvg and ob_retest_short evaluate without throwing across a full candle series", () => {

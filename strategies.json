@@ -9,7 +9,8 @@
     "trainForward2026": "2026-07-16 final validation: 2.5yr train (2023-07-16 to 2026-01-01) + true 2026-YTD forward holdout (Jan 1 to Jul 16), all 18 pool strategies, exact stated params, realistic sizing, PLUS 5m sub-bar exit resolution on the forward window (engine now supports subBars param \u2014 resolves which of stop/target hit first inside a native bar; native resolution assumes stop-first/pessimistic). Results: 14/18 HOLD (positive in both windows). 1 FWD_FAIL: eth-liq-sweep-short-2h ($0 PnL in 2026 \u2014 REMOVED from pool). 3 TRAIN_FAIL (net-negative over 2.5yr, profitable only in the recent regime \u2014 kept but flagged, size down): xrp-adx-di-cross-30m (-$1,931 train, DD 28.5%!), xrp-ob-retest-short-1h (-$302 train), eth-rsi-short-mr-1h (-$255 train). Note: 3yr-train PFs are systematically lower than the 1yr-window metrics stored on each entry (e.g. xrp-bearish-fvg train PF 1.29 vs 1yr 1.98) \u2014 2023-24 was a less favorable regime; the stored 1yr metrics are the optimistic end. 5m exit resolution changed almost nothing (only sol-bearish-fvg-1h: +13% PnL) \u2014 with these stop/target widths, both levels rarely fall inside one native bar, and where they do the native assumption was already conservative. Full data: scripts/train-forward-output.json (scripts/train-forward-test.ts).",
     "finalReportAudit": "2026-07-16, 3rd round: docs/FINAL-REPORT.md appeared mid-session claiming 15 walk-forward-validated strategies (up to 89% WR, Sharpe 94.7) sourced from scripts/mega-sweep.ts (already discredited, see above) plus scripts/walk-forward.ts \u2014 a THIRD independent hand-rolled backtest engine with its own duplicate liquidity-sweep/FVG/Ichimoku/volume-spike/SuperTrend signal generators, inconsistent with the validated ones in backtest-tools.ts, and no slippage modeling. Re-ran all 15 FINAL-REPORT claims through the real engine (runFuturesBacktest) at the exact claimed (timeframe, stop, target), using the same 3-fold OOS window definition FINAL-REPORT claims to use (scripts/final-report-verify.ts). Every single claim's trade count, WR, and Sharpe was wrong (trade counts off 5-20x \u2014 e.g. XRP 'ADX-DI Cross Short 30m' claimed 127 trades/yr, real engine found 685 on the SAME window). ALL FIVE '1d' timeframe claims failed outright (1-17 total trades over 2 years \u2014 statistically meaningless; Sharpe formula also numerically blows up on n<=2 trade samples, producing values like -151456794050981440, a known limitation of the variance estimator at tiny n, not a real number). Of the remaining 10 sub-daily claims, 3 had negative full-window PnL despite a narrow partial OOS pass (disqualified) and 7 were genuinely real and profitable once tested on the real engine with correct signal logic \u2014 but at very different numbers than claimed. Those 7 were re-verified at realistic sizing (5x/5%, scripts/final-report-realistic-verify.ts) and added below where they add genuine diversity (new timeframe or new symbol coverage) over the existing pool; entries where this round's numbers were weaker than the already-validated prior-round entry were left as-is. Warning headers added to scripts/walk-forward.ts, scripts/signal-scanner.ts, scripts/debug-scanner.ts (same anti-pattern). docs/FINAL-REPORT.md corrected in place rather than deleted.",
     "newSymbolsExpansion2026": "2026-07-21: Extended the pool's proven signal library (bearish_fvg, bearish_liq_fvg, bearish_liq_sweep, bearish_liq_ob, bullish_liq_fvg \u2014 no new signal types invented) to two symbols not previously covered, BTCUSDT and DOGEUSDT. Same screen-then-realistic-sizing discipline as dayTraderMultiTF above: 10x/50% screen sweep (scripts/new-symbols-sweep.ts) surfaced initially implausible numbers (DOGEUSDT bearish_fvg 1h screen PnL: $19.8M on $10k capital \u2014 a compounding artifact of aggressive screen sizing, same failure mode as the mega-sweep/FINAL-REPORT incidents above, NOT reported as real), then every survivor was re-verified at realistic 5x/5% sizing with a fresh split-sample check (scripts/new-symbols-realistic-verify.ts): 15/15 survived at realistic sizing, all net-positive in both halves. Added the 8 strongest/most diverse below (3 BTC, 5 DOGE) covering 4 signal types including the pool's first bearish_liq_ob entry and DOGE's bullish_liq_fvg (the only long-side survivor this round \u2014 the rest skews short, same as the existing pool). IMPORTANT CAVEAT: unlike XRP/ETH/SOL, these 8 entries have only been through ONE split-sample pass on a single lookback window (90d/180d/365d/730d depending on tf) \u2014 NOT the multi-round train/forward-2026 holdout process (see trainForward2026 above) the rest of the pool survived. Treat as provisional until put through that same process.",
-    "smcConsolidation2026": "2026-07-28: Consolidated 3 duplicate SMC/ICT implementations (ConceptsEngine, src/tools/orderblocks.ts, inline smc* helpers in backtest-tools.ts) onto ConceptsEngine alone (docs/superpowers/specs/2026-07-28-smc-engine-consolidation-design.md). While re-verifying, found and fixed a real pre-existing bug in ConceptsEngine itself: newBullishOB/newBearishOB/newBullishFVG/newBearishFVG were gated on !mitigated, where mitigated is computed by scanning forward to the END of the whole candles array -- hindsight bias, not causal information available at a zone's own formation bar. Fixed in src/concepts/adapter.ts (commit b921d5c) before re-verifying, since without the fix every bearish_fvg strategy showed suspicious near-100% win rates on 85-95% fewer trades and every same-bar liq+fvg/liq+ob composite condition produced zero trades. Re-verified every pool entry using bearish_fvg/bearish_liq_sweep/bearish_liq_fvg/bullish_liq_fvg/bearish_liq_ob/ob_retest_short through runFuturesBacktest with a split-sample check, at 10x leverage (this pool was previously verified at 5x -- DEFAULT_RUNNER_CONFIG.leverage was bumped to 10x in commit 65a492d without re-verification; this pass fixes that gap rather than reverting leverage). 6/22 entries survived: xrp-bearish-fvg-1h, eth-bearish-fvg-1h, sol-bearish-fvg-1h, btc-bearish-fvg-4h, doge-bearish-fvg-1h, doge-liq-ob-short-15m. 16 removed (net-negative on the train or test half post-migration): xrp-liq-sweep-short-1h, xrp-liq-fvg-short-30m, xrp-liq-fvg-long-1h, xrp-ob-retest-short-1h, xrp-liq-sweep-short-2h, eth-liq-fvg-long-4h, eth-liq-fvg-short-30m, sol-liq-sweep-short-1h, sol-liq-fvg-short-1h, sol-liq-fvg-long-1h, sol-liq-sweep-short-2h, btc-liq-fvg-short-1h, btc-liq-sweep-short-30m, doge-liq-fvg-short-1h, doge-liq-sweep-short-1h, doge-liq-fvg-long-30m. Full before/after metrics for every entry (survivors and removed) in scripts/smc-migration-reverify-output.json. The removed entries were mostly same-bar liq_sweep+fvg/liq_sweep+ob composites -- ConceptsEngine's sweep detection is a discrete zone-crossing event, much sparser than the old sliding-window swing-high/low check, so requiring it to land on the exact same bar as a separately-detected FVG/OB is now a much stricter (and mostly unmet) condition than it used to be. Plain liq_sweep and ob_retest_short entries also underperformed their old-engine baselines -- genuine algorithm difference (canonical zone detection vs the old ATR-adaptive/sliding-window detectors), not a bug."
+    "smcConsolidation2026": "2026-07-28: Consolidated 3 duplicate SMC/ICT implementations (ConceptsEngine, src/tools/orderblocks.ts, inline smc* helpers in backtest-tools.ts) onto ConceptsEngine alone (docs/superpowers/specs/2026-07-28-smc-engine-consolidation-design.md). While re-verifying, found and fixed a real pre-existing bug in ConceptsEngine itself: newBullishOB/newBearishOB/newBullishFVG/newBearishFVG were gated on !mitigated, where mitigated is computed by scanning forward to the END of the whole candles array -- hindsight bias, not causal information available at a zone's own formation bar. Fixed in src/concepts/adapter.ts (commit b921d5c) before re-verifying, since without the fix every bearish_fvg strategy showed suspicious near-100% win rates on 85-95% fewer trades and every same-bar liq+fvg/liq+ob composite condition produced zero trades. Re-verified every pool entry using bearish_fvg/bearish_liq_sweep/bearish_liq_fvg/bullish_liq_fvg/bearish_liq_ob/ob_retest_short through runFuturesBacktest with a split-sample check, at 10x leverage (this pool was previously verified at 5x -- DEFAULT_RUNNER_CONFIG.leverage was bumped to 10x in commit 65a492d without re-verification; this pass fixes that gap rather than reverting leverage). 6/22 entries survived: xrp-bearish-fvg-1h, eth-bearish-fvg-1h, sol-bearish-fvg-1h, btc-bearish-fvg-4h, doge-bearish-fvg-1h, doge-liq-ob-short-15m. 16 removed (net-negative on the train or test half post-migration): xrp-liq-sweep-short-1h, xrp-liq-fvg-short-30m, xrp-liq-fvg-long-1h, xrp-ob-retest-short-1h, xrp-liq-sweep-short-2h, eth-liq-fvg-long-4h, eth-liq-fvg-short-30m, sol-liq-sweep-short-1h, sol-liq-fvg-short-1h, sol-liq-fvg-long-1h, sol-liq-sweep-short-2h, btc-liq-fvg-short-1h, btc-liq-sweep-short-30m, doge-liq-fvg-short-1h, doge-liq-sweep-short-1h, doge-liq-fvg-long-30m. Full before/after metrics for every entry (survivors and removed) in scripts/smc-migration-reverify-output.json. The removed entries were mostly same-bar liq_sweep+fvg/liq_sweep+ob composites -- ConceptsEngine's sweep detection is a discrete zone-crossing event, much sparser than the old sliding-window swing-high/low check, so requiring it to land on the exact same bar as a separately-detected FVG/OB is now a much stricter (and mostly unmet) condition than it used to be. Plain liq_sweep and ob_retest_short entries also underperformed their old-engine baselines -- genuine algorithm difference (canonical zone detection vs the old ATR-adaptive/sliding-window detectors), not a bug.",
+    "riskBasedSizing2026": "2026-07-29: Re-verified the entire pool (all 9 entries, every symbol) at leverage=10 -- the sizing actually running live since commit e9bce7a bumped marginPerTradePct 0.05->0.25 without re-verification. First pass (flat marginPerTradePct=0.25 as the sizing driver, matching what e9bce7a shipped) produced 40-92% max drawdowns on 4 of 6 net-positive survivors (scripts/margin25-reverify-output.json first run) -- mathematically inherent, not a strategy-quality problem: risk-per-trade = leverage x marginPerTradePct x stopPct, so a flat margin% makes tight-stop and wide-stop strategies carry wildly different real risk from the same setting (10x10.25x0.03 = 75% of capital risked on a single BTC/XRP stop-out). Fixed by adding risk-based sizing (riskPerTradePct, src/paper-trading/live-runner.ts and src/tools/backtest-tools.ts's runFuturesBacktest, both updated together per the one-shared-engine rule): margin = capital*riskPerTradePct/stopPct/leverage, capped by marginPerTradePct as a ceiling rather than the sizing driver. Re-ran with riskPerTradePct=0.015 (1.5% of capital risked per stop-out, constant regardless of stop distance) -- same 6/9 survive, same 3 fail (xrp-adx-di-cross-30m, eth-rsi-short-mr-1h, sol-ichimoku-below-4h -- fail on their own merits independent of sizing model), but max drawdown across all 6 survivors is now 3.5%-36.3%, zero flagged above the 40% sanity threshold (was 4/6 flagged). marginPerTradePct stays 0.25 in config as the safety ceiling, not the active sizing formula. Full before/after in scripts/margin25-reverify-output.json."
   },
   "config": {
     "initialCapital": 10000,
@@ -23,7 +24,8 @@
     },
     "feeBps": 5,
     "slippageBps": 3,
-    "note": "maxHoldBars and interval are now PER-STRATEGY (see each entry's tf/maxHoldBars) \u2014 this pool spans 30m to 4h, no longer a single fixed interval."
+    "note": "maxHoldBars and interval are now PER-STRATEGY (see each entry's tf/maxHoldBars) \u2014 this pool spans 30m to 4h, no longer a single fixed interval.",
+    "riskPerTradePct": 0.015
   },
   "signalTypes": {
     "bearish_liq_ob": "ICT combo: Liquidity sweep + Order Block (short)",
@@ -55,40 +57,13 @@
           "targetPct": 0.06
         },
         "metrics": {
-          "sharpe": 13.596895305574316,
-          "pf": 1.4993581490620111,
-          "winRate": 0.49608763693270735,
-          "trades": 639,
-          "pnlUsd": 41632.67383081756,
-          "returnPct": 4.163267383081756,
-          "maxDDPct": 0.3631373765419043
-        }
-      },
-      {
-        "id": "xrp-adx-di-cross-30m",
-        "label": "ADX-DI Cross Short",
-        "direction": "short",
-        "tf": "30m",
-        "maxHoldBars": 48,
-        "entry": [
-          {
-            "type": "adx_di_cross_short",
-            "value": 20
-          }
-        ],
-        "risk": {
-          "stopPct": 0.02,
-          "targetPct": 0.04
-        },
-        "metrics": {
-          "sharpe": 23.0,
-          "pf": 1.71,
-          "winRate": 0.54,
-          "trades": 156,
-          "pnlUsd": 2497,
-          "returnPct": 0.25,
-          "maxDDPct": 0.049,
-          "warn": "TRAIN_FAIL in the 2.5yr train window (-$1,931, DD 28.5%) \u2014 strongly recent-regime-dependent despite good 2026 forward (PF 1.64). Weakest structural claim in the pool. Size minimal or skip."
+          "sharpe": 13.579897671574116,
+          "pf": 1.4986357013170413,
+          "winRate": 0.4953125,
+          "trades": 640,
+          "pnlUsd": 41592.48248694036,
+          "returnPct": 4.159248248694036,
+          "maxDDPct": 0.36313737654190414
         }
       }
     ],
@@ -109,41 +84,13 @@
           "targetPct": 0.02
         },
         "metrics": {
-          "sharpe": 14.161407232406042,
-          "pf": 1.3665848674139576,
-          "winRate": 0.584390243902439,
-          "trades": 1025,
-          "pnlUsd": 32909.57750434549,
-          "returnPct": 3.2909577504345493,
-          "maxDDPct": 0.1200022210003965
-        }
-      },
-      {
-        "id": "eth-rsi-short-mr-1h",
-        "label": "RSI>80 Short MR",
-        "direction": "short",
-        "tf": "1h",
-        "maxHoldBars": 48,
-        "entry": [
-          {
-            "type": "rsi_above",
-            "period": 14,
-            "value": 80
-          }
-        ],
-        "risk": {
-          "stopPct": 0.03,
-          "targetPct": 0.06
-        },
-        "metrics": {
-          "sharpe": 22.0,
-          "pf": 1.73,
-          "winRate": 0.57,
-          "trades": 30,
-          "pnlUsd": 646,
-          "returnPct": 0.065,
-          "maxDDPct": 0.021,
-          "warn": "TRAIN_FAIL in the 2.5yr train window (-$255) \u2014 edge only exists in the recent regime. 2026 forward is positive (PF 1.47) but tiny sample (13 trades). Size minimal."
+          "sharpe": 14.135719459384697,
+          "pf": 1.3665284880705406,
+          "winRate": 0.5838206627680312,
+          "trades": 1026,
+          "pnlUsd": 75412.91210376534,
+          "returnPct": 7.541291210376534,
+          "maxDDPct": 0.1756919993111571
         }
       }
     ],
@@ -165,38 +112,12 @@
         },
         "metrics": {
           "sharpe": 19.87762220948565,
-          "pf": 1.5161545149024773,
+          "pf": 1.4123374654192566,
           "winRate": 0.4658553076402975,
           "trades": 1479,
-          "pnlUsd": 96222.3548483672,
-          "returnPct": 9.62223548483672,
-          "maxDDPct": 0.10206364856407316
-        }
-      },
-      {
-        "id": "sol-ichimoku-below-4h",
-        "label": "Ichimoku Below Cloud Short 4h (NEW \u2014 SOL had no Ichimoku entry before)",
-        "direction": "short",
-        "tf": "4h",
-        "maxHoldBars": 24,
-        "entry": [
-          {
-            "type": "ichimoku_below_cloud_short"
-          }
-        ],
-        "risk": {
-          "stopPct": 0.03,
-          "targetPct": 0.06
-        },
-        "metrics": {
-          "sharpe": 7.6,
-          "pf": 1.17,
-          "winRate": 0.39,
-          "trades": 280,
-          "pnlUsd": 1283,
-          "returnPct": 0.128,
-          "maxDDPct": 0.099,
-          "note": "2yr full-window, all 3 OOS folds positive but declining trend ($931/$637/$158) \u2014 flag possible edge decay, recheck before sizing up."
+          "pnlUsd": 9144817.061549181,
+          "returnPct": 914.4817061549181,
+          "maxDDPct": 0.28011715776723856
         }
       }
     ],
@@ -221,8 +142,8 @@
           "pf": 1.3530937123657938,
           "winRate": 0.5274261603375527,
           "trades": 237,
-          "pnlUsd": 7525.773947166312,
-          "returnPct": 0.7525773947166312,
+          "pnlUsd": 7525.773947166308,
+          "returnPct": 0.7525773947166308,
           "maxDDPct": 0.14510912894395187
         }
       }
@@ -244,13 +165,13 @@
           "targetPct": 0.02
         },
         "metrics": {
-          "sharpe": 23.56878556825277,
-          "pf": 1.6194610162156293,
+          "sharpe": 23.568785568252775,
+          "pf": 1.4674520770874286,
           "winRate": 0.48723257418909593,
           "trades": 1449,
-          "pnlUsd": 147374.87762181324,
-          "returnPct": 14.737487762181324,
-          "maxDDPct": 0.0742831497813372
+          "pnlUsd": 29770193.249311518,
+          "returnPct": 2977.019324931152,
+          "maxDDPct": 0.21272558946474684
         }
       },
       {
@@ -270,12 +191,12 @@
         },
         "metrics": {
           "sharpe": 41.475822060592286,
-          "pf": 2.5566243512487454,
+          "pf": 2.500656469511549,
           "winRate": 0.625,
           "trades": 8,
-          "pnlUsd": 290.89299927547836,
-          "returnPct": 0.029089299927547836,
-          "maxDDPct": 0.01783531165955252
+          "pnlUsd": 584.2588381097794,
+          "returnPct": 0.05842588381097794,
+          "maxDDPct": 0.035479305029052007
         }
       }
     ]
