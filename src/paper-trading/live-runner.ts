@@ -10,6 +10,7 @@ import {
 } from "./symbol-position.js";
 import { AiEntryGate, AiGateConfig, DEFAULT_AI_GATE_CONFIG } from "./ai-gate.js";
 import { reconstructClosedTrades } from "./trade-analyst.js";
+import { TrailingConfig, DEFAULT_TRAILING_CONFIG, updateTrailingStop } from "./trailing.js";
 
 // Autonomous paper-trading runner. Polls Binance REST for newly-closed
 // candles per (symbol, timeframe) group, evaluates every pool strategy's
@@ -34,6 +35,7 @@ export interface StrategyDef {
   entry: { type: string; period?: number; value?: number }[];
   stopPct: number; targetPct: number; maxHoldBars: number;
   sizeMultiplier: number; // from PnlAdaptor (pnl-adaptor.ts); 1 unless resized based on live PnL
+  trailing?: TrailingConfig; // opt-in ATR trailing stop, from strategies.json's per-strategy "trailing" block
 }
 
 interface StrategyStats {
@@ -200,6 +202,7 @@ function loadStrategiesFromPool(poolPath = "strategies.json"): { strategies: Str
         id: s.id, symbol, tf: s.tf ?? "1h", direction: s.direction,
         entry: s.entry, stopPct: s.risk.stopPct, targetPct: s.risk.targetPct,
         maxHoldBars: s.maxHoldBars ?? 48, sizeMultiplier: s.sizeMultiplier ?? 1,
+        trailing: s.trailing ? { ...DEFAULT_TRAILING_CONFIG, ...s.trailing } : undefined,
       });
     }
   }
@@ -557,9 +560,27 @@ export class LivePaperRunner {
     if (governingHere) {
       const bar = lastClosed;
       const dir = pos.direction!;
+
+      // Trailing stop update — runs BEFORE the exit checks below so they see
+      // the (possibly already-moved) stop, and BEFORE they decide whether
+      // the fixed target is even still in play (disabled once trailing
+      // activates — see trailing.ts's header comment).
+      let targetDisabled = false;
+      if (pos.trailing && pos.trailingConfig) {
+        const trailResult = updateTrailingStop(
+          pos.trailing, bar, dir, pos.avgEntryPrice, pos.governingStopPrice!, pos.trailingConfig, candles,
+        );
+        pos.trailing = trailResult.state;
+        pos.governingStopPrice = trailResult.stopPrice;
+        targetDisabled = trailResult.targetDisabled;
+        if (trailResult.phaseChanged) {
+          this.journal({ type: "trailing_phase_change", symbol, tf, governingStrategyId: pos.governingStrategyId, phase: trailResult.state.phase, stopPrice: trailResult.stopPrice, extremePrice: trailResult.state.extremePrice });
+        }
+      }
+
       const hitLiq = dir === "long" ? bar.low <= pos.liqPrice! : bar.high >= pos.liqPrice!;
       const hitStop = dir === "long" ? bar.low <= pos.governingStopPrice! : bar.high >= pos.governingStopPrice!;
-      const hitTarget = dir === "long" ? bar.high >= pos.governingTargetPrice! : bar.low <= pos.governingTargetPrice!;
+      const hitTarget = !targetDisabled && (dir === "long" ? bar.high >= pos.governingTargetPrice! : bar.low <= pos.governingTargetPrice!);
       const barsHeld = candles.length - 1 - (pos.governingEntryBarIdx ?? candles.length - 1);
       const timedOut = barsHeld >= (pos.governingMaxHoldBars ?? Infinity);
 
@@ -694,6 +715,7 @@ export class LivePaperRunner {
             strategyId: strat.id, symbol, tf, direction: strat.direction,
             stopPct: strat.stopPct, targetPct: strat.targetPct, maxHoldBars: strat.maxHoldBars,
             entryBarIdx: i, entryBarOpenTime: candles[i].openTime,
+            trailingConfig: strat.trailing,
           };
 
           if (this.cfg.aiMode === "ai" && this.aiGate) {
