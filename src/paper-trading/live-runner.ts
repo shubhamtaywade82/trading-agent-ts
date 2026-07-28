@@ -70,7 +70,7 @@ export interface RunnerConfig {
 export const DEFAULT_RUNNER_CONFIG: RunnerConfig = {
   initialCapitalPerSymbol: 10000,
   leverage: 10,
-  marginPerTradePct: 0.05,
+  marginPerTradePct: 0.25,
   feeBps: 5,
   slippageBps: 3,
   volSizing: true,
@@ -138,7 +138,7 @@ export function fundingPnl(rates: number[], notional: number, direction: "long" 
   return (direction === "long" ? -1 : 1) * sum * notional;
 }
 
-function loadStrategiesFromPool(poolPath = "strategies.json"): { strategies: StrategyDef[]; aiGate?: Partial<AiGateConfig>; aiModeOverride?: "ai" | "no-ai" } {
+function loadStrategiesFromPool(poolPath = "strategies.json"): { strategies: StrategyDef[]; leverage?: number; marginPerTradePct?: number; aiGate?: Partial<AiGateConfig>; aiModeOverride?: "ai" | "no-ai" } {
   const cfg = JSON.parse(readFileSync(poolPath, "utf-8"));
   const out: StrategyDef[] = [];
   for (const [symbol, strats] of Object.entries(cfg.symbols) as [string, any[]][]) {
@@ -152,7 +152,7 @@ function loadStrategiesFromPool(poolPath = "strategies.json"): { strategies: Str
     }
   }
   const aiGateCfg = cfg.config?.aiGate as { mode?: "ai" | "no-ai" } & Partial<AiGateConfig> | undefined;
-  return { strategies: out, aiGate: aiGateCfg, aiModeOverride: aiGateCfg?.mode };
+  return { strategies: out, leverage: cfg.config?.leverage, marginPerTradePct: cfg.config?.marginPerTradePct, aiGate: aiGateCfg, aiModeOverride: aiGateCfg?.mode };
 }
 
 // A short human-readable summary of a symbol's current net position, for
@@ -183,8 +183,12 @@ export class LivePaperRunner {
   constructor(cfg: Partial<RunnerConfig> = {}, poolPath = "strategies.json") {
     const pool = loadStrategiesFromPool(poolPath);
     this.strategies = pool.strategies;
+    const baseLeverage = cfg.leverage ?? pool.leverage ?? DEFAULT_RUNNER_CONFIG.leverage;
+    const baseMarginPerTradePct = cfg.marginPerTradePct ?? pool.marginPerTradePct ?? DEFAULT_RUNNER_CONFIG.marginPerTradePct;
     this.cfg = {
       ...DEFAULT_RUNNER_CONFIG,
+      leverage: baseLeverage,
+      marginPerTradePct: baseMarginPerTradePct,
       ...cfg,
       aiGate: { ...DEFAULT_RUNNER_CONFIG.aiGate, ...pool.aiGate, ...cfg.aiGate },
       // env var takes precedence over strategies.json, which takes precedence over the hardcoded default
@@ -496,10 +500,23 @@ export class LivePaperRunner {
 
       if (hitLiq || hitStop || hitTarget || timedOut) {
         let exitPrice: number, reason: "liquidation" | "stop" | "target" | "timeout";
-        if (hitLiq) { exitPrice = pos.liqPrice!; reason = "liquidation"; }
-        else if (hitStop) { exitPrice = pos.governingStopPrice!; reason = "stop"; }
-        else if (hitTarget) { exitPrice = pos.governingTargetPrice!; reason = "target"; }
-        else { exitPrice = bar.close; reason = "timeout"; }
+        const slipMult = this.cfg.volSlippage ? slippageMultiplier(candles) : 1;
+        const slipFrac = (this.cfg.slippageBps / 10000) * slipMult;
+        if (hitLiq) {
+          exitPrice = pos.liqPrice!;
+          reason = "liquidation";
+        } else if (hitStop) {
+          const rawStop = pos.governingStopPrice!;
+          exitPrice = dir === "long" ? rawStop * (1 - slipFrac) : rawStop * (1 + slipFrac);
+          reason = "stop";
+        } else if (hitTarget) {
+          exitPrice = pos.governingTargetPrice!;
+          reason = "target";
+        } else {
+          const rawClose = bar.close;
+          exitPrice = dir === "long" ? rawClose * (1 - slipFrac) : rawClose * (1 + slipFrac);
+          reason = "timeout";
+        }
 
         // Funding accrues to the position as a whole; applied once here on
         // the same weighted-avg-cost basis as everything else, then folded

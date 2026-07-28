@@ -1,5 +1,6 @@
 import { Candle, StrategyConfig, Trade, BacktestResult, BacktestMetrics } from "./types.js";
 import { buildIndicatorSeries, evaluateAll } from "./conditions.js";
+import { buildSignalEvaluator } from "../tools/backtest-tools.js";
 
 const DEFAULT_MAX_HOLD_BARS = 200;
 const DEFAULT_FEE_BPS = 10;
@@ -9,14 +10,14 @@ const DEFAULT_FEE_BPS = 10;
 // or maxHoldBars timeout. One position at a time (no pyramiding/overlap) —
 // ponytail: add position sizing/overlap if a strategy genuinely needs it.
 export function runBacktest(candles: Candle[], config: StrategyConfig): BacktestResult {
-  const series = buildIndicatorSeries(candles, config.entry);
+  const evaluator = buildSignalEvaluator(candles, config.entry);
   const feeFraction = (config.feeBps ?? DEFAULT_FEE_BPS) / 10000;
   const maxHold = config.maxHoldBars ?? DEFAULT_MAX_HOLD_BARS;
   const trades: Trade[] = [];
 
   let i = 0;
   while (i < candles.length) {
-    if (!evaluateAll(config.entry, series, i)) {
+    if (!evaluator(i)) {
       i++;
       continue;
     }

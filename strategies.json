@@ -13,8 +13,8 @@
   },
   "config": {
     "initialCapital": 10000,
-    "leverage": 5,
-    "marginPerTradePct": 0.05,
+    "leverage": 10,
+    "marginPerTradePct": 0.25,
     "aiGate": {
       "mode": "no-ai",
       "tier": "cloud",

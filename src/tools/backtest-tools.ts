@@ -54,8 +54,15 @@ const STRATEGY_SCHEMA = {
   required: ["direction", "entry", "risk"],
 };
 
-async function fetchCandles(symbol: string, interval: string, limit: number): Promise<{ candles: ReturnType<typeof parseKlineRows> } | { error: string; message: string }> {
-  const url = new URL("/api/v3/klines", "https://api.binance.com");
+async function fetchCandles(
+  symbol: string,
+  interval: string,
+  limit: number,
+  market: "spot" | "usdm" = "usdm",
+): Promise<{ candles: ReturnType<typeof parseKlineRows> } | { error: string; message: string }> {
+  const baseUrl = market === "usdm" ? "https://fapi.binance.com" : "https://api.binance.com";
+  const path = market === "usdm" ? "/fapi/v1/klines" : "/api/v3/klines";
+  const url = new URL(path, baseUrl);
   url.searchParams.set("symbol", symbol);
   url.searchParams.set("interval", interval);
   url.searchParams.set("limit", String(limit));
@@ -94,6 +101,7 @@ export class BinanceBacktestTool extends Tool {
         symbol: { type: "string" },
         interval: { type: "string", description: "e.g. 1h, 4h, 1d" },
         limit: { type: "number", description: "Candles to fetch, max 1000 (default 500)" },
+        market: { type: "string", enum: ["usdm", "spot"], description: "Default: usdm (USD-M Futures)" },
         strategy: STRATEGY_SCHEMA,
       },
       required: ["symbol", "interval", "strategy"],
@@ -104,9 +112,10 @@ export class BinanceBacktestTool extends Tool {
     const symbol = String(args.symbol ?? "");
     const interval = typeof args.interval === "string" ? args.interval : "1h";
     const limit = Math.min(Number(args.limit ?? 500) || 500, 1000);
+    const market = (args.market as "spot" | "usdm") || "usdm";
     const strategy = args.strategy as StrategyConfig;
 
-    const fetched = await fetchCandles(symbol, interval, limit);
+    const fetched = await fetchCandles(symbol, interval, limit, market);
     if ("error" in fetched) return fetched;
 
     const result = runBacktest(fetched.candles, strategy);
@@ -307,12 +316,15 @@ async function fetchWithRetry(url: URL, retries = 3): Promise<Response> {
 
 export async function fetchCandlesRange(
   symbol: string, interval: string, startTime: number, endTime: number,
+  market: "spot" | "usdm" = "usdm",
 ): Promise<{ candles: ReturnType<typeof parseKlineRows> } | { error: string; message: string }> {
   const all: ReturnType<typeof parseKlineRows> = [];
   let from = startTime;
   try {
+    const baseUrl = market === "usdm" ? "https://fapi.binance.com" : "https://api.binance.com";
+    const path = market === "usdm" ? "/fapi/v1/klines" : "/api/v3/klines";
     while (from < endTime) {
-      const url = new URL("/api/v3/klines", "https://api.binance.com");
+      const url = new URL(path, baseUrl);
       url.searchParams.set("symbol", symbol);
       url.searchParams.set("interval", interval);
       url.searchParams.set("limit", "1000");
