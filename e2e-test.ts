@@ -145,9 +145,9 @@ async function main() {
   // ══════════════════════════════════════════════
   // Phase 7: Backtest
   // ══════════════════════════════════════════════
-  section("7. Backtest — RSI Mean Reversion");
+  section("7. Backtest — RSI Mean Reversion & Futures Pool Signal");
   const bt = await check(agent, "binance_backtest", "RSI<30 long on BTCUSDT 1h", {
-    symbol: "BTCUSDT", interval: "1h", limit: 500,
+    symbol: "BTCUSDT", interval: "1h", limit: 500, market: "usdm",
     strategy: {
       direction: "long",
       entry: [{ type: "rsi_below", period: 14, value: 30 }],
@@ -166,17 +166,33 @@ async function main() {
     }
   }
 
+  const solBt = await check(agent, "binance_backtest", "SOL bearish_fvg short 1h (futures)", {
+    symbol: "SOLUSDT", interval: "1h", limit: 500, market: "usdm",
+    strategy: {
+      direction: "short",
+      entry: [{ type: "bearish_fvg" }],
+      risk: { stopPct: 0.01, targetPct: 0.02 },
+      feeBps: 5, maxHoldBars: 48,
+    },
+  }, [
+    (r) => r.metrics?.totalTrades >= 0,
+  ]);
+  if (solBt) {
+    const m = solBt.metrics;
+    console.log(`   SOL Futures Trades: ${m.totalTrades} | Win: ${(m.winRate*100).toFixed(1)}% | PF: ${m.profitFactor?.toFixed(2)}`);
+  }
+
   // ══════════════════════════════════════════════
   // Phase 8: Walk-Forward
   // ══════════════════════════════════════════════
   section("8. Walk-Forward Analysis");
-  const wf = await check(agent, "binance_walk_forward", "ETHUSDT 4h walk-forward", {
-    symbol: "ETHUSDT", interval: "4h", limit: 500,
+  const wf = await check(agent, "binance_walk_forward", "ETHUSDT 4h walk-forward (bullish_liq_fvg)", {
+    symbol: "ETHUSDT", interval: "4h", limit: 500, market: "usdm",
     strategy: {
       direction: "long",
-      entry: [{ type: "rsi_below", period: 14, value: 35 }, { type: "price_above_sma", period: 20 }],
-      risk: { stopPct: 0.03, targetPct: 0.06 },
-      feeBps: 10, maxHoldBars: 48,
+      entry: [{ type: "bullish_liq_fvg" }],
+      risk: { stopPct: 0.02, targetPct: 0.04 },
+      feeBps: 5, maxHoldBars: 42,
     },
     folds: 4,
   }, [
