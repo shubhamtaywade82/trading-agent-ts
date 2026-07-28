@@ -25,7 +25,10 @@
     "feeBps": 5,
     "slippageBps": 3,
     "note": "maxHoldBars and interval are now PER-STRATEGY (see each entry's tf/maxHoldBars) \u2014 this pool spans 30m to 4h, no longer a single fixed interval.",
-    "riskPerTradePct": 0.015
+    "riskPerTradePct": 0.015,
+    "maxMarginUtilizationPct": 0.6,
+    "correlationGuard": true,
+    "correlationThreshold": 0.5
   },
   "signalTypes": {
     "bearish_liq_ob": "ICT combo: Liquidity sweep + Order Block (short)",

@@ -53,6 +53,9 @@ export interface RunnerConfig {
   leverage: number;
   marginPerTradePct: number; // hard ceiling on margin committed to one trade, regardless of riskPerTradePct
   riskPerTradePct: number;   // target fraction of capital lost on a stop-out; drives actual sizing, capped by marginPerTradePct
+  maxMarginUtilizationPct: number; // ceiling on TOTAL same-direction margin open on one symbol at once (pyramiding cap)
+  correlationGuard: boolean;       // downsize new entries once too many symbols already share the same direction
+  correlationThreshold: number;    // fraction of symbols same-direction before the guard starts downsizing
   feeBps: number;
   slippageBps: number;
   volSizing: boolean;   // scale margin down when current ATR% runs hot vs the lookback average
@@ -73,6 +76,9 @@ export const DEFAULT_RUNNER_CONFIG: RunnerConfig = {
   leverage: 10,
   marginPerTradePct: 0.25,
   riskPerTradePct: 0.015,
+  maxMarginUtilizationPct: 0.60,
+  correlationGuard: true,
+  correlationThreshold: 0.5,
   feeBps: 5,
   slippageBps: 3,
   volSizing: true,
@@ -130,6 +136,50 @@ export function slippageMultiplier(candles: Candle[], period = 14): number {
   return Math.min(3, Math.max(1, atrRatio(candles, period)));
 }
 
+// Correlation-aware sizing: the pool trades highly-correlated crypto majors
+// (BTC/ETH/SOL/XRP/DOGE move together in a broad market move), so N
+// same-direction positions across N symbols isn't N independent bets, it's
+// closer to one leveraged bet sized N times over. Downsize-only (never sizes
+// UP for being contrarian) once the fraction of symbols already positioned
+// in the same direction crosses `threshold`, linearly down to a 0.4 floor at
+// 100% same-direction — never zero, since a single strategy's own edge
+// still deserves some size even in a fully one-sided book.
+const CORRELATION_MIN_SCALE = 0.4;
+
+export function correlationScale(sameDirectionCount: number, totalSymbols: number, threshold: number): number {
+  if (totalSymbols <= 0) return 1;
+  const fraction = sameDirectionCount / totalSymbols;
+  if (fraction <= threshold) return 1;
+  const overshoot = (fraction - threshold) / (1 - threshold || 1);
+  return Math.max(CORRELATION_MIN_SCALE, 1 - overshoot * (1 - CORRELATION_MIN_SCALE));
+}
+
+export interface EntryMarginInputs {
+  symbolCapital: number;
+  stopPct: number;
+  leverage: number;
+  marginPerTradePct: number;      // hard ceiling on margin for one trade
+  riskPerTradePct: number;        // target fraction of capital lost on a stop-out
+  maxMarginUtilizationPct: number; // ceiling on total same-direction margin per symbol
+  existingSameDirMargin: number;  // margin already committed in the SAME direction on this symbol (0 if flat/opposite)
+  sizeScale: number;               // combined volScale * correlationScale, or 1
+}
+
+// Single source of truth for entry sizing, matching runFuturesBacktest's
+// risk-based formula (backtest-tools.ts) so live and backtest never drift —
+// same "one shared engine" discipline this codebase already applies to
+// signal evaluation. Order: risk-based-capped-by-ceiling, THEN scaled by
+// vol/correlation, THEN clipped to the exposure-cap headroom (a scaled-down
+// trade shouldn't be able to bypass the pyramiding cap).
+export function computeEntryMargin(inputs: EntryMarginInputs): number {
+  const { symbolCapital, stopPct, leverage, marginPerTradePct, riskPerTradePct, maxMarginUtilizationPct, existingSameDirMargin, sizeScale } = inputs;
+  const flatMargin = symbolCapital * marginPerTradePct;
+  const riskMargin = (symbolCapital * riskPerTradePct) / stopPct / leverage;
+  const scaledMargin = Math.min(flatMargin, riskMargin) * sizeScale;
+  const headroom = Math.max(0, symbolCapital * maxMarginUtilizationPct - existingSameDirMargin);
+  return Math.min(scaledMargin, headroom);
+}
+
 // Funding PnL over a held position: longs PAY when the rate is positive,
 // shorts RECEIVE. `rates` are the per-event funding rates (e.g. 0.0001)
 // that occurred while the position was open.
@@ -140,7 +190,7 @@ export function fundingPnl(rates: number[], notional: number, direction: "long" 
   return (direction === "long" ? -1 : 1) * sum * notional;
 }
 
-function loadStrategiesFromPool(poolPath = "strategies.json"): { strategies: StrategyDef[]; leverage?: number; marginPerTradePct?: number; riskPerTradePct?: number; aiGate?: Partial<AiGateConfig>; aiModeOverride?: "ai" | "no-ai" } {
+function loadStrategiesFromPool(poolPath = "strategies.json"): { strategies: StrategyDef[]; leverage?: number; marginPerTradePct?: number; riskPerTradePct?: number; maxMarginUtilizationPct?: number; correlationGuard?: boolean; correlationThreshold?: number; aiGate?: Partial<AiGateConfig>; aiModeOverride?: "ai" | "no-ai" } {
   const cfg = JSON.parse(readFileSync(poolPath, "utf-8"));
   const out: StrategyDef[] = [];
   for (const [symbol, strats] of Object.entries(cfg.symbols) as [string, any[]][]) {
@@ -154,7 +204,12 @@ function loadStrategiesFromPool(poolPath = "strategies.json"): { strategies: Str
     }
   }
   const aiGateCfg = cfg.config?.aiGate as { mode?: "ai" | "no-ai" } & Partial<AiGateConfig> | undefined;
-  return { strategies: out, leverage: cfg.config?.leverage, marginPerTradePct: cfg.config?.marginPerTradePct, riskPerTradePct: cfg.config?.riskPerTradePct, aiGate: aiGateCfg, aiModeOverride: aiGateCfg?.mode };
+  return {
+    strategies: out, leverage: cfg.config?.leverage, marginPerTradePct: cfg.config?.marginPerTradePct,
+    riskPerTradePct: cfg.config?.riskPerTradePct, maxMarginUtilizationPct: cfg.config?.maxMarginUtilizationPct,
+    correlationGuard: cfg.config?.correlationGuard, correlationThreshold: cfg.config?.correlationThreshold,
+    aiGate: aiGateCfg, aiModeOverride: aiGateCfg?.mode,
+  };
 }
 
 // A short human-readable summary of a symbol's current net position, for
@@ -188,11 +243,17 @@ export class LivePaperRunner {
     const baseLeverage = cfg.leverage ?? pool.leverage ?? DEFAULT_RUNNER_CONFIG.leverage;
     const baseMarginPerTradePct = cfg.marginPerTradePct ?? pool.marginPerTradePct ?? DEFAULT_RUNNER_CONFIG.marginPerTradePct;
     const baseRiskPerTradePct = cfg.riskPerTradePct ?? pool.riskPerTradePct ?? DEFAULT_RUNNER_CONFIG.riskPerTradePct;
+    const baseMaxMarginUtilizationPct = cfg.maxMarginUtilizationPct ?? pool.maxMarginUtilizationPct ?? DEFAULT_RUNNER_CONFIG.maxMarginUtilizationPct;
+    const baseCorrelationGuard = cfg.correlationGuard ?? pool.correlationGuard ?? DEFAULT_RUNNER_CONFIG.correlationGuard;
+    const baseCorrelationThreshold = cfg.correlationThreshold ?? pool.correlationThreshold ?? DEFAULT_RUNNER_CONFIG.correlationThreshold;
     this.cfg = {
       ...DEFAULT_RUNNER_CONFIG,
       leverage: baseLeverage,
       marginPerTradePct: baseMarginPerTradePct,
       riskPerTradePct: baseRiskPerTradePct,
+      maxMarginUtilizationPct: baseMaxMarginUtilizationPct,
+      correlationGuard: baseCorrelationGuard,
+      correlationThreshold: baseCorrelationThreshold,
       ...cfg,
       aiGate: { ...DEFAULT_RUNNER_CONFIG.aiGate, ...pool.aiGate, ...cfg.aiGate },
       // env var takes precedence over strategies.json, which takes precedence over the hardcoded default
@@ -594,16 +655,40 @@ export class LivePaperRunner {
           const rawEntry = candles[i].close;
           const entryPrice = strat.direction === "long" ? rawEntry * (1 + slipFrac) : rawEntry * (1 - slipFrac);
           const scale = this.cfg.volSizing ? volScale(candles) : 1;
-          // Risk-based sizing (see backtest-tools.ts's runFuturesBacktest,
-          // same formula, same "one shared engine" discipline): size so a
-          // stop-out loses riskPerTradePct of capital, capped by
-          // marginPerTradePct as a hard ceiling on any single trade's margin.
+
+          // Correlation guard: this pool trades highly-correlated crypto
+          // majors, all currently short-biased — N same-direction positions
+          // across N symbols is closer to one leveraged bet than N
+          // independent ones. Downsize once too many OTHER symbols already
+          // share this direction (excludes the current symbol itself —
+          // same-direction pyramiding on ONE symbol is maxMarginUtilizationPct's job).
+          const allSymbols = this.getSymbols();
+          const sameDirectionElsewhere = allSymbols.filter(sym =>
+            sym !== symbol && this.state.symbolPositions[sym]?.direction === strat.direction
+          ).length;
+          const corrScale = this.cfg.correlationGuard
+            ? correlationScale(sameDirectionElsewhere, allSymbols.length, this.cfg.correlationThreshold)
+            : 1;
+
           const symbolCapital = this.state.symbolCapital[symbol];
-          const flatMargin = symbolCapital * this.cfg.marginPerTradePct;
-          const riskMargin = (symbolCapital * this.cfg.riskPerTradePct) / strat.stopPct / this.cfg.leverage;
-          const margin = Math.min(flatMargin, riskMargin) * scale;
+          const preTradePos = this.state.symbolPositions[symbol];
+          const existingSameDirMargin = preTradePos?.direction === strat.direction ? preTradePos.margin : 0;
+          const margin = computeEntryMargin({
+            symbolCapital, stopPct: strat.stopPct, leverage: this.cfg.leverage,
+            marginPerTradePct: this.cfg.marginPerTradePct, riskPerTradePct: this.cfg.riskPerTradePct,
+            maxMarginUtilizationPct: this.cfg.maxMarginUtilizationPct, existingSameDirMargin,
+            sizeScale: scale * corrScale,
+          });
+
           const notional = margin * this.cfg.leverage;
           let qty = (notional / entryPrice) * strat.sizeMultiplier;
+
+          if (margin <= 0 || qty <= 0) {
+            this.journal({ type: "exposure_cap_blocked", strategyId: strat.id, symbol, tf, existingSameDirMargin, maxMarginUtilizationPct: this.cfg.maxMarginUtilizationPct });
+            evaluations.push({ strategyId: strat.id, symbol, tf, checked: isNew, fired, lastClosedCandleTime: lastClosed.openTime });
+            if (isNew) st.lastEvalOpenTime = lastClosed.openTime;
+            continue;
+          }
 
           const intent: StrategyIntent = {
             strategyId: strat.id, symbol, tf, direction: strat.direction,
