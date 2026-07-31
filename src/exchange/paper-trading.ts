@@ -1,4 +1,5 @@
-import { BinanceStreamManager, getLiveTick } from "./binance-stream.js";
+import type { BinanceStreamManager} from "./binance-stream.js";
+import { getLiveTick } from "./binance-stream.js";
 
 export interface PaperPosition {
   id: number;
@@ -15,15 +16,15 @@ export interface PaperPosition {
   realizedPnlPct: number | null;
 }
 
-// ponytail: in-memory, one paper account, mark-to-market on demand (not a
-// live tick loop) — no persistence, no fees/slippage model beyond what the
-// caller bakes into stop/target. This never touches a real exchange; it's a
-// hypothesis-tracking ledger, not an execution system.
+// Ponytail: in-memory, one paper account, mark-to-market on demand (not a
+// Live tick loop) — no persistence, no fees/slippage model beyond what the
+// Caller bakes into stop/target. This never touches a real exchange; it's a
+// Hypothesis-tracking ledger, not an execution system.
 export class PaperTradingManager {
-  private positions: PaperPosition[] = [];
+  private readonly positions: PaperPosition[] = [];
   private nextId = 1;
 
-  constructor(private stream: BinanceStreamManager) {}
+  constructor(private readonly stream: BinanceStreamManager) {}
 
   async open(symbol: string, direction: "long" | "short", quantity: number, stopPrice?: number, targetPrice?: number): Promise<PaperPosition | { error: string; message: string }> {
     const sym = symbol.toUpperCase();
@@ -36,8 +37,8 @@ export class PaperTradingManager {
       direction,
       entryPrice: tick.price,
       quantity,
-      stopPrice,
-      targetPrice,
+      ...(stopPrice !== undefined && { stopPrice }),
+      ...(targetPrice !== undefined && { targetPrice }),
       openedAt: tick.time,
       closedAt: null,
       closePrice: null,
@@ -49,7 +50,7 @@ export class PaperTradingManager {
   }
 
   // Mark every open position to the latest live price, auto-closing any
-  // that have crossed their stop/target. Call before listing for a fresh read.
+  // That have crossed their stop/target. Call before listing for a fresh read.
   markToMarket(): void {
     for (const p of this.positions) {
       if (p.closedAt !== null) continue;

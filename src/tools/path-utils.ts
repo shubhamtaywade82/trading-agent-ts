@@ -1,5 +1,7 @@
+/* eslint-disable security/detect-non-literal-fs-filename -- this module IS the path-validation layer; the flagged calls are the validation itself */
 import { existsSync, realpathSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
+
 import { ToolError } from "./tool.js";
 
 export class PathEscapeError extends ToolError {}

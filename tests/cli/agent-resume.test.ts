@@ -1,8 +1,9 @@
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { Agent } from "../../src/cli/agent.js";
-import { Planner } from "../../src/orchestrator/types.js";
+import type { Planner } from "../../src/orchestrator/types.js";
 
 const noopPlanner: Planner = { replan: async () => [] };
 
@@ -16,7 +17,7 @@ describe("Agent plan checkpoint/resume", () => {
       if (typeof url === "string" && url.endsWith("/api/tags")) {
         return { ok: true, status: 200, json: async () => ({ models: [] }) };
       }
-      const line = JSON.stringify({ message: { role: "assistant", content: "done" }, done: true }) + "\n";
+      const line = `${JSON.stringify({ message: { role: "assistant", content: "done" }, done: true })  }\n`;
       let delivered = false;
       const reader = {
         read: async () => {
@@ -59,7 +60,7 @@ describe("Agent plan checkpoint/resume", () => {
 
   it("resumes a plan left behind by a crashed process, skipping the completed step", async () => {
     // Simulate a prior process that finished "a" and crashed mid-"b" — write
-    // the checkpoint a real crashed run would have left, without running one.
+    // The checkpoint a real crashed run would have left, without running one.
     const checkpointPath = join(tempDir, ".trading-agent", "checkpoint.json");
     await mkdir(join(tempDir, ".trading-agent"), { recursive: true });
     await writeFile(
@@ -105,7 +106,7 @@ describe("Agent conversation session resume", () => {
       if (typeof url === "string" && url.endsWith("/api/tags")) {
         return { ok: true, status: 200, json: async () => ({ models: [] }) };
       }
-      const line = JSON.stringify({ message: { role: "assistant", content: "done" }, done: true }) + "\n";
+      const line = `${JSON.stringify({ message: { role: "assistant", content: "done" }, done: true })  }\n`;
       let delivered = false;
       const reader = {
         read: async () => {
@@ -154,7 +155,7 @@ describe("Agent conversation session resume", () => {
     const chatBodies = (globalThis.fetch as jest.Mock).mock.calls
       .filter((c) => c[1]?.body)
       .map((c) => JSON.parse(c[1].body));
-    const lastCall = chatBodies[chatBodies.length - 1];
+    const lastCall = chatBodies.at(-1);
     expect(lastCall.messages.some((m: { content?: string }) => m.content === "remember the number 42")).toBe(true);
     expect(lastCall.messages.some((m: { content?: string }) => m.content === "what number did I say")).toBe(true);
   });

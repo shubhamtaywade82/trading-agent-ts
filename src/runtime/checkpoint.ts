@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { PlanStep, HistoryEntry, StepStatus } from "../orchestrator/types.js";
+
+import type { PlanStep, HistoryEntry, StepStatus } from "../orchestrator/types.js";
 
 export interface CheckpointData {
   steps: PlanStep[];
@@ -10,9 +11,9 @@ export interface CheckpointData {
 }
 
 // Non-terminal statuses can't be trusted after a crash — the step may or may
-// not have finished the work it was doing when the process died. Reset them
-// to "pending" so the orchestrator retries them; "completed" steps are kept
-// so a resumed run doesn't redo finished work.
+// Not have finished the work it was doing when the process died. Reset them
+// To "pending" so the orchestrator retries them; "completed" steps are kept
+// So a resumed run doesn't redo finished work.
 const TRUSTED_ON_RESUME: ReadonlySet<StepStatus> = new Set(["completed", "cancelled", "rolledback"]);
 
 export function sanitizeResumedSteps(steps: PlanStep[]): PlanStep[] {
@@ -26,7 +27,7 @@ export class CheckpointStore {
     mkdirSync(dirname(this.path), { recursive: true });
     const full: CheckpointData = { ...data, updatedAt: Date.now() };
     // Atomic write: a crash mid-write leaves the old checkpoint intact instead
-    // of a half-written, unparseable JSON file.
+    // Of a half-written, unparseable JSON file.
     const tmpPath = `${this.path}.tmp`;
     writeFileSync(tmpPath, JSON.stringify(full, null, 2));
     renameSync(tmpPath, this.path);

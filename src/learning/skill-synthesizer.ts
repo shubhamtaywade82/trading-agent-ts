@@ -1,8 +1,10 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { SkillUsageStats } from "../skills/types.js";
-import { LessonStore } from "./lesson-store.js";
-import { Lesson } from "./types.js";
+
+import type { SkillUsageStats } from "../skills/types.js";
+
+import type { LessonStore } from "./lesson-store.js";
+import type { Lesson } from "./types.js";
 
 /**
  * Materializes promoted lessons as ordinary workspace skills and demotes
@@ -39,7 +41,7 @@ export class SkillSynthesizer {
 
     const written: string[] = [];
     for (const [topic, group] of byTopic) {
-      const skillId = `${LEARNED_PREFIX}${topic.replace(/[^a-z0-9]+/g, "-")}`;
+      const skillId = `${LEARNED_PREFIX}${topic.replaceAll(/[^a-z0-9]+/g, "-")}`;
       const existing = this.lessons.promotedLessons(skillId);
       const merged = [...existing, ...group]
         .sort((a, b) => b.confidence - a.confidence)

@@ -1,9 +1,10 @@
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+
+import type { PlanStep } from "../../src/orchestrator/types.js";
 import { CheckpointStore, sanitizeResumedSteps } from "../../src/runtime/checkpoint.js";
-import { PlanStep } from "../../src/orchestrator/types.js";
 
 function makeStep(id: string, status: PlanStep["status"]): PlanStep {
   return { id, description: id, status, dependencies: [], retryCount: 0 };
@@ -32,7 +33,7 @@ describe("CheckpointStore", () => {
     store.save({ steps: [makeStep("a", "completed")], history: [], replanCount: 1 });
 
     const loaded = store.load();
-    expect(loaded?.steps).toEqual([makeStep("a", "completed")]);
+    expect(loaded?.steps).toStrictEqual([makeStep("a", "completed")]);
     expect(loaded?.replanCount).toBe(1);
     expect(typeof loaded?.updatedAt).toBe("number");
   });
@@ -68,7 +69,7 @@ describe("CheckpointStore", () => {
 
   it("clear is a no-op when no checkpoint exists", () => {
     const store = new CheckpointStore(path);
-    expect(() => store.clear()).not.toThrow();
+    expect(() => { store.clear(); }).not.toThrow();
   });
 
   it("returns null instead of throwing on corrupt JSON", () => {
@@ -82,7 +83,7 @@ describe("CheckpointStore", () => {
     const store = new CheckpointStore(path);
     store.save({ steps: [makeStep("a", "pending")], history: [], replanCount: 0 });
     // Simulate a crash between the tmp write and the rename: the real file
-    // must still hold the last complete checkpoint.
+    // Must still hold the last complete checkpoint.
     expect(JSON.parse(readFileSync(path, "utf8")).steps[0].status).toBe("pending");
   });
 });
@@ -99,12 +100,12 @@ describe("sanitizeResumedSteps", () => {
       makeStep("g", "running"),
     ];
     const sanitized = sanitizeResumedSteps(steps);
-    expect(sanitized.map((s) => s.status)).toEqual(["pending", "pending", "pending", "pending", "pending", "pending", "pending"]);
+    expect(sanitized.map((s) => s.status)).toStrictEqual(["pending", "pending", "pending", "pending", "pending", "pending", "pending"]);
   });
 
   it("keeps completed, cancelled, and rolledback statuses as-is", () => {
     const steps = [makeStep("a", "completed"), makeStep("b", "cancelled"), makeStep("c", "rolledback")];
-    expect(sanitizeResumedSteps(steps).map((s) => s.status)).toEqual(["completed", "cancelled", "rolledback"]);
+    expect(sanitizeResumedSteps(steps).map((s) => s.status)).toStrictEqual(["completed", "cancelled", "rolledback"]);
   });
 
   it("does not mutate the input steps", () => {

@@ -22,7 +22,7 @@ describe("density tiers", () => {
   it("gives the active view all rows minus the fixed chrome (6 rows: header, 2 dividers, activity strip, prompt, context strip)", () => {
     expect(activeViewRows(24)).toBe(18);
     expect(activeViewRows(30)).toBe(24);
-    expect(activeViewRows(5)).toBe(3); // never less than 3
+    expect(activeViewRows(5)).toBe(3); // Never less than 3
   });
 
   it("shrinks by one more row when the prompt bar is showing its multiline indicator", () => {

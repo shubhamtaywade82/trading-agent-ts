@@ -1,6 +1,6 @@
-import { scoreByModel } from "../../src/benchmark/score.js";
 import { formatReport } from "../../src/benchmark/report.js";
-import { BenchmarkResult } from "../../src/benchmark/types.js";
+import { scoreByModel } from "../../src/benchmark/score.js";
+import type { BenchmarkResult } from "../../src/benchmark/types.js";
 
 function result(overrides: Partial<BenchmarkResult>): BenchmarkResult {
   return {
@@ -37,7 +37,7 @@ describe("scoreByModel", () => {
   });
 
   it("returns an empty array for no results", () => {
-    expect(scoreByModel([])).toEqual([]);
+    expect(scoreByModel([])).toStrictEqual([]);
   });
 });
 

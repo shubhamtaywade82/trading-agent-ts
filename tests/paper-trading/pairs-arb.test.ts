@@ -1,7 +1,9 @@
-import { mkdtemp, rm, readFile } from "fs/promises";
-import { tmpdir } from "os";
-import { join } from "path";
-import { PairsArbTracker, PairsArbCandidate, PairsArbDeps, summarizePairsArbJournal } from "../../src/paper-trading/pairs-arb.js";
+import { mkdtemp, rm, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import type { PairsArbCandidate, PairsArbDeps} from "../../src/paper-trading/pairs-arb.js";
+import { PairsArbTracker, summarizePairsArbJournal } from "../../src/paper-trading/pairs-arb.js";
 
 describe("PairsArbTracker", () => {
   let dir: string;
@@ -34,7 +36,7 @@ describe("PairsArbTracker", () => {
   it("opens a position when the latest z-score exceeds entryZ", async () => {
     const tracker = new PairsArbTracker([CANDIDATE], { stateFile, journalFile }, deps());
     const result = await tracker.tick();
-    expect(result.opened).toEqual(["XRPUSDT-ETHUSDT"]);
+    expect(result.opened).toStrictEqual(["XRPUSDT-ETHUSDT"]);
     const journal = await readFile(journalFile, "utf-8");
     expect(journal).toContain('"type":"pairs_arb_open"');
     expect(journal).toContain('"direction":"short_a_long_b"');
@@ -42,23 +44,23 @@ describe("PairsArbTracker", () => {
 
   it("does not open when correlation-adjacent history is too short to compute a z-score", async () => {
     const tracker = new PairsArbTracker([CANDIDATE], { stateFile, journalFile }, deps({
-      fetchRecentCloses: async () => ({ closes: [100, 101] }), // shorter than lookback
+      fetchRecentCloses: async () => ({ closes: [100, 101] }), // Shorter than lookback
     }));
     const result = await tracker.tick();
-    expect(result.opened).toEqual([]);
+    expect(result.opened).toStrictEqual([]);
   });
 
   it("does not open a second position while one is already open for a pair", async () => {
     const tracker = new PairsArbTracker([CANDIDATE], { stateFile, journalFile }, deps());
     await tracker.tick();
     const result = await tracker.tick();
-    expect(result.opened).toEqual([]);
+    expect(result.opened).toStrictEqual([]);
   });
 
   it("closes on max hold and journals a finite realized PnL", async () => {
-    // z≈3.09 here — above entryZ(2) so it still opens, but below stopZ(3.5)
-    // so only the maxHoldBars timeout (not the stop) can close it; a bigger
-    // spike would hit stopZ on the very next tick and never test timeout.
+    // Z≈3.09 here — above entryZ(2) so it still opens, but below stopZ(3.5)
+    // So only the maxHoldBars timeout (not the stop) can close it; a bigger
+    // Spike would hit stopZ on the very next tick and never test timeout.
     const moderateSpikeDeps = deps({
       fetchRecentCloses: async (symbol: string) =>
         symbol === "XRPUSDT" ? { closes: [100, 102, 98, 101, 99, 105] } : { closes: [100, 100, 100, 100, 100, 100] },
@@ -67,7 +69,7 @@ describe("PairsArbTracker", () => {
     const tracker = new PairsArbTracker([shortHold], { stateFile, journalFile }, moderateSpikeDeps);
     await tracker.tick();
     const result = await tracker.tick();
-    expect(result.closed).toEqual(["XRPUSDT-ETHUSDT"]);
+    expect(result.closed).toStrictEqual(["XRPUSDT-ETHUSDT"]);
     const journal = await readFile(journalFile, "utf-8");
     expect(journal).toContain('"type":"pairs_arb_close"');
     expect(journal).toContain('"reason":"timeout"');
@@ -93,6 +95,6 @@ describe("summarizePairsArbJournal", () => {
       { type: "pairs_arb_close", id: "XRPUSDT-ETHUSDT", reason: "stop", pnlUsd: -20 },
     ];
     const summary = summarizePairsArbJournal(entries);
-    expect(summary["XRPUSDT-ETHUSDT"]).toEqual({ closedCount: 2, totalPnlUsd: 20, winRate: 0.5 });
+    expect(summary["XRPUSDT-ETHUSDT"]).toStrictEqual({ closedCount: 2, totalPnlUsd: 20, winRate: 0.5 });
   });
 });

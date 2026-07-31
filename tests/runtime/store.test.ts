@@ -1,6 +1,6 @@
 import { EventBus } from "../../src/runtime/events.js";
 import { initialRuntimeState, reduce, sanitizeText, Store } from "../../src/runtime/store.js";
-import { RuntimeState } from "../../src/runtime/types.js";
+import type { RuntimeState } from "../../src/runtime/types.js";
 
 function fresh(): RuntimeState {
   return initialRuntimeState({ workspace: "devagent", branch: "main", model: "qwen3:30b" });
@@ -8,8 +8,8 @@ function fresh(): RuntimeState {
 
 describe("sanitizeText", () => {
   it("strips ANSI escape sequences and control chars", () => {
-    expect(sanitizeText("a\x1b[31mred\x1b[0mb")).toBe("aredb");
-    expect(sanitizeText("t\x1b]0;title\x07x")).toBe("tx");
+    expect(sanitizeText("a\x1B[31mred\x1B[0mb")).toBe("aredb");
+    expect(sanitizeText("t\x1B]0;title\x07x")).toBe("tx");
     expect(sanitizeText("keep\nnewline\tand tab\rno-cr")).toBe("keep\nnewline\tand tabno-cr");
   });
 });
@@ -57,7 +57,7 @@ describe("store reducer", () => {
     s = reduce(s, { type: "error", message: "Ollama local 400: model does not support tools" });
     expect(s.lastError).toBe("Ollama local 400: model does not support tools");
     expect(s.actors.executor).toMatchObject({ health: "error", detail: "✗" });
-    expect(s.notifications[s.notifications.length - 1]).toMatchObject({
+    expect(s.notifications.at(-1)).toMatchObject({
       kind: "error",
       text: "Ollama local 400: model does not support tools",
     });
@@ -71,7 +71,7 @@ describe("store reducer", () => {
     expect(s.tasks[0]).toMatchObject({ status: "running", progress: 0.4 });
     s = reduce(s, { type: "task.progress", taskId: "a", status: "completed" });
     expect(s.actors.tasks.detail).toBe("✓");
-    // invalid transition ignored
+    // Invalid transition ignored
     const after = reduce(s, { type: "task.progress", taskId: "a", status: "running" });
     expect(after.tasks[0].status).toBe("completed");
   });
@@ -95,7 +95,7 @@ describe("store reducer", () => {
 
   it("appends sanitized logs and counts them", () => {
     let s = fresh();
-    s = reduce(s, { type: "logs.appended", level: "info", source: "shell", message: "\x1b[32mok\x1b[0m" });
+    s = reduce(s, { type: "logs.appended", level: "info", source: "shell", message: "\x1B[32mok\x1B[0m" });
     expect(s.logs[0].message).toBe("ok");
     expect(s.actors.logs.detail).toBe("1");
   });
@@ -128,8 +128,8 @@ describe("store reducer", () => {
     s = reduce(s, { type: "model.streaming", streaming: true, tokensPerSecond: 81 });
     expect(s.model).toMatchObject({ streaming: true, tokensPerSecond: 81 });
     expect(s.actors.models.health).toBe("thinking");
-    s = reduce(s, { type: "context.changed", used: 48000, limit: 71000 });
-    expect(s.model.contextUsed).toBe(48000);
+    s = reduce(s, { type: "context.changed", used: 48_000, limit: 71_000 });
+    expect(s.model.contextUsed).toBe(48_000);
   });
 
   it("bounds the log buffer", () => {
@@ -137,15 +137,15 @@ describe("store reducer", () => {
     for (let i = 0; i < 600; i++) {
       s = reduce(s, { type: "logs.appended", level: "debug", source: "t", message: `m${i}` });
     }
-    expect(s.logs.length).toBe(500);
-    expect(s.logs[s.logs.length - 1].message).toBe("m599");
+    expect(s.logs).toHaveLength(500);
+    expect(s.logs.at(-1).message).toBe("m599");
   });
 
   describe("skills.changed", () => {
     it("marks the actor muted with no skills at all", () => {
       const s = reduce(fresh(), { type: "skills.changed", skills: [] });
       expect(s.actors.skills).toMatchObject({ health: "muted", detail: "✓" });
-      expect(s.skills).toEqual([]);
+      expect(s.skills).toStrictEqual([]);
     });
 
     it("marks the actor healthy when skills exist but none are active", () => {
@@ -179,7 +179,7 @@ describe("Store", () => {
     const seen: string[] = [];
     store.subscribe((s) => seen.push(s.status));
     bus.publish({ type: "status.changed", status: "working" });
-    expect(seen).toEqual(["working"]);
+    expect(seen).toStrictEqual(["working"]);
     expect(store.getState().status).toBe("working");
   });
 

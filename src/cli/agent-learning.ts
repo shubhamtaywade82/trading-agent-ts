@@ -1,8 +1,8 @@
-import { MemoryStore } from "../memory/store.js";
 import { LearningEngine } from "../learning/index.js";
+import type { MemoryStore } from "../memory/store.js";
+import type { Provider } from "../provider/provider.js";
 import { SkillsRegistry } from "../skills/registry.js";
-import { SkillContent } from "../skills/types.js";
-import { Provider } from "../provider/provider.js";
+import type { SkillContent } from "../skills/types.js";
 
 export interface AgentLearningOptions {
   workspaceRoot: string;
@@ -25,7 +25,7 @@ export class AgentLearning {
       memory: opts.memory,
     });
     this.skills = SkillsRegistry.discover(
-      { workspaceRoot: opts.workspaceRoot, homeDir: opts.skillsHomeDir },
+      { workspaceRoot: opts.workspaceRoot, ...(opts.skillsHomeDir !== undefined ? { homeDir: opts.skillsHomeDir } : {}) },
     );
   }
 

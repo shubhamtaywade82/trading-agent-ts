@@ -1,6 +1,6 @@
-import { volScale, fundingPnl, slippageMultiplier } from "../../src/paper-trading/live-runner.js";
+import type { Candle } from "../../src/backtest/types.js";
 import { realizedPnlForUtcDate } from "../../src/paper-trading/circuit-breaker.js";
-import { Candle } from "../../src/backtest/types.js";
+import { volScale, fundingPnl, slippageMultiplier } from "../../src/paper-trading/live-runner.js";
 
 function candle(i: number, range: number, base = 100): Candle {
   return { openTime: i * 3_600_000, open: base, high: base + range / 2, low: base - range / 2, close: base, volume: 1 };
@@ -52,17 +52,17 @@ describe("slippageMultiplier", () => {
 
 describe("fundingPnl", () => {
   it("longs pay positive funding, shorts receive it", () => {
-    expect(fundingPnl([0.0001, 0.0001], 10000, "long")).toBeCloseTo(-2);
-    expect(fundingPnl([0.0001, 0.0001], 10000, "short")).toBeCloseTo(2);
+    expect(fundingPnl([0.0001, 0.0001], 10_000, "long")).toBeCloseTo(-2);
+    expect(fundingPnl([0.0001, 0.0001], 10_000, "short")).toBeCloseTo(2);
   });
 
   it("negative funding flips the sign", () => {
-    expect(fundingPnl([-0.0002], 10000, "long")).toBeCloseTo(2);
-    expect(fundingPnl([-0.0002], 10000, "short")).toBeCloseTo(-2);
+    expect(fundingPnl([-0.0002], 10_000, "long")).toBeCloseTo(2);
+    expect(fundingPnl([-0.0002], 10_000, "short")).toBeCloseTo(-2);
   });
 
   it("no funding events costs nothing", () => {
-    expect(fundingPnl([], 10000, "long")).toBeCloseTo(0);
+    expect(fundingPnl([], 10_000, "long")).toBeCloseTo(0);
   });
 });
 

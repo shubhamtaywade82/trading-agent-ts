@@ -9,7 +9,7 @@ export interface TradingConfig {
 }
 
 export const DEFAULT_TRADING_CONFIG: TradingConfig = {
-  initialCapital: 10000,
+  initialCapital: 10_000,
   riskPercentageOfCapital: 0.015,
   stopLossPct: 0.02,
   takeProfitPct: 0.04,

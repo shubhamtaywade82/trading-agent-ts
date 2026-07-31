@@ -1,4 +1,4 @@
-import { ModelScore } from "./types.js";
+import type { ModelScore } from "./types.js";
 
 export function formatReport(scores: ModelScore[]): string {
   if (scores.length === 0) return "(no benchmark results)";
@@ -14,9 +14,9 @@ export function formatReport(scores: ModelScore[]): string {
   ]);
 
   const header = ["model", "pass rate", "avg latency", "avg tok/s", "cases"];
-  const widths = header.map((h, i) => Math.max(h.length, ...rows.map((r) => r[i].length)));
+  const widths = header.map((h, i) => Math.max(h.length, ...rows.map((r) => (r[i] ?? "").length)));
 
-  const formatRow = (cells: string[]) => cells.map((c, i) => c.padEnd(widths[i])).join("  ");
+  const formatRow = (cells: string[]) => cells.map((c, i) => c.padEnd(widths[i] ?? 0)).join("  ");
 
   return [formatRow(header), formatRow(widths.map((w) => "-".repeat(w))), ...rows.map(formatRow)].join("\n");
 }

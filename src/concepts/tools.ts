@@ -1,13 +1,15 @@
-import { Tool } from '../tools/tool.js';
-import { ConceptsEngine, adaptConceptsCandles } from './adapter.js';
-import { Candle } from '../backtest/types.js';
-import { computeLiqPrice } from '../paper-trading/symbol-position.js';
 import {
   calculateVolumeProfile,
   calculateVWAP,
   calculateATR,
-  classifyFundingSkew,
 } from 'trading-concepts-ts';
+
+import type { Candle } from '../backtest/types.js';
+import { computeLiqPrice } from '../paper-trading/symbol-position.js';
+import { Tool } from '../tools/tool.js';
+
+import { ConceptsEngine, adaptConceptsCandles } from './adapter.js';
+
 
 // ── Shared helpers ──
 
@@ -67,7 +69,7 @@ const CONCEPTS_CONDITION_SCHEMA = {
 
 function futuresBacktest(
   candles: Candle[],
-  conditions: { type: string; value?: number }[],
+  conditions: Array<{ type: string; value?: number }>,
   direction: 'long' | 'short',
   stopPct: number, targetPct: number, feeBps: number, maxHoldBars: number,
   initialCapital: number, leverage: number, marginPerTradePct: number,
@@ -76,8 +78,8 @@ function futuresBacktest(
 ) {
   const engine = new ConceptsEngine(candles);
   const evaluator = engine.evaluator(conditions);
-  const slipFrac = slippageBps / 10000;
-  const feeFrac = feeBps / 10000;
+  const slipFrac = slippageBps / 10_000;
+  const feeFrac = feeBps / 10_000;
   let capital = initialCapital;
   const eq: number[] = [capital];
   const returns: number[] = [];
@@ -90,7 +92,9 @@ function futuresBacktest(
     const passesMask = !entryMask || entryMask[i] === true;
     if (!passesEntry || !passesMask) { i++; continue; }
 
-    const rawEntry = candles[i].close;
+    const entryCandle = candles[i];
+    if (entryCandle === undefined) { i++; continue; }
+    const rawEntry = entryCandle.close;
     const entryPrice = direction === 'long' ? rawEntry * (1 + slipFrac) : rawEntry * (1 - slipFrac);
     const margin = capital * marginPerTradePct;
     const notional = margin * leverage;
@@ -100,9 +104,12 @@ function futuresBacktest(
     const liqPrice = computeLiqPrice(direction, entryPrice, leverage);
 
     let exitIdx = candles.length - 1;
-    let exitPrice = candles[exitIdx].close;
+    const exitCandle = candles[exitIdx];
+    if (exitCandle === undefined) { i = exitIdx + 1; continue; }
+    let exitPrice = exitCandle.close;
     for (let j = i + 1; j < candles.length && j <= i + maxHoldBars; j++) {
       const b = candles[j];
+      if (b === undefined) continue;
       if (direction === 'long' ? b.low <= liqPrice : b.high >= liqPrice) { exitIdx = j; exitPrice = liqPrice; break; }
       if (direction === 'long' ? b.low <= stopPrice : b.high >= stopPrice) { exitIdx = j; exitPrice = direction === 'long' ? stopPrice * (1 - slipFrac) : stopPrice * (1 + slipFrac); break; }
       if (direction === 'long' ? b.high >= targetPrice : b.low <= targetPrice) { exitIdx = j; exitPrice = targetPrice; break; }
@@ -120,7 +127,7 @@ function futuresBacktest(
   }
 
   const winRate = trades > 0 ? wins / trades : 0;
-  const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? Infinity : 0;
+  const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : (grossProfit > 0 ? Infinity : 0);
   const totalPnlUsd = capital - initialCapital;
   const totalReturnPct = totalPnlUsd / initialCapital;
   const expectancyPct = trades > 0 ? returns.reduce((s, v) => s + v, 0) / trades : 0;
@@ -152,9 +159,9 @@ export class BinanceConceptsBacktestTool extends Tool {
       'when htfInterval is provided, only entries aligning with the HTF bias are taken.'
     );
   }
-  get tags(): string[] { return ['binance', 'backtest', 'concepts', 'smc', 'ict', 'multi-tf']; }
+  override get tags(): string[] { return ['binance', 'backtest', 'concepts', 'smc', 'ict', 'multi-tf']; }
 
-  get parameters(): Record<string, unknown> {
+  override get parameters(): Record<string, unknown> {
     return {
       type: 'object',
       properties: {
@@ -167,7 +174,7 @@ export class BinanceConceptsBacktestTool extends Tool {
         targetPct: { type: 'number', description: 'Take profit fraction, e.g. 0.04 = 4%' },
         feeBps: { type: 'number', default: 5 },
         maxHoldBars: { type: 'number', default: 96 },
-        initialCapital: { type: 'number', default: 10000 },
+        initialCapital: { type: 'number', default: 10_000 },
         leverage: { type: 'number', default: 1 },
         marginPerTradePct: { type: 'number', default: 0.5 },
         slippageBps: { type: 'number', default: 0 },
@@ -179,21 +186,21 @@ export class BinanceConceptsBacktestTool extends Tool {
   }
 
   async call(args: Record<string, unknown>): Promise<Record<string, unknown>> {
-    const symbol = String(args.symbol ?? '');
-    const interval = String(args.interval ?? '1h');
-    const limit = Math.min(Number(args.limit ?? 500) || 500, 1000);
-    const direction = args.direction as 'long' | 'short';
-    const entry = args.entry as { type: string; value?: number }[];
-    const stopPct = Number(args.stopPct ?? 0.02);
-    const targetPct = Number(args.targetPct ?? 0.04);
-    const feeBps = Number(args.feeBps ?? 5);
-    const maxHoldBars = Number(args.maxHoldBars ?? 96);
-    const initialCapital = Number(args.initialCapital ?? 10000);
-    const leverage = Number(args.leverage ?? 1);
-    const marginPerTradePct = Number(args.marginPerTradePct ?? 0.5);
-    const slippageBps = Number(args.slippageBps ?? 0);
-    const htfInterval = args.htfInterval as string | undefined;
-    const htfLimit = Math.min(Number(args.htfLimit ?? 200) || 200, 1000);
+    const symbol = String(args["symbol"] ?? '');
+    const interval = String(args["interval"] ?? '1h');
+    const limit = Math.min(Number(args["limit"] ?? 500) || 500, 1000);
+    const direction = args["direction"] as 'long' | 'short';
+    const entry = args["entry"] as Array<{ type: string; value?: number }>;
+    const stopPct = Number(args["stopPct"] ?? 0.02);
+    const targetPct = Number(args["targetPct"] ?? 0.04);
+    const feeBps = Number(args["feeBps"] ?? 5);
+    const maxHoldBars = Number(args["maxHoldBars"] ?? 96);
+    const initialCapital = Number(args["initialCapital"] ?? 10_000);
+    const leverage = Number(args["leverage"] ?? 1);
+    const marginPerTradePct = Number(args["marginPerTradePct"] ?? 0.5);
+    const slippageBps = Number(args["slippageBps"] ?? 0);
+    const htfInterval = args["htfInterval"] as string | undefined;
+    const htfLimit = Math.min(Number(args["htfLimit"] ?? 200) || 200, 1000);
 
     const fetched = await fetchCandles(symbol, interval, limit);
     if ('error' in fetched) return fetched;
@@ -272,9 +279,9 @@ export class BinanceConceptsAnalyzeTool extends Tool {
       'zones, and 7-pillar confluence scores. This is the "deterministic eyes" of the system.'
     );
   }
-  get tags(): string[] { return ['binance', 'concepts', 'smc', 'ict', 'analysis']; }
+  override get tags(): string[] { return ['binance', 'concepts', 'smc', 'ict', 'analysis']; }
 
-  get parameters(): Record<string, unknown> {
+  override get parameters(): Record<string, unknown> {
     return {
       type: 'object',
       properties: {
@@ -287,9 +294,9 @@ export class BinanceConceptsAnalyzeTool extends Tool {
   }
 
   async call(args: Record<string, unknown>): Promise<Record<string, unknown>> {
-    const symbol = String(args.symbol ?? '');
-    const interval = String(args.interval ?? '1h');
-    const limit = Math.min(Number(args.limit ?? 200) || 200, 1000);
+    const symbol = String(args["symbol"] ?? '');
+    const interval = String(args["interval"] ?? '1h');
+    const limit = Math.min(Number(args["limit"] ?? 200) || 200, 1000);
 
     const fetched = await fetchCandles(symbol, interval, limit);
     if ('error' in fetched) return fetched;
@@ -303,11 +310,11 @@ export class BinanceConceptsAnalyzeTool extends Tool {
 
     // VWAP (latest value)
     const vwapArr = calculateVWAP(adapted, { resetDaily: false, timezoneOffsetMinutes: 0 });
-    const latestVWAP = vwapArr.filter(v => v !== null && !Number.isNaN(v)).pop() ?? null;
+    const latestVWAP = vwapArr.findLast(v => v !== null && !Number.isNaN(v)) ?? null;
 
     // ATR
     const atrArr = calculateATR(adapted, { period: 14 });
-    const latestATR = atrArr.filter(a => a !== null && !Number.isNaN(a)).pop() ?? null;
+    const latestATR = atrArr.findLast(a => a !== null && !Number.isNaN(a)) ?? null;
 
     return {
       symbol, interval, candles: fetched.candles.length,
@@ -366,9 +373,9 @@ export class BinanceConceptsMarketStateTool extends Tool {
       'This is the "deterministic eyes" input for the Macro Analyst and Execution Desk agents.'
     );
   }
-  get tags(): string[] { return ['binance', 'concepts', 'smc', 'ict', 'market-state', 'llm']; }
+  override get tags(): string[] { return ['binance', 'concepts', 'smc', 'ict', 'market-state', 'llm']; }
 
-  get parameters(): Record<string, unknown> {
+  override get parameters(): Record<string, unknown> {
     return {
       type: 'object',
       properties: {
@@ -385,13 +392,13 @@ export class BinanceConceptsMarketStateTool extends Tool {
   }
 
   async call(args: Record<string, unknown>): Promise<Record<string, unknown>> {
-    const symbol = String(args.symbol ?? '');
-    const htfInterval = String(args.htfInterval ?? '4h');
-    const mtfInterval = String(args.mtfInterval ?? '1h');
-    const ltfInterval = String(args.ltfInterval ?? '15m');
-    const htfLimit = Number(args.htfLimit ?? 100);
-    const mtfLimit = Number(args.mtfLimit ?? 100);
-    const ltfLimit = Number(args.ltfLimit ?? 150);
+    const symbol = String(args["symbol"] ?? '');
+    const htfInterval = String(args["htfInterval"] ?? '4h');
+    const mtfInterval = String(args["mtfInterval"] ?? '1h');
+    const ltfInterval = String(args["ltfInterval"] ?? '15m');
+    const htfLimit = Number(args["htfLimit"] ?? 100);
+    const mtfLimit = Number(args["mtfLimit"] ?? 100);
+    const ltfLimit = Number(args["ltfLimit"] ?? 150);
 
     // Fetch all three timeframes in parallel
     const [htfRes, mtfRes, ltfRes] = await Promise.all([
@@ -425,11 +432,11 @@ export class BinanceConceptsMarketStateTool extends Tool {
     function buildTimeframeData(
       interval: string,
       analysis: typeof htfAnalysis,
-      signals: typeof htfSignals,
+      _signals: typeof htfSignals,
       candles: Candle[],
     ) {
-      const latestCandle = candles[candles.length - 1];
-      const latestPrice = latestCandle.close;
+      const latestCandle = candles.at(-1);
+      const latestPrice = latestCandle?.close ?? 0;
 
       // Determine trend from last 3 structure signals
       const recentStructures = analysis.structure.slice(-3);
@@ -440,24 +447,26 @@ export class BinanceConceptsMarketStateTool extends Tool {
       else if (bearishCount > bullishCount) trend = 'bearish';
 
       // Latest structure
-      const lastStruct = analysis.structure[analysis.structure.length - 1];
-      const structure = lastStruct ? lastStruct.type as 'BOS' | 'CHoCH' | 'MSS' : null;
+      const lastStruct = analysis.structure.at(-1);
+      const structure = lastStruct ? lastStruct.type : null;
 
       // Draw on liquidity
       const unsweptLiq = analysis.liquidity.filter(l => !l.swept);
       const nearestBullishLiq = unsweptLiq.filter(l => l.type === 'sellside').sort((a, b) => Math.abs(a.level - latestPrice) - Math.abs(b.level - latestPrice));
       const nearestBearishLiq = unsweptLiq.filter(l => l.type === 'buyside').sort((a, b) => Math.abs(a.level - latestPrice) - Math.abs(b.level - latestPrice));
       let drawOnLiquidity = '';
-      if (nearestBullishLiq.length > 0 && nearestBearishLiq.length > 0) {
-        drawOnLiquidity = nearestBullishLiq[0].level < nearestBearishLiq[0].level ? 'BSL (buyside)' : 'SSL (sellside)';
-      } else if (nearestBullishLiq.length > 0) {
+      const nearestBull = nearestBullishLiq[0];
+      const nearestBear = nearestBearishLiq[0];
+      if (nearestBull !== undefined && nearestBear !== undefined) {
+        drawOnLiquidity = nearestBull.level < nearestBear.level ? 'BSL (buyside)' : 'SSL (sellside)';
+      } else if (nearestBull !== undefined) {
         drawOnLiquidity = 'SSL (sellside)';
-      } else if (nearestBearishLiq.length > 0) {
+      } else if (nearestBear !== undefined) {
         drawOnLiquidity = 'BSL (buyside)';
       }
 
       // Premium/Discount
-      const pdz = analysis.premiumDiscountZones[analysis.premiumDiscountZones.length - 1];
+      const pdz = analysis.premiumDiscountZones.at(-1);
       let premiumDiscount: 'premium' | 'discount' | 'equilibrium' = 'equilibrium';
       if (pdz) {
         if (latestPrice > pdz.equilibrium) premiumDiscount = 'premium';
@@ -465,7 +474,7 @@ export class BinanceConceptsMarketStateTool extends Tool {
       }
 
       // POI — unmitigated OBs and FVGs in the direction of trend
-      const poi: any[] = [];
+      const poi: Array<{ type: string; index: number; price: { top: number; bottom: number }; strength?: number }> = [];
       const trendDir = trend === 'bullish' ? 'bullish' : 'bearish';
       for (const ob of analysis.orderBlocks) {
         if (!ob.mitigated && ob.type === trendDir) {
@@ -498,7 +507,7 @@ export class BinanceConceptsMarketStateTool extends Tool {
     const vwapArr = calculateVWAP(adaptedHtf, { resetDaily: false, timezoneOffsetMinutes: 0 });
     const atrArr = calculateATR(adaptedHtf, { period: 14 });
 
-    const marketState = {
+    return {
       symbol,
       timestamp: new Date().toISOString(),
       htf,
@@ -510,20 +519,18 @@ export class BinanceConceptsMarketStateTool extends Tool {
           hvn: vp.highVolumeNodes.map(b => (b.priceLow + b.priceHigh) / 2),
           lvn: vp.lowVolumeNodes.map(b => (b.priceLow + b.priceHigh) / 2),
         } : null,
-        vwap: vwapArr.filter(v => v !== null && !Number.isNaN(v)).pop() ?? null,
-        atr: atrArr.filter(a => a !== null && !Number.isNaN(a)).pop() ?? null,
+        vwap: vwapArr.findLast(v => v !== null && !Number.isNaN(v)) ?? null,
+        atr: atrArr.findLast(a => a !== null && !Number.isNaN(a)) ?? null,
       },
-      lastPrice: ltfRes.candles[ltfRes.candles.length - 1]?.close ?? 0,
+      lastPrice: ltfRes.candles.at(-1)?.close ?? 0,
       ltfSignalSummary: {
         hasLiquiditySweep: ltfAnalysis.liquidity.some(l => l.swept),
         hasMSS: ltfAnalysis.structure.some(s => s.type === 'MSS'),
         hasJudasSwing: ltfAnalysis.judasSwings.length > 0,
         hasPremiumDiscount: ltfAnalysis.premiumDiscountZones.length > 0,
         hasConfluenceScore: ltfAnalysis.confluenceScores.some(cs => cs.highConviction),
-        activeSession: ltfAnalysis.killzones[ltfAnalysis.killzones.length - 1]?.session ?? '',
+        activeSession: ltfAnalysis.killzones.at(-1)?.session ?? '',
       },
     };
-
-    return marketState;
   }
 }

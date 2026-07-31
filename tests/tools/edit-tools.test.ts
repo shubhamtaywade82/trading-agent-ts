@@ -1,6 +1,7 @@
 import { mkdtemp, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { PatchTool, AppendTool } from "../../src/tools/edit-tools.js";
 
 describe("PatchTool", () => {
@@ -11,7 +12,7 @@ describe("PatchTool", () => {
 
     await tool.call({ path: "a.txt", find: "world", replace: "there" });
 
-    expect(await readFile(join(dir, "a.txt"), "utf-8")).toBe("hello there");
+    await expect(readFile(join(dir, "a.txt"), "utf-8")).resolves.toBe("hello there");
   });
 
   it("throws ToolError when find block is not present", async () => {
@@ -31,6 +32,6 @@ describe("AppendTool", () => {
     await tool.call({ path: "out/log.txt", content: "line1\n" });
     await tool.call({ path: "out/log.txt", content: "line2\n" });
 
-    expect(await readFile(join(dir, "out/log.txt"), "utf-8")).toBe("line1\nline2\n");
+    await expect(readFile(join(dir, "out/log.txt"), "utf-8")).resolves.toBe("line1\nline2\n");
   });
 });

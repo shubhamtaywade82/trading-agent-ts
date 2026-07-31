@@ -1,28 +1,31 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
-import { dirname } from "path";
-import { LivePaperRunner } from "./live-runner.js";
-import { reconstructClosedTrades, ClosedTrade } from "./trade-analyst.js";
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
+
+import type { BinanceStreamManager } from "../exchange/binance-stream.js";
+
+import type { LivePaperRunner } from "./live-runner.js";
 import { sendTelegram } from "./notifier.js";
-import { BinanceStreamManager } from "../exchange/binance-stream.js";
+import type { ClosedTrade } from "./trade-analyst.js";
+import { reconstructClosedTrades } from "./trade-analyst.js";
 
 // Self-correcting risk control: watches each strategy's rolling recent
-// trade history and automatically pauses NEW entries (never touches open
-// positions, never touches buildSignalEvaluator or any strategy parameter)
-// when performance craters. Fully reversible — auto-resumes once enough
-// fresh trades show recovery, or stays paused pending manual review.
+// Trade history and automatically pauses NEW entries (never touches open
+// Positions, never touches buildSignalEvaluator or any strategy parameter)
+// When performance craters. Fully reversible — auto-resumes once enough
+// Fresh trades show recovery, or stays paused pending manual review.
 //
 // Runs in-process against the same LivePaperRunner instance (see
 // LivePaperRunner.setPaused/isPaused) so there's no file-write race with the
-// runner's own state persistence.
+// Runner's own state persistence.
 
 export interface CircuitBreakerConfig {
   journalFile: string;
   stateFile: string;
-  rollingWindow: number;       // last N closed trades used for rolling PF
-  pfFloor: number;             // pause if rolling PF drops below this
-  maxConsecutiveLosses: number; // pause if this many losses in a row
-  cooldownTrades: number;      // fresh closed trades (pool-wide) before re-checking a paused strategy
-  dailyMaxLossPct: number;     // halt ALL new entries for the rest of the UTC day if today's realized loss exceeds this fraction of total initial capital
+  rollingWindow: number;       // Last N closed trades used for rolling PF
+  pfFloor: number;             // Pause if rolling PF drops below this
+  maxConsecutiveLosses: number; // Pause if this many losses in a row
+  cooldownTrades: number;      // Fresh closed trades (pool-wide) before re-checking a paused strategy
+  dailyMaxLossPct: number;     // Halt ALL new entries for the rest of the UTC day if today's realized loss exceeds this fraction of total initial capital
   notifyTelegram: boolean;
 }
 
@@ -39,7 +42,7 @@ export const DEFAULT_CIRCUIT_BREAKER_CONFIG: CircuitBreakerConfig = {
 
 // Sum of realized PnL for trades that CLOSED on the given UTC date
 // (dateIso = "YYYY-MM-DD"). Realized-only — unrealized needs live prices,
-// which nothing on this path tracks; the per-strategy stops bound open risk.
+// Which nothing on this path tracks; the per-strategy stops bound open risk.
 export function realizedPnlForUtcDate(trades: ClosedTrade[], dateIso: string): number {
   return trades.filter(t => t.exitTime.slice(0, 10) === dateIso).reduce((s, t) => s + t.pnl, 0);
 }
@@ -48,7 +51,7 @@ interface BreakerEntry {
   paused: boolean;
   reason: string | null;
   pausedAt: string | null;
-  pausedTradeCount: number; // this strategy's total closed-trade count at the moment it was paused
+  pausedTradeCount: number; // This strategy's total closed-trade count at the moment it was paused
 }
 
 type BreakerState = Record<string, BreakerEntry>;
@@ -56,33 +59,35 @@ type BreakerState = Record<string, BreakerEntry>;
 export function rollingPf(trades: ClosedTrade[]): number {
   const grossProfit = trades.filter(t => t.pnl > 0).reduce((s, t) => s + t.pnl, 0);
   const grossLoss = Math.abs(trades.filter(t => t.pnl <= 0).reduce((s, t) => s + t.pnl, 0));
-  return grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? Infinity : 0;
+  return grossLoss > 0 ? grossProfit / grossLoss : (grossProfit > 0 ? Infinity : 0);
 }
 
 function consecutiveLosses(trades: ClosedTrade[]): number {
   let n = 0;
   for (let i = trades.length - 1; i >= 0; i--) {
-    if (trades[i].pnl <= 0) n++; else break;
+    const t = trades[i];
+    if (t === undefined) break;
+    if (t.pnl <= 0) n++; else break;
   }
   return n;
 }
 
 export class StrategyCircuitBreaker {
-  private cfg: CircuitBreakerConfig;
-  private runner: LivePaperRunner;
-  private stream?: BinanceStreamManager;
+  private readonly cfg: CircuitBreakerConfig;
+  private readonly runner: LivePaperRunner;
+  private readonly stream?: BinanceStreamManager;
   private state: BreakerState = {};
   private running = false;
   // UTC date ("YYYY-MM-DD") the daily-loss halt tripped on, or null. Once
-  // tripped it holds for the rest of that date even if later exits claw the
-  // loss back — daily-loss-limit semantics, not a live threshold. In-memory
-  // on purpose: a restart recomputes today's loss from the journal, so the
-  // halt re-derives itself (worst case: one duplicate Telegram).
+  // Tripped it holds for the rest of that date even if later exits claw the
+  // Loss back — daily-loss-limit semantics, not a live threshold. In-memory
+  // On purpose: a restart recomputes today's loss from the journal, so the
+  // Halt re-derives itself (worst case: one duplicate Telegram).
   private dailyHaltDate: string | null = null;
 
   constructor(runner: LivePaperRunner, cfg: Partial<CircuitBreakerConfig> = {}, stream?: BinanceStreamManager) {
     this.runner = runner;
-    this.stream = stream;
+    if (stream !== undefined) this.stream = stream;
     this.cfg = { ...DEFAULT_CIRCUIT_BREAKER_CONFIG, ...cfg };
     this.loadState();
   }
@@ -108,12 +113,12 @@ export class StrategyCircuitBreaker {
   }
 
   // Portfolio-level daily loss cap. Trips the runner's global halt (new
-  // entries only) when today's realized + unrealized (mark-to-market) PnL
-  // exceeds dailyMaxLossPct of total initial capital; releases automatically
-  // at the next UTC day. Unrealized component only included when a live
-  // stream was passed in (best-effort — a missing tick just contributes 0,
-  // see LivePaperRunner.totalUnrealizedPnl); without it this degrades to the
-  // realized-only check.
+  // Entries only) when today's realized + unrealized (mark-to-market) PnL
+  // Exceeds dailyMaxLossPct of total initial capital; releases automatically
+  // At the next UTC day. Unrealized component only included when a live
+  // Stream was passed in (best-effort — a missing tick just contributes 0,
+  // See LivePaperRunner.totalUnrealizedPnl); without it this degrades to the
+  // Realized-only check.
   private checkDailyLoss(allTrades: ClosedTrade[]) {
     const today = new Date().toISOString().slice(0, 10);
     if (this.dailyHaltDate && this.dailyHaltDate !== today) {
@@ -121,7 +126,7 @@ export class StrategyCircuitBreaker {
       this.runner.setGlobalHalt(false);
       if (this.cfg.notifyTelegram) sendTelegram(`🟢 DAILY LOSS HALT released — new UTC day, trading resumed.`);
     }
-    if (this.dailyHaltDate) return; // already halted for today
+    if (this.dailyHaltDate) return; // Already halted for today
     const realizedToday = realizedPnlForUtcDate(allTrades, today);
     const unrealizedNow = this.stream ? this.runner.totalUnrealizedPnl(this.stream) : 0;
     const pnlToday = realizedToday + unrealizedNow;
@@ -172,8 +177,8 @@ export class StrategyCircuitBreaker {
             resumedNow.push(strategyId);
           } else {
             // Still below the bar after cooldown — re-anchor the cooldown
-            // window so it re-checks after another cooldownTrades instead of
-            // spamming a failed re-check every cycle.
+            // Window so it re-checks after another cooldownTrades instead of
+            // Spamming a failed re-check every cycle.
             entry.pausedTradeCount = trades.length;
             this.state[strategyId] = entry;
           }

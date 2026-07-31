@@ -1,35 +1,37 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from "fs";
-import { dirname } from "path";
-import { LivePaperRunner } from "./live-runner.js";
-import { reconstructClosedTrades, ClosedTrade } from "./trade-analyst.js";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from "node:fs";
+import { dirname } from "node:path";
+
 import { rollingPf } from "./circuit-breaker.js";
+import type { LivePaperRunner } from "./live-runner.js";
 import { sendTelegram } from "./notifier.js";
+import type { ClosedTrade } from "./trade-analyst.js";
+import { reconstructClosedTrades } from "./trade-analyst.js";
 
 // Live-PnL feedback loop: the ONE place (besides ResearchPipeline's add-only
-// promotion) that adjusts EXISTING strategies based on real trading results.
+// Promotion) that adjusts EXISTING strategies based on real trading results.
 // Two distinct actions, both longer-horizon and more conservative than
 // StrategyCircuitBreaker's temporary pause:
 //   - resize: nudge an existing strategy's sizeMultiplier up/down based on
-//     live PF vs its own backtest reference, bounded per cycle.
+//     Live PF vs its own backtest reference, bounded per cycle.
 //   - prune: soft-disable (enabled:false) a strategy whose live PF stays
-//     decisively below floor over a long sample, with no partial-recovery
-//     signal — permanent until a human re-enables it in strategies.json.
+//     Decisively below floor over a long sample, with no partial-recovery
+//     Signal — permanent until a human re-enables it in strategies.json.
 //
 // Ships dry-run by default (see DEFAULT_PNL_ADAPTOR_CONFIG): computes and
-// logs every decision to pnlAdjustmentsFile without ever writing
-// strategies.json or calling reloadPool, until TRADINGAGENT_PNL_ADAPTOR_LIVE
-// is explicitly set (see scripts/autonomous-trading-daemon.ts wiring).
+// Logs every decision to pnlAdjustmentsFile without ever writing
+// Strategies.json or calling reloadPool, until TRADINGAGENT_PNL_ADAPTOR_LIVE
+// Is explicitly set (see scripts/autonomous-trading-daemon.ts wiring).
 
 export interface PnlAdaptorConfig {
   journalFile: string;
   poolPath: string;
   stateFile: string;
   pnlAdjustmentsFile: string;
-  minSampleSize: number;        // live trades needed before any resize
-  pruneMinSample: number;       // live trades needed before prune is considered (>= minSampleSize)
-  pruneFloorPf: number;         // prune if live PF stays under this after pruneMinSample trades
-  recoverySliceSize: number;    // most-recent-N trades checked for a recovery signal before pruning
-  maxSizeStepPerCycle: number;  // max +/- change to sizeMultiplier in one cycle
+  minSampleSize: number;        // Live trades needed before any resize
+  pruneMinSample: number;       // Live trades needed before prune is considered (>= minSampleSize)
+  pruneFloorPf: number;         // Prune if live PF stays under this after pruneMinSample trades
+  recoverySliceSize: number;    // Most-recent-N trades checked for a recovery signal before pruning
+  maxSizeStepPerCycle: number;  // Max +/- change to sizeMultiplier in one cycle
   sizeMultiplierMin: number;
   sizeMultiplierMax: number;
   dryRun: boolean;
@@ -52,11 +54,11 @@ export const DEFAULT_PNL_ADAPTOR_CONFIG: PnlAdaptorConfig = {
   notifyTelegram: true,
 };
 
-// null = not enough live trades yet, no change this cycle. Scales down when
-// live PF trails backtest PF meaningfully (below 70% of backtest PF), scales
-// up cautiously when live PF clears backtest PF outright — bounded to
-// maxSizeStepPerCycle either direction so no single cycle can swing sizing
-// far off a human-set starting point.
+// Null = not enough live trades yet, no change this cycle. Scales down when
+// Live PF trails backtest PF meaningfully (below 70% of backtest PF), scales
+// Up cautiously when live PF clears backtest PF outright — bounded to
+// MaxSizeStepPerCycle either direction so no single cycle can swing sizing
+// Far off a human-set starting point.
 export function decideSizeMultiplier(
   liveTrades: ClosedTrade[],
   backtestPf: number,
@@ -69,17 +71,17 @@ export function decideSizeMultiplier(
   let target = currentSizeMultiplier;
   if (livePf < backtestPf * 0.7) target = currentSizeMultiplier - cfg.maxSizeStepPerCycle;
   else if (livePf > backtestPf) target = currentSizeMultiplier + cfg.maxSizeStepPerCycle;
-  else return null; // within normal band -- no change
+  else return null; // Within normal band -- no change
 
   target = Math.max(cfg.sizeMultiplierMin, Math.min(cfg.sizeMultiplierMax, target));
   return target === currentSizeMultiplier ? null : Math.round(target * 100) / 100;
 }
 
 // Harsher, longer-horizon than StrategyCircuitBreaker's pause: requires a
-// much bigger sample (pruneMinSample) with live PF decisively under floor,
+// Much bigger sample (pruneMinSample) with live PF decisively under floor,
 // AND no recovery signal in the most recent recoverySliceSize trades (a
-// strategy climbing back out doesn't get permanently cut for a bad stretch
-// circuit-breaker already paused-and-resumed through).
+// Strategy climbing back out doesn't get permanently cut for a bad stretch
+// Circuit-breaker already paused-and-resumed through).
 export function decidePrune(
   liveTrades: ClosedTrade[],
   cfg: Pick<PnlAdaptorConfig, "pruneMinSample" | "pruneFloorPf" | "recoverySliceSize">,
@@ -108,8 +110,8 @@ interface PoolStrategy {
 }
 
 export class PnlAdaptor {
-  private cfg: PnlAdaptorConfig;
-  private runner: LivePaperRunner | null;
+  private readonly cfg: PnlAdaptorConfig;
+  private readonly runner: LivePaperRunner | null;
   private state: AdaptorState = {};
   private running = false;
 
@@ -134,7 +136,7 @@ export class PnlAdaptor {
   private logAdjustment(entry: Record<string, unknown>) {
     const dir = dirname(this.cfg.pnlAdjustmentsFile);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    appendFileSync(this.cfg.pnlAdjustmentsFile, JSON.stringify({ ts: new Date().toISOString(), ...entry }) + "\n");
+    appendFileSync(this.cfg.pnlAdjustmentsFile, `${JSON.stringify({ ts: new Date().toISOString(), ...entry })  }\n`);
   }
 
   // Runs once; returns strategies resized/pruned this call (empty in dryRun
@@ -156,7 +158,7 @@ export class PnlAdaptor {
     for (const strat of strategies) {
       const trades = byStrategy.get(strat.id) ?? [];
       const entry = this.state[strat.id] ?? { lastAdjustedTradeCount: 0 };
-      if (trades.length === entry.lastAdjustedTradeCount) continue; // no new data since last cycle
+      if (trades.length === entry.lastAdjustedTradeCount) continue; // No new data since last cycle
 
       const currentSize = strat.sizeMultiplier ?? 1;
       const newSize = decideSizeMultiplier(trades, strat.metrics.pf, currentSize, this.cfg);

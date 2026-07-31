@@ -1,5 +1,6 @@
-import { Provider, RateLimitError, ProviderError, ChatResponse } from "../../src/provider/provider.js";
 import { ModelCatalog } from "../../src/provider/catalog.js";
+import type { ChatResponse } from "../../src/provider/provider.js";
+import { Provider, RateLimitError, ProviderError } from "../../src/provider/provider.js";
 import { Router } from "../../src/provider/router.js";
 
 const okResponse = (content: string): ChatResponse => ({

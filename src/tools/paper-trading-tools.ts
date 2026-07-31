@@ -1,8 +1,9 @@
+import type { PaperTradingManager } from "../exchange/paper-trading.js";
+
 import { Tool } from "./tool.js";
-import { PaperTradingManager } from "../exchange/paper-trading.js";
 
 export class BinancePaperTradeTool extends Tool {
-  constructor(private paper: PaperTradingManager) {
+  constructor(private readonly paper: PaperTradingManager) {
     super();
   }
 
@@ -21,11 +22,11 @@ export class BinancePaperTradeTool extends Tool {
     );
   }
 
-  get tags(): string[] {
+  override get tags(): string[] {
     return ["binance", "paper-trading", "simulation", "quant-research"];
   }
 
-  get parameters(): Record<string, unknown> {
+  override get parameters(): Record<string, unknown> {
     return {
       type: "object",
       properties: {
@@ -43,28 +44,28 @@ export class BinancePaperTradeTool extends Tool {
   }
 
   async call(args: Record<string, unknown>): Promise<Record<string, unknown>> {
-    const action = String(args.action ?? "");
+    const action = String(args["action"] ?? "");
 
     if (action === "open") {
-      const symbol = String(args.symbol ?? "");
-      const direction = args.direction as "long" | "short";
-      const quantity = Number(args.quantity);
+      const symbol = String(args["symbol"] ?? "");
+      const direction = args["direction"] as "long" | "short";
+      const quantity = Number(args["quantity"]);
       if (!symbol || (direction !== "long" && direction !== "short") || Number.isNaN(quantity)) {
         return { error: "InvalidArgs", message: "open requires symbol, direction ('long'|'short'), quantity" };
       }
-      const stopPrice = typeof args.stopPrice === "number" ? args.stopPrice : undefined;
-      const targetPrice = typeof args.targetPrice === "number" ? args.targetPrice : undefined;
+      const stopPrice = typeof args["stopPrice"] === "number" ? args["stopPrice"] : undefined;
+      const targetPrice = typeof args["targetPrice"] === "number" ? args["targetPrice"] : undefined;
       const result = await this.paper.open(symbol, direction, quantity, stopPrice, targetPrice);
       return "error" in result ? result : { ...result };
     }
 
     if (action === "list") {
-      const openOnly = args.openOnly === true;
+      const openOnly = args["openOnly"] === true;
       return { positions: this.paper.list(openOnly) };
     }
 
     if (action === "close") {
-      const id = Number(args.id);
+      const id = Number(args["id"]);
       const closed = this.paper.close(id, "manual");
       return closed ? { ...closed } : { error: "NotFound", message: `No open position with id ${id}` };
     }

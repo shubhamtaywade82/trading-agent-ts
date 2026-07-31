@@ -1,5 +1,5 @@
+import type { Provider } from "../../src/provider/provider.js";
 import { generatePlan, PlanGenerationError } from "../../src/tui/plan-generator.js";
-import { Provider } from "../../src/provider/provider.js";
 
 function fakeProvider(content: string) {
   return {
@@ -18,7 +18,7 @@ describe("generatePlan", () => {
 
     const steps = await generatePlan("add a CommandRegistry", provider);
 
-    expect(steps).toEqual([
+    expect(steps).toStrictEqual([
       { id: "s1", description: "create types.ts", dependencies: [], status: "pending", retryCount: 0 },
       { id: "s2", description: "create registry", dependencies: ["s1"], status: "pending", retryCount: 0 },
     ]);
@@ -29,7 +29,7 @@ describe("generatePlan", () => {
 
     const steps = await generatePlan("do it", provider);
 
-    expect(steps).toEqual([{ id: "s1", description: "do it", dependencies: [], status: "pending", retryCount: 0 }]);
+    expect(steps).toStrictEqual([{ id: "s1", description: "do it", dependencies: [], status: "pending", retryCount: 0 }]);
   });
 
   it("throws PlanGenerationError on malformed JSON, without a silent single-step fallback", async () => {

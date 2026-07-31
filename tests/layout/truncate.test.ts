@@ -31,16 +31,16 @@ describe("elidePath", () => {
 
 describe("tail", () => {
   it("returns the last N items", () => {
-    expect(tail([1, 2, 3, 4], 2)).toEqual([3, 4]);
-    expect(tail([1, 2], 5)).toEqual([1, 2]);
-    expect(tail([1, 2], 0)).toEqual([]);
+    expect(tail([1, 2, 3, 4], 2)).toStrictEqual([3, 4]);
+    expect(tail([1, 2], 5)).toStrictEqual([1, 2]);
+    expect(tail([1, 2], 0)).toStrictEqual([]);
   });
 });
 
 describe("wrapText", () => {
   it("hard-wraps long lines and preserves newlines", () => {
-    expect(wrapText("abcdefgh", 3)).toEqual(["abc", "def", "gh"]);
-    expect(wrapText("ab\ncd", 10)).toEqual(["ab", "cd"]);
-    expect(wrapText("x", 0)).toEqual([]);
+    expect(wrapText("abcdefgh", 3)).toStrictEqual(["abc", "def", "gh"]);
+    expect(wrapText("ab\ncd", 10)).toStrictEqual(["ab", "cd"]);
+    expect(wrapText("x", 0)).toStrictEqual([]);
   });
 });

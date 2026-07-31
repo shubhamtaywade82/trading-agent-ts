@@ -1,5 +1,6 @@
 import { smaSeries, emaSeries, rsiSeries, macdSeries, bollingerSeries } from "../tools/indicators.js";
-import { Candle, Condition } from "./types.js";
+
+import type { Candle, Condition } from "./types.js";
 
 export interface IndicatorSeries {
   closes: number[];
@@ -14,7 +15,7 @@ const DEFAULT_SMA_EMA_PERIOD = 20;
 const DEFAULT_RSI_PERIOD = 14;
 
 // Precomputes every series a condition set might reference, keyed by the
-// periods actually requested (avoids recomputing a full series per-candle).
+// Periods actually requested (avoids recomputing a full series per-candle).
 export function buildIndicatorSeries(candles: Candle[], conditions: Condition[]): IndicatorSeries {
   const closes = candles.map((c) => c.close);
   const smaPeriods = new Set<number>();
@@ -48,12 +49,12 @@ export function buildIndicatorSeries(candles: Candle[], conditions: Condition[])
   };
 }
 
-// emaSeries() only returns the post-warmup tail; pad the front with NaN so
-// index i in the padded array lines up with candle i, matching the other series.
+// EmaSeries() only returns the post-warmup tail; pad the front with NaN so
+// Index i in the padded array lines up with candle i, matching the other series.
 function emaSeriesPadded(values: number[], period: number): number[] {
   const raw = emaSeries(values, period);
   const padCount = values.length - raw.length;
-  return [...Array(Math.max(0, padCount)).fill(NaN), ...raw];
+  return [...Array.from({length: Math.max(0, padCount)}, () => NaN), ...raw];
 }
 
 export function evaluateCondition(cond: Condition, series: IndicatorSeries, i: number): boolean {
@@ -68,19 +69,23 @@ export function evaluateCondition(cond: Condition, series: IndicatorSeries, i: n
     }
     case "price_above_sma": {
       const v = series.sma.get(cond.period ?? DEFAULT_SMA_EMA_PERIOD)?.[i];
-      return v !== undefined && !Number.isNaN(v) && series.closes[i] > v;
+      const close = series.closes[i];
+      return v !== undefined && close !== undefined && !Number.isNaN(v) && close > v;
     }
     case "price_below_sma": {
       const v = series.sma.get(cond.period ?? DEFAULT_SMA_EMA_PERIOD)?.[i];
-      return v !== undefined && !Number.isNaN(v) && series.closes[i] < v;
+      const close = series.closes[i];
+      return v !== undefined && close !== undefined && !Number.isNaN(v) && close < v;
     }
     case "price_above_ema": {
       const v = series.ema.get(cond.period ?? DEFAULT_SMA_EMA_PERIOD)?.[i];
-      return v !== undefined && !Number.isNaN(v) && series.closes[i] > v;
+      const close = series.closes[i];
+      return v !== undefined && close !== undefined && !Number.isNaN(v) && close > v;
     }
     case "price_below_ema": {
       const v = series.ema.get(cond.period ?? DEFAULT_SMA_EMA_PERIOD)?.[i];
-      return v !== undefined && !Number.isNaN(v) && series.closes[i] < v;
+      const close = series.closes[i];
+      return v !== undefined && close !== undefined && !Number.isNaN(v) && close < v;
     }
     case "macd_bullish_cross": {
       const cur = series.macd[i];
@@ -96,14 +101,17 @@ export function evaluateCondition(cond: Condition, series: IndicatorSeries, i: n
     }
     case "bollinger_touch_lower": {
       const b = series.bollinger[i];
-      return !!b && !Number.isNaN(b.lower) && series.closes[i] <= b.lower;
+      const close = series.closes[i];
+      return !!b && close !== undefined && !Number.isNaN(b.lower) && close <= b.lower;
     }
     case "bollinger_touch_upper": {
       const b = series.bollinger[i];
-      return !!b && !Number.isNaN(b.upper) && series.closes[i] >= b.upper;
+      const close = series.closes[i];
+      return !!b && close !== undefined && !Number.isNaN(b.upper) && close >= b.upper;
     }
-    default:
+    default: {
       return false;
+    }
   }
 }
 

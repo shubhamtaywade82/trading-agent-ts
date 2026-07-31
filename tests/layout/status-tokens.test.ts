@@ -1,5 +1,5 @@
 import { packTokens, renderTokenLine, TOKEN_SEPARATOR } from "../../src/layout/status-tokens.js";
-import { StatusToken } from "../../src/runtime/types.js";
+import type { StatusToken } from "../../src/runtime/types.js";
 
 const tokens: StatusToken[] = [
   { text: "Now: Running tests", priority: 1 },
@@ -17,7 +17,7 @@ describe("packTokens", () => {
   it("drops lowest-priority tokens first as width shrinks", () => {
     const width = "Now: Running tests".length + TOKEN_SEPARATOR.length + "Tool:pnpm test".length;
     const packed = packTokens(tokens, width);
-    expect(packed.map((t) => t.text)).toEqual(["Now: Running tests", "Tool:pnpm test"]);
+    expect(packed.map((t) => t.text)).toStrictEqual(["Now: Running tests", "Tool:pnpm test"]);
   });
 
   it("preserves original ordering among survivors", () => {
@@ -27,7 +27,7 @@ describe("packTokens", () => {
       { text: "bbb", priority: 2 },
     ];
     const packed = packTokens(shuffled, 500);
-    expect(packed.map((t) => t.text)).toEqual(["ccc", "aaa", "bbb"]);
+    expect(packed.map((t) => t.text)).toStrictEqual(["ccc", "aaa", "bbb"]);
   });
 
   it("can skip a large token but keep a smaller lower-priority one", () => {
@@ -37,7 +37,7 @@ describe("packTokens", () => {
       { text: "cc", priority: 3 },
     ];
     const packed = packTokens(mixed, 12);
-    expect(packed.map((t) => t.text)).toEqual(["aaaa", "cc"]);
+    expect(packed.map((t) => t.text)).toStrictEqual(["aaaa", "cc"]);
   });
 
   it("always shows the top token truncated when nothing fits", () => {

@@ -1,13 +1,15 @@
-import React, { useEffect, useState, useRef } from "react";
+import { readFileSync, existsSync } from "node:fs";
+
 import { Box, Text, useApp, useInput } from "ink";
-import { readFileSync, existsSync } from "fs";
-import { LivePaperRunner } from "../paper-trading/live-runner.js";
+import React, { useEffect, useState, useRef } from "react";
+
 import { BinanceStreamManager } from "../exchange/binance-stream.js";
-import { TradeAnalyst } from "../paper-trading/trade-analyst.js";
-import { ReadinessMonitor, StrategyReadiness, PortfolioReadiness } from "../paper-trading/readiness.js";
-import { FillNotifier } from "../paper-trading/notifier.js";
-import { TradeEvaluator, TradeEvaluation } from "../paper-trading/trade-evaluator.js";
-import { SymbolPosition } from "../paper-trading/symbol-position.js";
+import type { LivePaperRunner } from "../paper-trading/live-runner.js";
+import type { FillNotifier } from "../paper-trading/notifier.js";
+import type { ReadinessMonitor, StrategyReadiness, PortfolioReadiness } from "../paper-trading/readiness.js";
+import type { SymbolPosition } from "../paper-trading/symbol-position.js";
+import type { TradeAnalyst } from "../paper-trading/trade-analyst.js";
+import type { TradeEvaluator, TradeEvaluation } from "../paper-trading/trade-evaluator.js";
 
 interface RowStatus {
   id: string; symbol: string; tf: string; direction: "long" | "short";
@@ -31,7 +33,7 @@ function fmtMoney(n: number): string {
   return `${n >= 0 ? "+" : "-"}$${Math.abs(n).toFixed(2)}`;
 }
 function pnlColor(n: number): string {
-  return n > 0 ? "green" : n < 0 ? "red" : "gray";
+  return n > 0 ? "green" : (n < 0 ? "red" : "gray");
 }
 function readLastJournalEvents(journalFile: string, n: number): FeedEvent[] {
   if (!existsSync(journalFile)) return [];
@@ -55,15 +57,15 @@ function Panel({ title, borderColor, children }: { title: string; borderColor: s
 }
 
 // Fixed-width grid column — guarantees a real gutter between cells
-// regardless of content length, unlike string padStart/padEnd concatenation
+// Regardless of content length, unlike string padStart/padEnd concatenation
 // (which silently loses its gap the moment content reaches the column
-// width). Every table in this dashboard is built from these.
+// Width). Every table in this dashboard is built from these.
 function Col({ width, align = "left", color, bold, children }: {
   width: number; align?: "left" | "right"; color?: string; bold?: boolean; children: React.ReactNode;
 }): JSX.Element {
   return (
     <Box width={width} marginRight={2} justifyContent={align === "right" ? "flex-end" : "flex-start"}>
-      <Text color={color} bold={bold} wrap="truncate">{children}</Text>
+      <Text wrap="truncate" {...(color !== undefined && { color })} {...(bold !== undefined && { bold })}>{children}</Text>
     </Box>
   );
 }
@@ -90,11 +92,11 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
   const [clock, setClock] = useState(new Date());
 
   // Live WS price feed — DISPLAY ONLY. Entries/exits still only ever
-  // evaluate on closed candles inside runner.tick(), identical to the
-  // backtest engine. This never influences a trading decision — it exists
-  // purely so the dashboard shows a moving current price and mark-to-market
-  // unrealized PnL between candle closes, instead of looking frozen for
-  // up to `pollMs`.
+  // Evaluate on closed candles inside runner.tick(), identical to the
+  // Backtest engine. This never influences a trading decision — it exists
+  // Purely so the dashboard shows a moving current price and mark-to-market
+  // Unrealized PnL between candle closes, instead of looking frozen for
+  // Up to `pollMs`.
   const streamRef = useRef<BinanceStreamManager | null>(null);
   const [livePrices, setLivePrices] = useState<Record<string, { price: number; time: number; changePct24h?: number }>>({});
   const [wsStatus, setWsStatus] = useState<Record<string, "connecting" | "live" | "stale" | "error">>({});
@@ -108,8 +110,8 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
     setWsStatus(initial);
     for (const sym of symbols) {
       stream.subscribe(sym)
-        .then(() => setWsStatus(s => ({ ...s, [sym]: "live" })))
-        .catch(() => setWsStatus(s => ({ ...s, [sym]: "error" })));
+        .then(() => { setWsStatus(s => ({ ...s, [sym]: "live" })); })
+        .catch(() => { setWsStatus(s => ({ ...s, [sym]: "error" })); });
     }
     return () => {
       for (const sym of symbols) stream.unsubscribe(sym);
@@ -118,11 +120,11 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
 
   // Single 1s heartbeat driving every per-second concern (clock, countdown,
   // WS price poll) — was 3 separate setInterval callbacks each calling
-  // setState independently, which Ink/React would render as 2-3 separate
-  // full-terminal repaints per second (visible flicker). One interval means
-  // one batched render per second. Also skips setState entirely when a
-  // symbol's price/status hasn't actually changed, so the diff Ink repaints
-  // stays as small as possible even on the one render/sec that does happen.
+  // SetState independently, which Ink/React would render as 2-3 separate
+  // Full-terminal repaints per second (visible flicker). One interval means
+  // One batched render per second. Also skips setState entirely when a
+  // Symbol's price/status hasn't actually changed, so the diff Ink repaints
+  // Stays as small as possible even on the one render/sec that does happen.
   useEffect(() => {
     const t = setInterval(() => {
       setClock(new Date());
@@ -138,7 +140,7 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
         for (const sym of symbols) {
           const tick = stream.getLatest(sym);
           if (tick && (prev[sym]?.price !== tick.price || prev[sym]?.time !== tick.time)) {
-            next[sym] = { price: tick.price, time: tick.time, changePct24h: tick.changePct24h };
+            next[sym] = { price: tick.price, time: tick.time, ...(tick.changePct24h !== undefined && { changePct24h: tick.changePct24h }) };
             changed = true;
           }
         }
@@ -150,17 +152,17 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
         for (const sym of symbols) {
           if (next[sym] === "error") continue;
           const tick = stream.getLatest(sym);
-          const computed = tick && Date.now() - tick.time < 15_000 ? "live" : next[sym] === "connecting" ? "connecting" : "stale";
+          const computed = tick && Date.now() - tick.time < 15_000 ? "live" : (next[sym] === "connecting" ? "connecting" : "stale");
           if (computed !== prev[sym]) { next[sym] = computed; changed = true; }
         }
         return changed ? next : prev;
       });
     }, 1000);
-    return () => clearInterval(t);
+    return () => { clearInterval(t); };
   }, [runner]);
 
   // Deterministic readiness gate (not LLM-judged, see readiness.ts) — run
-  // once on mount so the panel isn't blank until the first new fill.
+  // Once on mount so the panel isn't blank until the first new fill.
   useEffect(() => {
     if (!readiness) return;
     let cancelled = false;
@@ -169,9 +171,9 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
   }, [readiness]);
 
   // Read-only LLM analyst — checks its own schedule (min trade count + min
-  // interval, see trade-analyst.ts) and only calls the model when due. This
-  // never touches runner/trading state; it only reads the journal file and
-  // appends to its own log. analystRunning just drives a spinner in the UI.
+  // Interval, see trade-analyst.ts) and only calls the model when due. This
+  // Never touches runner/trading state; it only reads the journal file and
+  // Appends to its own log. analystRunning just drives a spinner in the UI.
   useEffect(() => {
     if (!analyst) return;
     let stopped = false;
@@ -183,8 +185,8 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
   }, [analyst]);
 
   // Per-EVENT LLM evaluator — separate from the periodic-batch analyst
-  // above. Runs its own background queue (trade-evaluator.ts); this effect
-  // just starts/stops it and reflects its output into the panel.
+  // Above. Runs its own background queue (trade-evaluator.ts); this effect
+  // Just starts/stops it and reflects its output into the panel.
   useEffect(() => {
     if (!evaluator) return;
     let stopped = false;
@@ -199,11 +201,13 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
   if (process.stdin.isTTY) {
     // eslint-disable-next-line react-hooks/rules-of-hooks
     useInput((input, key) => {
-      if (input === "q" || key.escape || (key.ctrl && input === "c")) {
-        runner.stop();
-        exit();
-        if (onExit) onExit(); else process.exit(0);
+      if (!(input === "q" || key.escape || (key.ctrl && input === "c"))) {
+      	return;
       }
+
+      runner.stop();
+      exit();
+      if (onExit) onExit(); else process.exit(0);
     });
   }
 
@@ -214,7 +218,7 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
         setTicking(true);
         try {
           const result = await runner.tick();
-          setRows(runner.getStatus() as RowStatus[]);
+          setRows(runner.getStatus());
           setSymbolPositions(runner.getSymbolPositions());
           setLastEval(result.evaluations);
           setLastTick(new Date());
@@ -280,9 +284,9 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
           const st = wsStatus[sym] ?? "connecting";
           const chg = p?.changePct24h;
           return (
-            <Box key={sym} borderStyle="single" borderColor={st === "live" ? "green" : st === "error" ? "red" : "yellow"} paddingX={1} marginRight={1}>
+            <Box key={sym} borderStyle="single" borderColor={st === "live" ? "green" : (st === "error" ? "red" : "yellow")} paddingX={1} marginRight={1}>
               <Text>
-                <Text color={st === "live" ? "green" : st === "error" ? "red" : "yellow"}>{BULLET[st]}</Text>
+                <Text color={st === "live" ? "green" : (st === "error" ? "red" : "yellow")}>{BULLET[st]}</Text>
                 {" "}<Text bold>{sym.replace("USDT", "")}</Text>
                 {"  "}<Text bold color="white">{p ? p.price.toFixed(4) : "-.----"}</Text>
                 {chg !== undefined && !Number.isNaN(chg) && (
@@ -340,7 +344,7 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
         </Box>
         <Box>
           <Text color="gray">
-            {ticking ? "⟳ checking strategies..." : lastTick ? `⟳ last check ${lastTick.toLocaleTimeString()} · ${lastEval.length} evaluated${firedThisTick.length > 0 ? `, ${firedThisTick.length} fired` : ""} · next in ${nextTickIn}s` : "starting..."}
+            {ticking ? "⟳ checking strategies..." : (lastTick ? `⟳ last check ${lastTick.toLocaleTimeString()} · ${lastEval.length} evaluated${firedThisTick.length > 0 ? `, ${firedThisTick.length} fired` : ""} · next in ${nextTickIn}s` : "starting...")}
             {anyStale && <Text color="yellow">  ⚠ price feed degraded</Text>}
           </Text>
         </Box>
@@ -468,7 +472,7 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
                 {new Date(e.ts).toLocaleTimeString()}{"  "}
                 <Text color={e.eventType === "entry" ? "yellow" : "cyan"} bold>{e.eventType.toUpperCase()}</Text>
                 {" "}{e.strategyId}
-                {e.qualityScore !== null && <Text color={e.qualityScore >= 4 ? "green" : e.qualityScore <= 2 ? "red" : "yellow"}> [{e.qualityScore}/5]</Text>}
+                {e.qualityScore !== null && <Text color={e.qualityScore >= 4 ? "green" : (e.qualityScore <= 2 ? "red" : "yellow")}> [{e.qualityScore}/5]</Text>}
               </Text>
               {e.error ? <Text color="red">  error: {e.error}</Text> : <Text wrap="wrap">  {e.evaluation}</Text>}
             </Box>

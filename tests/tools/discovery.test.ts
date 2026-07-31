@@ -1,6 +1,6 @@
-import { Tool } from "../../src/tools/tool.js";
+import type { Provider} from "../../src/provider/provider.js";
 import { DynamicToolSelector } from "../../src/tools/discovery.js";
-import { Provider, ChatMessage } from "../../src/provider/provider.js";
+import { Tool } from "../../src/tools/tool.js";
 
 class MockTool extends Tool {
   constructor(
@@ -84,7 +84,7 @@ describe("DynamicToolSelector", () => {
       const selected = await selector.selectTools("open file", [], tools);
 
       expect(mockProvider.chat).toHaveBeenCalled();
-      expect(selected.length).toBe(1);
+      expect(selected).toHaveLength(1);
       expect(selected[0].name).toBe("read_file");
     });
 
@@ -100,7 +100,7 @@ describe("DynamicToolSelector", () => {
       const selector = new DynamicToolSelector({ mode: "llm", provider: mockProvider });
       const selected = await selector.selectTools("run cmd", [], tools);
 
-      expect(selected.length).toBe(1);
+      expect(selected).toHaveLength(1);
       expect(selected[0].name).toBe("run_shell");
     });
 

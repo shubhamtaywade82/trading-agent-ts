@@ -7,7 +7,7 @@ export interface McpToolDescriptor {
 }
 
 export interface McpClientLike {
-  callTool(request: { name: string; arguments: Record<string, unknown> }): Promise<Record<string, unknown>>;
+  callTool: (request: { name: string; arguments: Record<string, unknown> }) => Promise<Record<string, unknown>>;
 }
 
 export class McpToolAdapter extends Tool {
@@ -26,7 +26,7 @@ export class McpToolAdapter extends Tool {
     return this.descriptor.description;
   }
 
-  get parameters(): Record<string, unknown> {
+  override get parameters(): Record<string, unknown> {
     return this.descriptor.inputSchema;
   }
 

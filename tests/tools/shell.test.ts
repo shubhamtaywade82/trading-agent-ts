@@ -1,9 +1,10 @@
 import { EventEmitter } from "node:events";
+
 import { jest } from "@jest/globals";
 
-// jest.mock's auto-hoisting doesn't apply to real ESM — mock explicitly and
-// import both the mock and the module under test dynamically, after the
-// mock is registered (see https://jestjs.io/docs/ecmascript-modules).
+// Jest.mock's auto-hoisting doesn't apply to real ESM — mock explicitly and
+// Import both the mock and the module under test dynamically, after the
+// Mock is registered (see https://jestjs.io/docs/ecmascript-modules).
 jest.unstable_mockModule("node:child_process", () => ({ spawn: jest.fn() }));
 
 const { spawn } = await import("node:child_process");
@@ -31,7 +32,7 @@ afterEach(() => {
 });
 
 // Dynamic `await import()` gives ShellTool as a value binding only — this
-// recovers a type from it for annotations below.
+// Recovers a type from it for annotations below.
 type ShellToolInstance = InstanceType<typeof ShellTool>;
 
 function skipDockerPreflight(tool: ShellToolInstance): void {
@@ -52,7 +53,7 @@ describe("ShellTool", () => {
     proc.stderr.emit("data", Buffer.from(""));
     proc.emit("close", 0);
 
-    expect(await promise).toMatchObject({ exitCode: 0, stdout: "hi\n" });
+    await expect(promise).resolves.toMatchObject({ exitCode: 0, stdout: "hi\n" });
   });
 
   it("returns non-zero exitCode on command failure", async () => {

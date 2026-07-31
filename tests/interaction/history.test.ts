@@ -5,9 +5,9 @@ describe("HistoryManager", () => {
     const h = new HistoryManager(["first", "second"]);
     expect(h.up("draft")).toBe("second");
     expect(h.up("second")).toBe("first");
-    expect(h.up("first")).toBe("first"); // clamped at oldest
+    expect(h.up("first")).toBe("first"); // Clamped at oldest
     expect(h.down("first")).toBe("second");
-    expect(h.down("second")).toBe("draft"); // restores draft
+    expect(h.down("second")).toBe("draft"); // Restores draft
     expect(h.down("draft")).toBe("draft");
   });
 
@@ -16,19 +16,19 @@ describe("HistoryManager", () => {
     h.add("a");
     h.add("b");
     h.add("a");
-    expect(h.all()).toEqual(["b", "a"]);
+    expect(h.all()).toStrictEqual(["b", "a"]);
   });
 
   it("ignores blank entries", () => {
     const h = new HistoryManager();
     h.add("   ");
-    expect(h.all()).toEqual([]);
+    expect(h.all()).toStrictEqual([]);
   });
 
   it("caps history at max entries", () => {
     const h = new HistoryManager([], 3);
     for (const x of ["1", "2", "3", "4"]) h.add(x);
-    expect(h.all()).toEqual(["2", "3", "4"]);
+    expect(h.all()).toStrictEqual(["2", "3", "4"]);
   });
 
   it("search finds the newest entry containing all terms", () => {

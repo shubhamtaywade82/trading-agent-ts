@@ -1,10 +1,10 @@
-import { BenchmarkCase } from "./types.js";
+import type { BenchmarkCase } from "./types.js";
 
 function parseContent(content: unknown): unknown {
   if (typeof content !== "string") return undefined;
   // Models sometimes wrap JSON in a ```json fence despite instructions not to.
-  const fenced = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-  const raw = fenced ? fenced[1] : content;
+  const fenced = /```(?:json)?\s*([\s\S]*?)\s*```/.exec(content);
+  const raw = fenced?.[1] ?? content;
   try {
     return JSON.parse(raw.trim());
   } catch {
@@ -51,6 +51,7 @@ export const BUILTIN_CASES: BenchmarkCase[] = [
       const toolCalls = response.message?.tool_calls as Array<{ function: { name: string; arguments: unknown } }> | undefined;
       if (!toolCalls || toolCalls.length === 0) return { pass: false, reason: "no tool call in response" };
       const call = toolCalls[0];
+      if (call === undefined) return { pass: false, reason: "no tool call in response" };
       if (call.function.name !== "get_weather") {
         return { pass: false, reason: `called ${call.function.name} instead of get_weather` };
       }

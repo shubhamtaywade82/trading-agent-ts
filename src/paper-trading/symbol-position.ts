@@ -1,16 +1,17 @@
 // Symbol-level position state machine: one net position per symbol, shared
-// across every strategy registered on it. A strategy's fired entry signal is
-// an *intent*, not a position owner — this module decides whether an intent
-// opens, adds to (averages into), reduces, closes, or flips the symbol's one
-// true position, using weighted-average-cost accounting (the same method a
-// real exchange uses to compute a perpetual position's average entry price —
-// not FIFO lot accounting for the trading economics; FIFO is used only to
-// attribute realized PnL back to contributing strategies for display).
+// Across every strategy registered on it. A strategy's fired entry signal is
+// An *intent*, not a position owner — this module decides whether an intent
+// Opens, adds to (averages into), reduces, closes, or flips the symbol's one
+// True position, using weighted-average-cost accounting (the same method a
+// Real exchange uses to compute a perpetual position's average entry price —
+// Not FIFO lot accounting for the trading economics; FIFO is used only to
+// Attribute realized PnL back to contributing strategies for display).
 //
 // Pure, side-effect-free: no fs/journal access. The caller (LivePaperRunner)
-// owns persistence and journaling of the PositionFill[] this returns.
+// Owns persistence and journaling of the PositionFill[] this returns.
 
-import { TrailingConfig, TrailingState, initTrailingState } from "./trailing.js";
+import type { TrailingConfig, TrailingState} from "./trailing.js";
+import { initTrailingState } from "./trailing.js";
 
 export type Direction = "long" | "short";
 
@@ -35,17 +36,17 @@ export interface StrategyIntent {
   maxHoldBars: number;
   entryBarIdx: number;
   entryBarOpenTime: number;
-  trailingConfig?: TrailingConfig; // governing strategy's trailing config, if any — see open()
+  trailingConfig?: TrailingConfig; // Governing strategy's trailing config, if any — see open()
 }
 
 export interface PositionFill {
   action: FillAction;
-  strategyId: string; // attribution target (FIFO-lot sliced on reduce/close)
-  triggerStrategyId: string; // the signal/risk-plan that actually caused this fill
+  strategyId: string; // Attribution target (FIFO-lot sliced on reduce/close)
+  triggerStrategyId: string; // The signal/risk-plan that actually caused this fill
   direction: Direction;
   price: number;
   qty: number;
-  notionalDelta: number; // positive
+  notionalDelta: number; // Positive
   marginDelta: number; // + for open/add, - for reduce/close
   entryPriceAtFill: number;
   entryTimeAtFill: number | null;
@@ -68,9 +69,9 @@ export interface SymbolPosition {
   notional: number;
   margin: number;
   // Only the strategy that OPENED the position governs its risk plan — adds
-  // from other (or the same) strategy change qty/avgEntryPrice but never the
-  // governing stop/target/maxHoldBars-clock-anchor. See applyIntent's `add`
-  // path for the rationale.
+  // From other (or the same) strategy change qty/avgEntryPrice but never the
+  // Governing stop/target/maxHoldBars-clock-anchor. See applyIntent's `add`
+  // Path for the rationale.
   governingStrategyId: string | null;
   governingStopPrice: number | null;
   governingTargetPrice: number | null;
@@ -80,8 +81,8 @@ export interface SymbolPosition {
   contributingStrategyIds: string[];
   lots: Lot[]; // FIFO, oldest first — attribution only, never affects P&L math
   // Set once at open() from the governing strategy's config, untouched by
-  // add() — same rule as every other governing* field above. null when the
-  // governing strategy has no trailing config or it's disabled.
+  // Add() — same rule as every other governing* field above. null when the
+  // Governing strategy has no trailing config or it's disabled.
   trailing: TrailingState | null;
   trailingConfig: TrailingConfig | null;
 }
@@ -124,11 +125,11 @@ export function computeLiqPrice(direction: Direction, entryPrice: number, levera
 
 // Splits a reduce/close's total realized PnL/fee/notional/margin across the
 // FIFO lots being consumed, purely for per-strategy attribution display —
-// the trading economics (the four totals) are computed once by the caller
-// off the position's single true avgEntryPrice and never recomputed here.
+// The trading economics (the four totals) are computed once by the caller
+// Off the position's single true avgEntryPrice and never recomputed here.
 // The last consumed slice takes the remainder of each total instead of its
-// proportional share, so the slices always sum back exactly (no rounding
-// drift from repeated multiplication).
+// Proportional share, so the slices always sum back exactly (no rounding
+// Drift from repeated multiplication).
 function allocateAcrossLots(
   lots: Lot[],
   qtyToConsume: number,
@@ -170,7 +171,7 @@ function allocateAcrossLots(
     marginDone += sliceMargin;
 
     fills.push({
-      action: "reduce", // caller overwrites with "close"/"flip_close" as appropriate
+      action: "reduce", // Caller overwrites with "close"/"flip_close" as appropriate
       strategyId: lot.strategyId,
       triggerStrategyId,
       direction,
@@ -195,12 +196,12 @@ function allocateAcrossLots(
 
 export class SymbolPositionManager {
   constructor(
-    private leverage: number,
-    private feeBps: number,
+    private readonly leverage: number,
+    private readonly feeBps: number,
   ) {}
 
   private fee(notional: number): number {
-    return notional * (this.feeBps / 10000);
+    return notional * (this.feeBps / 10_000);
   }
 
   /** Signal-driven: a fired strategy intent opens, adds to, reduces, or flips the symbol's position. */
@@ -298,7 +299,7 @@ export class SymbolPositionManager {
       avgEntryPrice: newAvgEntry,
       notional: current.notional + addNotional,
       margin: current.margin + addMargin,
-      // governing* deliberately untouched — see class header comment.
+      // Governing* deliberately untouched — see class header comment.
       contributingStrategyIds,
       lots: [...current.lots, { strategyId: intent.strategyId, qty: qtyAdd, entryBarOpenTime: intent.entryBarOpenTime }],
     };
@@ -390,7 +391,7 @@ export class SymbolPositionManager {
 
     const remainderQty = qtyRequested - closeQty;
     const { position: openPos, fills: openFills } = this.open(flatPos, intent, price, remainderQty);
-    const openFillsFlagged = openFills.map((f) => ({ ...f, action: "flip_open" as FillAction }));
+    const openFillsFlagged = openFills.map((f): PositionFill => ({ ...f, action: "flip_open" }));
 
     return { position: openPos, fills: [...closeFills, ...openFillsFlagged] };
   }

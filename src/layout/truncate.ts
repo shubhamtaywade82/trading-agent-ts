@@ -35,12 +35,12 @@ export function elidePath(path: string, width: number): string {
     const candidate = `${head}/${ELLIPSIS}/${tail}`;
     if (candidate.length <= width) return candidate;
   }
-  return truncateStart(parts[parts.length - 1], width);
+  return truncateStart(parts.at(-1) ?? "", width);
 }
 
 /** Keep the last `count` items of a list (for scroll-follow rendering). */
 export function tail<T>(items: T[], count: number): T[] {
-  return count <= 0 ? [] : items.length <= count ? items : items.slice(items.length - count);
+  return count <= 0 ? [] : (items.length <= count ? items : items.slice(items.length - count));
 }
 
 /** Hard-wrap a line to `width` columns, preserving explicit newlines. */

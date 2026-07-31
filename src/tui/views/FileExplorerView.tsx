@@ -1,6 +1,7 @@
-import React from "react";
 import { Box, Text } from "ink";
-import { ViewProps } from "./ConversationView.js";
+import React from "react";
+
+import type { ViewProps } from "./ConversationView.js";
 
 const MOCK_TREE = [
   { name: "src/", depth: 0, type: "dir" },
@@ -15,7 +16,7 @@ const MOCK_TREE = [
   { name: "tsconfig.json", depth: 0, type: "file" },
 ];
 
-export function FileExplorerView({ width, rows }: ViewProps): JSX.Element {
+export function FileExplorerView({ rows }: ViewProps): JSX.Element {
   return (
     <Box flexDirection="column" height={rows}>
       <Box height={1} marginBottom={1}>

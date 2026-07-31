@@ -4,7 +4,8 @@
  * and the strip never wraps or overflows.
  */
 
-import { StatusToken } from "../runtime/types.js";
+import type { StatusToken } from "../runtime/types.js";
+
 import { truncate } from "./truncate.js";
 
 export const TOKEN_SEPARATOR = " │ ";
@@ -32,6 +33,7 @@ export function packTokens(tokens: StatusToken[], width: number): StatusToken[] 
   // Always show at least the single most important token, truncated.
   if (chosen.size === 0) {
     const top = byPriority[0];
+    if (top === undefined) return [];
     return [{ ...top.token, text: truncate(top.token.text, width) }];
   }
   return indexed.filter(({ index }) => chosen.has(index)).map(({ token }) => token);

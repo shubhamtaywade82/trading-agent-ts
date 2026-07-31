@@ -1,11 +1,12 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { gradeEpisode } from "../../src/learning/grader.js";
 import { LessonStore, lessonId } from "../../src/learning/lesson-store.js";
 import { parseReflection } from "../../src/learning/reflector.js";
 import { SkillSynthesizer } from "../../src/learning/skill-synthesizer.js";
-import { Episode, ToolEvent } from "../../src/learning/types.js";
+import type { Episode, ToolEvent } from "../../src/learning/types.js";
 
 function ev(name: string, ok: boolean, errorLabel?: string): ToolEvent {
   const event: ToolEvent = { name, args: {}, ok, durationMs: 10, at: Date.now() };
@@ -88,7 +89,7 @@ describe("LessonStore", () => {
     const [lesson] = store.absorb(second, "ep-2", 0.4);
 
     expect(lesson.evidenceCount).toBe(2);
-    expect(lesson.episodeIds).toEqual(["ep-1", "ep-2"]);
+    expect(lesson.episodeIds).toStrictEqual(["ep-1", "ep-2"]);
     expect(store.all()).toHaveLength(1);
   });
 
@@ -150,7 +151,7 @@ describe("SkillSynthesizer", () => {
     const synth = new SkillSynthesizer(dir, store, silent);
     const written = synth.synthesize();
 
-    expect(written).toEqual(["learned-rspec"]);
+    expect(written).toStrictEqual(["learned-rspec"]);
     const path = join(dir, ".trading-agent", "skills", "learned-rspec", "SKILL.md");
     expect(existsSync(path)).toBe(true);
     const content = readFileSync(path, "utf8");
@@ -172,7 +173,7 @@ describe("SkillSynthesizer", () => {
 
     const demoted = synth.prune([{ skillId: "learned-build", useCount: 6, successCount: 1, lastUsedAt: Date.now() }]);
 
-    expect(demoted).toEqual(["learned-build"]);
+    expect(demoted).toStrictEqual(["learned-build"]);
     expect(existsSync(join(dir, ".trading-agent", "skills", "learned-build"))).toBe(false);
     expect(store.all()[0].promotedSkillId).toBeNull();
   });

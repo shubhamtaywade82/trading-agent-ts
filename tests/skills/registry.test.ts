@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { SkillsRegistry } from "../../src/skills/registry.js";
 
 function writeSkill(root: string, id: string, frontmatter: string, body = "Body text"): void {
@@ -32,7 +33,7 @@ describe("SkillsRegistry", () => {
         .list()
         .map((s) => s.id)
         .sort(),
-    ).toEqual(["docker", "rails-api"]);
+    ).toStrictEqual(["docker", "rails-api"]);
   });
 
   it("get() finds a known skill and returns undefined for an unknown one", () => {
@@ -50,7 +51,7 @@ describe("SkillsRegistry", () => {
 
   it("resolveForPrompt returns nothing when no skill matches", () => {
     const registry = SkillsRegistry.discover({ workspaceRoot, homeDir });
-    expect(registry.resolveForPrompt("completely unrelated text")).toEqual([]);
+    expect(registry.resolveForPrompt("completely unrelated text")).toStrictEqual([]);
   });
 
   it("activate(id) bypasses scoring and returns full content", () => {

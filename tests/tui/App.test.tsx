@@ -1,18 +1,21 @@
-import React from "react";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { render } from "ink-testing-library";
-import { App, ShellAgent } from "../../src/tui/App.js";
+import React from "react";
+
 import { EventBus } from "../../src/runtime/events.js";
 import { initialRuntimeState, Store } from "../../src/runtime/store.js";
+import type { ShellAgent } from "../../src/tui/App.js";
+import { App } from "../../src/tui/App.js";
 
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
-import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const NOW = new Date(2026, 0, 1, 10, 42, 11).getTime();
 
 // eslint-disable-next-line no-control-regex
-const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "");
+const stripAnsi = (s: string) => s.replaceAll(/\x1B\[[0-9;]*m/g, "");
 
 function makeWorld() {
   const bus = new EventBus();
@@ -59,15 +62,15 @@ function renderApp(
   return { ...world, ...r };
 }
 
-let mockTime = 100000;
+let mockTime = 100_000;
 
 // Above App's FAST_INPUT_MS (20ms) burst-paste-detection threshold — a real
-// human never sends two keystrokes within 20ms, but a same-tick 0ms test
-// helper would, and App would (correctly) mistake that for a paste burst.
+// Human never sends two keystrokes within 20ms, but a same-tick 0ms test
+// Helper would, and App would (correctly) mistake that for a paste burst.
 const tick = async () => {
   mockTime += 30; // Shift mock time by 30ms (which is > FAST_INPUT_MS = 20)
   // Real wait, not mocked: must clear App.tsx's RENDER_THROTTLE_MS (50ms) so a
-  // deferred store-driven render has actually flushed before assertions run.
+  // Deferred store-driven render has actually flushed before assertions run.
   await new Promise((resolve) => setTimeout(resolve, 60));
 };
 
@@ -84,11 +87,11 @@ describe("App shell", () => {
   it("renders all five permanent zones", () => {
     const { lastFrame, unmount } = renderApp();
     const frame = stripAnsi(lastFrame() ?? "");
-    expect(frame).toContain("TradingAgent"); // header
-    expect(frame).toContain("No conversation yet"); // conversation area
-    expect(frame).toContain("Chat"); // activity strip
-    expect(frame).toContain(">"); // prompt
-    expect(frame).toContain("IDLE"); // status in header
+    expect(frame).toContain("TradingAgent"); // Header
+    expect(frame).toContain("No conversation yet"); // Conversation area
+    expect(frame).toContain("Chat"); // Activity strip
+    expect(frame).toContain(">"); // Prompt
+    expect(frame).toContain("IDLE"); // Status in header
     unmount();
   });
 
@@ -138,7 +141,7 @@ describe("App shell", () => {
     expect(stripAnsi(lastFrame() ?? "")).toContain("fix the bug");
     stdin.write("\r");
     await tick();
-    expect(agent.calls).toEqual(["fix the bug"]);
+    expect(agent.calls).toStrictEqual(["fix the bug"]);
     expect(store.getState().conversation[0]).toMatchObject({ role: "user", text: "fix the bug" });
     unmount();
   });
@@ -147,12 +150,12 @@ describe("App shell", () => {
     const { stdin, lastFrame, unmount } = renderApp();
     await tick();
     // Some terminals send these on scroll/click while the app is in raw mode,
-    // even though TradingAgent never enables mouse tracking.
-    stdin.write("\x1b[<65;80;34M\x1b[<64;80;34M");
+    // Even though TradingAgent never enables mouse tracking.
+    stdin.write("\x1B[<65;80;34M\x1B[<64;80;34M");
     await tick();
     const frame = stripAnsi(lastFrame() ?? "");
     expect(frame).not.toContain("[<65");
-    expect(frame).toContain("No conversation yet"); // still idle, nothing typed
+    expect(frame).toContain("No conversation yet"); // Still idle, nothing typed
     unmount();
   });
 
@@ -176,9 +179,9 @@ describe("App shell", () => {
     await tick();
     stdin.write("\r");
     await tick();
-    expect(agent.models).toEqual(["qwen3:8b"]);
+    expect(agent.models).toStrictEqual(["qwen3:8b"]);
     expect(store.getState().model.name).toBe("qwen3:8b");
-    expect(agent.calls).toEqual([]); // never sent to the model as chat
+    expect(agent.calls).toStrictEqual([]); // Never sent to the model as chat
     unmount();
   });
 
@@ -189,7 +192,7 @@ describe("App shell", () => {
     await tick();
     stdin.write("\r");
     await tick();
-    expect(agent.learnings).toEqual([["user_preference", "user explicitly typed /learn", "use 2-space indentation"]]);
+    expect(agent.learnings).toStrictEqual([["user_preference", "user explicitly typed /learn", "use 2-space indentation"]]);
     unmount();
   });
 
@@ -207,11 +210,12 @@ describe("App shell", () => {
     r.stdin.write("/resume");
     await tick();
     r.stdin.write("\r");
-    await tick(100);
+    await tick();
+    await tick(); // Resume publishes N+1 events; extra flush cycles keep CI stable under load
     const frame = stripAnsi(r.lastFrame() ?? "");
     expect(frame).toContain("earlier question");
     expect(frame).toContain("earlier answer");
-    expect(frame).not.toContain("old system prompt"); // system messages are never replayed into the log
+    expect(frame).not.toContain("old system prompt"); // System messages are never replayed into the log
     r.unmount();
   });
 
@@ -269,15 +273,15 @@ describe("App shell", () => {
     await tick();
     stdin.write("\r");
     await tick();
-    await tick(); // listModels resolves
+    await tick(); // ListModels resolves
     const frame = stripAnsi(lastFrame() ?? "");
     expect(frame).toContain("Switch Model");
     expect(frame).toContain("deepseek");
-    stdin.write("\u001B[B"); // down to qwen3:8b
+    stdin.write("\u001B[B"); // Down to qwen3:8b
     await tick();
     stdin.write("\r");
     await tick();
-    expect(agent.models).toEqual(["qwen3:8b"]);
+    expect(agent.models).toStrictEqual(["qwen3:8b"]);
     expect(store.getState().model.name).toBe("qwen3:8b");
     expect(stripAnsi(lastFrame() ?? "")).not.toContain("Switch Model");
     unmount();
@@ -305,13 +309,13 @@ describe("App shell", () => {
     await tick();
     stdin.write("\r");
     await tick();
-    await tick(); // listModels resolves
-    stdin.write("[B"); // down to nomic-embed-text:latest
+    await tick(); // ListModels resolves
+    stdin.write("[B"); // Down to nomic-embed-text:latest
     await tick();
     stdin.write("\r");
-    await tick(); // validateModel resolves and reverts
+    await tick(); // ValidateModel resolves and reverts
     await tick();
-    expect(agent.models).toEqual(["nomic-embed-text:latest", "qwen3:30b"]); // set, then reverted
+    expect(agent.models).toStrictEqual(["nomic-embed-text:latest", "qwen3:30b"]); // Set, then reverted
     expect(store.getState().model.name).toBe("qwen3:30b");
     expect(stripAnsi(lastFrame() ?? "")).toContain("nomic-embed-text:latest unreachable: 404 model not found");
     unmount();
@@ -350,8 +354,8 @@ describe("App shell", () => {
     const { stdin, lastFrame, unmount } = renderApp();
     await tick();
     // Terminals that don't support/emit \x1b[200~..\x1b[201~ still deliver a
-    // paste as one chunk with embedded newlines through Ink's normal stdin —
-    // this must collapse the same way bracketed paste does.
+    // Paste as one chunk with embedded newlines through Ink's normal stdin —
+    // This must collapse the same way bracketed paste does.
     stdin.write("line one\nline two\nline three");
     await tick();
     const frame = stripAnsi(lastFrame() ?? "");
@@ -371,27 +375,27 @@ describe("App shell", () => {
       stdin.write(line);
       stdin.write("\r");
     }
-    mockTime += 100; // let the burst-idle debounce fire
-    await new Promise((resolve) => setTimeout(resolve, 100)); // let the burst-idle debounce fire
-    expect(agent.calls).toEqual([]); // nothing submitted prematurely
+    mockTime += 100; // Let the burst-idle debounce fire
+    await new Promise((resolve) => setTimeout(resolve, 100)); // Let the burst-idle debounce fire
+    expect(agent.calls).toStrictEqual([]); // Nothing submitted prematurely
     const frame = stripAnsi(lastFrame() ?? "");
-    // each line's trailing \r appends its own newline, including the last
-    // one, so 4 pasted lines produce a 5th trailing empty segment
+    // Each line's trailing \r appends its own newline, including the last
+    // One, so 4 pasted lines produce a 5th trailing empty segment
     expect(frame).toContain("[Pasted text #1 +5 lines]");
-    stdin.write("\r"); // now submit for real
+    stdin.write("\r"); // Now submit for real
     await tick();
     // The placeholder label is display-only — the actual message sent to the
-    // model must not contain it, just the real pasted content.
-    expect(agent.calls).toEqual(["# TradingAgent TS\n\nsecond line\nthird line"]);
+    // Model must not contain it, just the real pasted content.
+    expect(agent.calls).toStrictEqual(["# TradingAgent TS\n\nsecond line\nthird line"]);
     unmount();
   });
 
-  it("collapses a real bracketed paste that uses \\r (not \\n) as its line separator", async () => {
+  it(String.raw`collapses a real bracketed paste that uses \r (not \n) as its line separator`, async () => {
     // Exact byte sequence captured via DEVAGENT_DEBUG_STDIN from a real
-    // terminal session: bracketed-paste markers are present and correct,
-    // but the terminal encodes pasted line breaks as bare \r. Bracketed
-    // paste binds to the real process.stdin (not ink-testing-library's
-    // fake stdin), so this test drives that path directly.
+    // Terminal session: bracketed-paste markers are present and correct,
+    // But the terminal encodes pasted line breaks as bare \r. Bracketed
+    // Paste binds to the real process.stdin (not ink-testing-library's
+    // Fake stdin), so this test drives that path directly.
     const wasTTY = process.stdin.isTTY;
     Object.defineProperty(process.stdin, "isTTY", { value: true, configurable: true });
     const world = makeWorld();
@@ -399,7 +403,7 @@ describe("App shell", () => {
     await tick();
 
     const raw = "# TradingAgent TS\r\rA TypeScript developer agent framework...\r\r## Architecture\r\r```\rsrc/\r```\r";
-    process.stdin.emit("data", Buffer.from(`\x1b[200~${raw}\x1b[201~`));
+    process.stdin.emit("data", Buffer.from(`\x1B[200~${raw}\x1B[201~`));
     await tick();
 
     const frame = stripAnsi(r.lastFrame() ?? "");
@@ -449,7 +453,7 @@ describe("App shell", () => {
     // Verify it was written to file as JSON array
     expect(existsSync(historyFile)).toBe(true);
     const parsed = JSON.parse(readFileSync(historyFile, "utf-8"));
-    expect(parsed).toEqual(["test command one"]);
+    expect(parsed).toStrictEqual(["test command one"]);
 
     // Second run - should load from the file
     const r2 = renderApp(120, 30, undefined, tempDir);
@@ -462,7 +466,7 @@ describe("App shell", () => {
 
     // Verify both commands exist in file
     const content = JSON.parse(readFileSync(historyFile, "utf-8"));
-    expect(content).toEqual(["test command one", "test command two"]);
+    expect(content).toStrictEqual(["test command one", "test command two"]);
 
     // Clean up
     rmSync(tempDir, { recursive: true, force: true });
@@ -470,7 +474,7 @@ describe("App shell", () => {
 });
 
 describe("resize safety (regression)", () => {
-  const sizes: [number, number][] = [
+  const sizes: Array<[number, number]> = [
     [80, 24],
     [100, 30],
     [120, 30],
@@ -485,7 +489,7 @@ describe("resize safety (regression)", () => {
       for (let i = 0; i < 40; i++) {
         bus.publish({ type: "logs.appended", level: "info", source: "tool", message: `log line ${i}` });
       }
-      bus.publish({ type: "context.changed", used: 48000, limit: 71000 });
+      bus.publish({ type: "context.changed", used: 48_000, limit: 71_000 });
     });
     const frame = stripAnsi(lastFrame() ?? "");
     const lines = frame.split("\n");

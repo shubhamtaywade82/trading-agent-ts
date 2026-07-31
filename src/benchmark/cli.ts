@@ -1,18 +1,29 @@
 #!/usr/bin/env node
-import { Provider } from "../provider/provider.js";
-import { ModelCatalog } from "../provider/catalog.js";
 import { loadConfig } from "../cli/config.js";
-import { runBenchmark, BenchmarkTarget } from "./runner.js";
+import { ModelCatalog } from "../provider/catalog.js";
+import { Provider } from "../provider/provider.js";
+
 import { BUILTIN_CASES } from "./cases.js";
-import { scoreByModel } from "./score.js";
 import { formatReport } from "./report.js";
+import type { BenchmarkTarget } from "./runner.js";
+import { runBenchmark } from "./runner.js";
+import { scoreByModel } from "./score.js";
 
 async function main() {
   const cfg = loadConfig();
 
-  const local = new Provider({ tier: "local", model: cfg.model, host: cfg.tier === "local" ? cfg.host : undefined });
+  const local = new Provider({
+    tier: "local",
+    model: cfg.model,
+    ...(cfg.tier === "local" && cfg.host !== undefined ? { host: cfg.host } : {}),
+  });
   const cloud = cfg.apiKey
-    ? new Provider({ tier: "cloud", model: cfg.model, apiKey: cfg.apiKey, host: cfg.tier === "cloud" ? cfg.host : undefined })
+    ? new Provider({
+        tier: "cloud",
+        model: cfg.model,
+        apiKey: cfg.apiKey,
+        ...(cfg.tier === "cloud" && cfg.host !== undefined ? { host: cfg.host } : {}),
+      })
     : undefined;
 
   const catalog = new ModelCatalog(local, cloud);
@@ -26,11 +37,12 @@ async function main() {
 
   console.log(`Benchmarking ${models.length} model(s) across ${BUILTIN_CASES.length} case(s)...\n`);
 
-  const targets: BenchmarkTarget[] = models.map((m) => ({
-    model: m.name,
-    tier: m.tier,
-    provider: m.tier === "local" ? local : (cloud as Provider),
-  }));
+  const targets: BenchmarkTarget[] = [];
+  for (const m of models) {
+    const provider = m.tier === "local" ? local : cloud;
+    if (provider === undefined) continue;
+    targets.push({ model: m.name, tier: m.tier, provider });
+  }
 
   const results = await runBenchmark(targets, BUILTIN_CASES);
   const failures = results.filter((r) => !r.pass);

@@ -17,8 +17,10 @@
  * Changing focus never stops background actors.
  */
 
-import { RuntimeMode, VIEW_ORDER, ViewId } from "../runtime/types.js";
-import { OverlayId } from "./ui-state.js";
+import type { RuntimeMode, ViewId } from "../runtime/types.js";
+import { VIEW_ORDER } from "../runtime/types.js";
+
+import type { OverlayId } from "./ui-state.js";
 
 export interface KeyInfo {
   ctrl?: boolean;
@@ -71,7 +73,7 @@ export function resolveKey(input: string, key: KeyInfo, ctx: KeyContext): UiComm
   if (key.ctrl && input === "t") return { type: "focus-view", view: "tasks" };
 
   // Tab cycles views only when the prompt is empty — while typing it
-  // belongs to the prompt (ghost-text / completion accept).
+  // Belongs to the prompt (ghost-text / completion accept).
   if (key.tab && !ctx.overlay && !ctx.promptHasText) {
     return key.shift ? { type: "prev-view" } : { type: "next-view" };
   }
@@ -91,6 +93,7 @@ export function resolveKey(input: string, key: KeyInfo, ctx: KeyContext): UiComm
 
   if (input >= "1" && input <= "9") {
     const view = VIEW_ORDER[Number(input) - 1];
+    if (view === undefined) return null;
     return { type: "focus-view", view };
   }
   if (input === "z") return { type: "toggle-zoom" };

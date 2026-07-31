@@ -1,6 +1,7 @@
-import { readFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+
 import { Tool } from "./tool.js";
 
 async function detectPackageManager(root: string): Promise<"npm" | "pnpm" | "yarn"> {
@@ -37,8 +38,8 @@ function runScript(root: string, pm: "npm" | "pnpm" | "yarn", scriptName: string
     let stderr = "";
     child.stdout.on("data", (c: Buffer) => (stdout += c.toString()));
     child.stderr.on("data", (c: Buffer) => (stderr += c.toString()));
-    child.on("close", (exitCode) => resolvePromise({ command, exitCode: exitCode ?? -1, stdout, stderr }));
-    child.on("error", (err) => resolvePromise({ command, exitCode: -1, stdout: "", stderr: err.message }));
+    child.on("close", (exitCode) => { resolvePromise({ command, exitCode: exitCode ?? -1, stdout, stderr }); });
+    child.on("error", (err) => { resolvePromise({ command, exitCode: -1, stdout: "", stderr: err.message }); });
   });
 }
 

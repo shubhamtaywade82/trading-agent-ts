@@ -1,5 +1,6 @@
-import { runBacktest, computeMetrics, computeEquityCurve } from "../../src/backtest/engine.js";
-import { Candle, StrategyConfig } from "../../src/backtest/types.js";
+import { runBacktest, runRuleEngineBacktest, computeMetrics, computeEquityCurve } from "../../src/backtest/engine.js";
+import { DecoupledRuleEngine } from "../../src/paper-trading/rules-engine.js";
+import type { Candle, StrategyConfig } from "../../src/backtest/types.js";
 
 function makeCandles(closes: number[]): Candle[] {
   return closes.map((c, i) => ({ openTime: i, open: c, high: c * 1.001, low: c * 0.999, close: c, volume: 100 }));
@@ -7,13 +8,12 @@ function makeCandles(closes: number[]): Candle[] {
 
 describe("runBacktest", () => {
   it("enters and hits target on a strategy with an always-true entry condition", () => {
-    // RSI-below-100 is always true once warmed up — deterministic entry point for testing exits.
-    const closes = Array.from({ length: 60 }, (_, i) => 100 + i); // steadily rising
+    const closes = Array.from({ length: 60 }, (_, i) => 100 + i);
     const candles = makeCandles(closes);
     const strategy: StrategyConfig = {
       direction: "long",
       entry: [{ type: "rsi_below", period: 14, value: 101 }],
-      risk: { stopPct: 0.5, targetPct: 0.02 }, // wide stop, tight target on a rising series
+      risk: { stopPct: 0.5, targetPct: 0.02 },
       feeBps: 0,
     };
     const result = runBacktest(candles, strategy);
@@ -43,7 +43,7 @@ describe("runBacktest", () => {
       direction: "long",
       entry: [{ type: "rsi_below", period: 14, value: 101 }],
       risk: { stopPct: 0.5, targetPct: 0.02 },
-      feeBps: 100, // 1%
+      feeBps: 100,
     };
     const result = runBacktest(candles, strategy);
     expect(result.trades[0].returnPct).toBeCloseTo(0.02 - 0.01, 5);
@@ -54,7 +54,7 @@ describe("runBacktest", () => {
     const candles = makeCandles(closes);
     const strategy: StrategyConfig = {
       direction: "long",
-      entry: [{ type: "rsi_above", period: 14, value: 100 }], // never true, RSI maxes at 100 not >100
+      entry: [{ type: "rsi_above", period: 14, value: 100 }],
       risk: { stopPct: 0.02, targetPct: 0.02 },
     };
     const result = runBacktest(candles, strategy);
@@ -108,5 +108,27 @@ describe("computeMetrics", () => {
     expect(curve[1]).toBeCloseTo(1.2 * 0.7);
     const metrics = computeMetrics(trades);
     expect(metrics.maxDrawdownPct).toBeCloseTo(0.3, 5);
+  });
+});
+
+describe("runRuleEngineBacktest", () => {
+  it("runs backtest against a DecoupledRuleEngine strategy", () => {
+    const engine = new DecoupledRuleEngine("test_rule_backtest", "Test Rule Engine");
+    engine.addRule({
+      id: "buy_always",
+      name: "Buy Always Rule",
+      condition: () => true,
+      direction: "long",
+      stopLossPct: 0.02,
+      takeProfitPct: 0.04,
+    });
+
+    const closes = Array.from({ length: 60 }, (_, i) => 100 + i);
+    const candles = makeCandles(closes);
+
+    const result = runRuleEngineBacktest(candles, engine);
+    expect(result.trades.length).toBeGreaterThan(0);
+    expect(result.trades[0].direction).toBe("long");
+    expect(result.metrics.winRate).toBeGreaterThan(0);
   });
 });

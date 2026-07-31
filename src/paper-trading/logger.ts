@@ -9,7 +9,7 @@ export interface LogEvent {
 export class StructuredLogger {
   private logs: LogEvent[] = [];
 
-  constructor(private category = "Agent") {}
+  constructor(private readonly category = "Agent") {}
 
   info(message: string, meta?: Record<string, unknown>): LogEvent {
     return this.log("info", message, meta);
@@ -29,7 +29,7 @@ export class StructuredLogger {
       level,
       category: this.category,
       message,
-      meta,
+      ...(meta !== undefined && { meta }),
     };
     this.logs.push(event);
     return event;

@@ -5,28 +5,29 @@
  * No business logic lives in rendering; it all terminates here.
  */
 
-import { EventBus, RuntimeEvent } from "./events.js";
+import { MAX_LOGS, MAX_CONVERSATION, MAX_TOOL_CALLS, MAX_NOTIFICATIONS } from "./config.js";
+import type { EventBus, RuntimeEvent } from "./events.js";
 import { applyTaskTransition } from "./task-machine.js";
-import { ACTOR_IDS, ActorId, ActorState, ChatEntry, RuntimeState, Task, ToolCall } from "./types.js";
+import type { ActorId, ActorState, ChatEntry, RuntimeState, Task, ToolCall } from "./types.js";
+import { ACTOR_IDS } from "./types.js";
 
 /** Bounded buffer sizes so long sessions can't grow state without limit. */
 // NOTE: Buffer limits are now configurable via `src/runtime/config.ts`. This file
-// reads the values from environment variables (or falls back to sensible defaults).
+// Reads the values from environment variables (or falls back to sensible defaults).
 // Moving the constants out of this file keeps the reducer pure and makes it easy
-// for CI or callers to adjust limits without recompiling.
-import { MAX_LOGS, MAX_CONVERSATION, MAX_TOOL_CALLS, MAX_NOTIFICATIONS } from "./config.js";
+// For CI or callers to adjust limits without recompiling.
 
 // Strips ANSI/C0/C1 control sequences from text before it lands in state,
-// so tool or shell output emitting screen-clear/cursor-addressing/title-set
+// So tool or shell output emitting screen-clear/cursor-addressing/title-set
 // (or hostile) escape sequences can't corrupt the fixed layout. Preserves
-// printable characters, newlines, and tabs; \r is stripped since Ink has no
-// concept of "rewind the line".
+// Printable characters, newlines, and tabs; \r is stripped since Ink has no
+// Concept of "rewind the line".
 /* eslint-disable no-control-regex -- intentionally matching C0/C1 control chars to strip them */
 export function sanitizeText(text: string): string {
   return text
-    .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "")
-    .replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, "")
-    .replace(/[\x00-\x08\x0b-\x1f\x7f]/g, "");
+    .replaceAll(/\x1B\[[0-9;]*[a-zA-Z]/g, "")
+    .replaceAll(/\x1B\][^\x07\x1B]*(\x07|\x1B\\)/g, "")
+    .replaceAll(/[\x00-\x08\x0B-\x1F\x7F]/g, "");
 }
 /* eslint-enable no-control-regex */
 
@@ -96,7 +97,7 @@ function withActor(state: RuntimeState, id: ActorId, patch: Partial<Omit<ActorSt
 }
 
 function appendChunk(conversation: ChatEntry[], role: "assistant" | "thinking", chunk: string): ChatEntry[] {
-  const last = conversation[conversation.length - 1];
+  const last = conversation.at(-1);
   if (last && last.kind === "text" && last.role === role) {
     return conversation.slice(0, -1).concat({ ...last, text: last.text + chunk });
   }
@@ -122,8 +123,9 @@ export function reduce(state: RuntimeState, event: RuntimeEvent): RuntimeState {
       const next = { ...state, conversation: appendChunk(state.conversation, event.role, sanitizeText(event.chunk)) };
       return withActor(next, "conversation", { health: event.role === "thinking" ? "thinking" : "active" });
     }
-    case "conversation.clear":
+    case "conversation.clear": {
       return { ...state, conversation: [] };
+    }
     case "conversation.plan": {
       const entry: ChatEntry = {
         kind: "plan",
@@ -162,8 +164,8 @@ export function reduce(state: RuntimeState, event: RuntimeEvent): RuntimeState {
         name: event.name,
         args: event.args,
         status: event.status,
-        result: event.result,
-        error: event.error,
+        ...(event.result !== undefined ? { result: event.result } : {}),
+        ...(event.error !== undefined ? { error: event.error } : {}),
         at: Date.now(),
       };
       const existingIdx = state.conversation.findIndex(
@@ -173,7 +175,7 @@ export function reduce(state: RuntimeState, event: RuntimeEvent): RuntimeState {
         existingIdx >= 0
           ? [...state.conversation.slice(0, existingIdx), entry, ...state.conversation.slice(existingIdx + 1)]
           : [...state.conversation, entry];
-      const actorHealth = event.status === "failed" ? "error" : event.status === "running" ? "active" : "healthy";
+      const actorHealth = event.status === "failed" ? "error" : (event.status === "running" ? "active" : "healthy");
       return withActor(
         {
           ...state,
@@ -181,7 +183,7 @@ export function reduce(state: RuntimeState, event: RuntimeEvent): RuntimeState {
           execution: { ...state.execution, activeTool: event.status === "running" ? event.name : state.execution.activeTool },
         },
         "executor",
-        { health: actorHealth, detail: event.status === "running" ? "▶" : event.status === "failed" ? "✗" : "✓" },
+        { health: actorHealth, detail: event.status === "running" ? "▶" : (event.status === "failed" ? "✗" : "✓") },
       );
     }
     case "conversation.diff": {
@@ -233,16 +235,18 @@ export function reduce(state: RuntimeState, event: RuntimeEvent): RuntimeState {
       );
     }
     case "conversation.card_item": {
-      const last = state.conversation[state.conversation.length - 1];
+      const last = state.conversation.at(-1);
       if (last && last.kind === "card" && last.title === event.title) {
         const updatedItems = last.items.map((item) =>
-          item.label === event.label ? { ...item, status: event.status, detail: event.detail ?? item.detail } : item,
+          item.label === event.label
+            ? { ...item, status: event.status, ...(event.detail !== undefined ? { detail: event.detail } : {}) }
+            : item,
         );
         const updatedEntry: ChatEntry = { ...last, items: updatedItems };
         return withActor(
           { ...state, conversation: bounded([...state.conversation.slice(0, -1), updatedEntry], MAX_CONVERSATION) },
           "tasks",
-          { health: event.status === "running" ? "active" : "healthy", detail: event.status as string },
+          { health: event.status === "running" ? "active" : "healthy", detail: event.status },
         );
       }
       return state;
@@ -255,7 +259,7 @@ export function reduce(state: RuntimeState, event: RuntimeEvent): RuntimeState {
       const tasks = applyTaskTransition(state.tasks, event.taskId, event.status, event.progress);
       const anyFailed = tasks.some((t) => t.status === "failed");
       return withActor({ ...state, tasks }, "tasks", {
-        health: anyFailed ? "error" : tasks.some((t) => t.status === "running") ? "active" : "healthy",
+        health: anyFailed ? "error" : (tasks.some((t) => t.status === "running") ? "active" : "healthy"),
         detail: taskDetail(tasks),
       });
     }
@@ -277,17 +281,13 @@ export function reduce(state: RuntimeState, event: RuntimeEvent): RuntimeState {
     case "tool.completed":
     case "tool.failed": {
       const failed = event.type === "tool.failed";
-      const toolCalls = state.toolCalls.map((c) =>
-        c.id === event.id
-          ? {
-              ...c,
-              status: failed ? ("failed" as const) : ("completed" as const),
-              endedAt: Date.now(),
-              result: failed ? c.result : (event as { result: Record<string, unknown> }).result,
-              error: failed ? (event as { error: string }).error : c.error,
-            }
-          : c,
-      );
+      const toolCalls = state.toolCalls.map((c) => {
+        if (c.id !== event.id) return c;
+        if (failed) {
+          return { ...c, status: "failed" as const, endedAt: Date.now(), error: (event as { error: string }).error };
+        }
+        return { ...c, status: "completed" as const, endedAt: Date.now(), result: (event as { result: Record<string, unknown> }).result };
+      });
       const stillRunning = toolCalls.some((c) => c.status === "running");
       const next = {
         ...state,
@@ -295,8 +295,8 @@ export function reduce(state: RuntimeState, event: RuntimeEvent): RuntimeState {
         execution: { ...state.execution, activeTool: stillRunning ? state.execution.activeTool : null },
       };
       return withActor(next, "executor", {
-        health: failed ? "error" : stillRunning ? "active" : "healthy",
-        detail: stillRunning ? "▶" : failed ? "✗" : "✓",
+        health: failed ? "error" : (stillRunning ? "active" : "healthy"),
+        detail: stillRunning ? "▶" : (failed ? "✗" : "✓"),
       });
     }
     case "model.streaming": {
@@ -314,13 +314,15 @@ export function reduce(state: RuntimeState, event: RuntimeEvent): RuntimeState {
       const model = { ...state.model, name: event.name, provider: event.provider ?? state.model.provider };
       return withActor({ ...state, model }, "models", { health: "healthy" });
     }
-    case "context.changed":
+    case "context.changed": {
       return { ...state, model: { ...state.model, contextUsed: event.used, contextLimit: event.limit } };
-    case "git.changed":
+    }
+    case "git.changed": {
       return withActor({ ...state, git: event.git }, "git", {
         health: event.git.files.length > 0 ? "waiting" : "healthy",
         detail: event.git.files.length > 0 ? String(event.git.files.length) : "✓",
       });
+    }
     case "logs.appended": {
       const entry = {
         at: Date.now(),
@@ -330,7 +332,7 @@ export function reduce(state: RuntimeState, event: RuntimeEvent): RuntimeState {
       };
       const logs = bounded([...state.logs, entry], MAX_LOGS);
       return withActor({ ...state, logs }, "logs", {
-        health: event.level === "error" ? "error" : state.actors.logs.health === "error" ? "error" : "healthy",
+        health: event.level === "error" ? "error" : (state.actors.logs.health === "error" ? "error" : "healthy"),
         detail: String(logs.length),
       });
     }
@@ -345,27 +347,28 @@ export function reduce(state: RuntimeState, event: RuntimeEvent): RuntimeState {
     case "mcp.changed": {
       const anyDown = event.servers.some((s) => !s.connected);
       return withActor({ ...state, mcpServers: event.servers }, "mcp", {
-        health: event.servers.length === 0 ? "muted" : anyDown ? "error" : "healthy",
+        health: event.servers.length === 0 ? "muted" : (anyDown ? "error" : "healthy"),
         detail: anyDown ? "✗" : "✓",
       });
     }
     case "skills.changed": {
       const anyActive = event.skills.some((s) => s.active);
       return withActor({ ...state, skills: event.skills }, "skills", {
-        health: event.skills.length === 0 ? "muted" : anyActive ? "active" : "healthy",
+        health: event.skills.length === 0 ? "muted" : (anyActive ? "active" : "healthy"),
         detail: anyActive ? String(event.skills.filter((s) => s.active).length) : "✓",
       });
     }
-    case "approval.requested":
+    case "approval.requested": {
       return withActor({ ...state, approval: event.request, mode: "approval" }, "executor", {
         health: "waiting",
         detail: "?",
       });
+    }
     case "approval.resolved": {
       if (!state.approval || state.approval.id !== event.id) return state;
       return { ...state, approval: null, mode: "idle" };
     }
-    case "execution.goal":
+    case "execution.goal": {
       return withActor(
         {
           ...state,
@@ -375,6 +378,7 @@ export function reduce(state: RuntimeState, event: RuntimeEvent): RuntimeState {
         "planner",
         { health: "thinking", detail: "▶" },
       );
+    }
     case "execution.step": {
       const known = state.execution.steps.some((s) => s.id === event.step.id);
       const steps = known
@@ -387,19 +391,24 @@ export function reduce(state: RuntimeState, event: RuntimeEvent): RuntimeState {
         detail: done ? "✓" : "▶",
       });
     }
-    case "execution.queue":
+    case "execution.queue": {
       return {
         ...state,
         execution: { ...state.execution, queue: event.queue, etaSeconds: event.etaSeconds ?? null },
       };
-    case "execution.reasoning":
+    }
+    case "execution.reasoning": {
       return { ...state, execution: { ...state.execution, reasoning: sanitizeText(event.text) } };
-    case "mode.changed":
+    }
+    case "mode.changed": {
       return { ...state, mode: event.mode };
-    case "mode.agent":
+    }
+    case "mode.agent": {
       return { ...state, agentMode: event.mode };
-    case "status.changed":
+    }
+    case "status.changed": {
       return { ...state, status: event.status };
+    }
     case "notification": {
       const note = {
         id: `n${Date.now()}-${state.notifications.length}`,
@@ -411,8 +420,8 @@ export function reduce(state: RuntimeState, event: RuntimeEvent): RuntimeState {
     }
     case "error": {
       // Executor health flips to "✗" on any error, but that glyph alone gives
-      // the user zero detail — surface the actual message as a notification
-      // too, the same path a visible toast already uses elsewhere.
+      // The user zero detail — surface the actual message as a notification
+      // Too, the same path a visible toast already uses elsewhere.
       const note = { id: `n${Date.now()}-${state.notifications.length}`, text: event.message, kind: "error" as const, at: Date.now() };
       return withActor(
         { ...state, lastError: event.message, notifications: bounded([...state.notifications, note], MAX_NOTIFICATIONS) },
@@ -420,8 +429,9 @@ export function reduce(state: RuntimeState, event: RuntimeEvent): RuntimeState {
         { health: "error", detail: "✗" },
       );
     }
-    default:
+    default: {
       return state;
+    }
   }
 }
 
@@ -429,7 +439,7 @@ export type StoreListener = (state: RuntimeState) => void;
 
 export class Store {
   private state: RuntimeState;
-  private listeners = new Set<StoreListener>();
+  private readonly listeners = new Set<StoreListener>();
 
   constructor(initial?: RuntimeState) {
     this.state = initial ?? initialRuntimeState();
@@ -443,7 +453,7 @@ export class Store {
     const next = reduce(this.state, event);
     if (next === this.state) return;
     this.state = next;
-    for (const listener of [...this.listeners]) listener(next);
+    for (const listener of this.listeners) listener(next);
   }
 
   subscribe(listener: StoreListener): () => void {
@@ -455,6 +465,6 @@ export class Store {
 
   /** Wire this store as the primary subscriber of a bus. */
   attach(bus: EventBus): () => void {
-    return bus.subscribe((event) => this.apply(event));
+    return bus.subscribe((event) => { this.apply(event); });
   }
 }

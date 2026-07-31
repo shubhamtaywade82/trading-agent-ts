@@ -5,7 +5,9 @@
  * Context Strip: dynamic status for the current runtime mode.
  */
 
-import { ACTOR_IDS, ActorHealth, ActorId, AGENT_MODE_LABELS, RuntimeState, StatusToken, ViewId } from "../runtime/types.js";
+import type { ActorHealth, ActorId, RuntimeState, StatusToken, ViewId } from "../runtime/types.js";
+import { ACTOR_IDS, AGENT_MODE_LABELS } from "../runtime/types.js";
+
 import { semanticColor } from "./theme-map.js";
 
 const ACTOR_LABELS: Record<ActorId, string> = {
@@ -66,10 +68,10 @@ function contextPercent(state: RuntimeState): string | null {
 export function contextStripTokens(state: RuntimeState, activeView?: ViewId): StatusToken[] {
   const tokens: StatusToken[] = [];
   const push = (text: string, priority: number, health?: ActorHealth) =>
-    tokens.push({ text, priority, color: health ? semanticColor(health) : undefined });
+    tokens.push({ text, priority, ...(health !== undefined ? { color: semanticColor(health) } : {}) });
 
   // View-specific strips take over while idle: the strip always shows the
-  // most relevant live state for what the user is looking at.
+  // Most relevant live state for what the user is looking at.
   if (state.mode === "idle" && activeView === "git") {
     push(`Branch:${state.git.branch || "-"}`, 1, "active");
     push(`Modified:${state.git.files.length}`, 2);
@@ -177,7 +179,7 @@ export function headerTokens(state: RuntimeState, now: number = Date.now()): Sta
   tokens.push({
     text: MODE_LABELS[state.mode],
     priority: 3,
-    color: semanticColor(state.mode === "idle" ? "healthy" : state.mode === "approval" ? "waiting" : "thinking"),
+    color: semanticColor(state.mode === "idle" ? "healthy" : (state.mode === "approval" ? "waiting" : "thinking")),
   });
   // Git status
   if (state.git.files.length > 0) {

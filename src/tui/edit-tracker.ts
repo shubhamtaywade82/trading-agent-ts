@@ -21,7 +21,7 @@ export class EditTracker {
     const parts = diffLines(before, newContent);
     const lines: DiffLine[] = [];
     for (const part of parts) {
-      const type: DiffLine["type"] = part.added ? "add" : part.removed ? "remove" : "context";
+      const type: DiffLine["type"] = part.added ? "add" : (part.removed ? "remove" : "context");
       lines.push({ type, text: part.value });
     }
     return lines;

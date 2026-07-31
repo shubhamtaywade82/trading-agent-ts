@@ -1,5 +1,5 @@
 import { resolveSkills, tokenize } from "../../src/skills/resolver.js";
-import { SkillMeta } from "../../src/skills/types.js";
+import type { SkillMeta } from "../../src/skills/types.js";
 
 function meta(id: string, tags: string[], description = "", name = id): SkillMeta {
   return { id, name, description, tags, version: "0.0.0", scope: "workspace", dir: "", path: "" };
@@ -7,8 +7,8 @@ function meta(id: string, tags: string[], description = "", name = id): SkillMet
 
 describe("tokenize", () => {
   it("lowercases, splits on non-word chars, and dedups", () => {
-    expect(tokenize("Fix the Docker-Compose Build!")).toEqual(new Set(["fix", "the", "docker", "compose", "build"]));
-    expect(tokenize("rails rails RAILS")).toEqual(new Set(["rails"]));
+    expect(tokenize("Fix the Docker-Compose Build!")).toStrictEqual(new Set(["fix", "the", "docker", "compose", "build"]));
+    expect(tokenize("rails rails RAILS")).toStrictEqual(new Set(["rails"]));
   });
 });
 
@@ -22,12 +22,12 @@ describe("resolveSkills", () => {
   it("ranks by tag-weighted overlap, tag hits outrank description hits", () => {
     const results = resolveSkills("help me build a rails api", catalog);
     expect(results[0].meta.id).toBe("rails-api");
-    expect(results[0].matchedTags).toEqual(["rails", "api"]);
+    expect(results[0].matchedTags).toStrictEqual(["rails", "api"]);
   });
 
   it("excludes skills below minScore", () => {
     const results = resolveSkills("help me build a rails api", catalog, { minScore: 100 });
-    expect(results).toEqual([]);
+    expect(results).toStrictEqual([]);
   });
 
   it("caps results at topN", () => {
@@ -38,11 +38,11 @@ describe("resolveSkills", () => {
   it("breaks ties deterministically by id", () => {
     const tied: SkillMeta[] = [meta("zzz", ["shared"]), meta("aaa", ["shared"])];
     const results = resolveSkills("shared", tied);
-    expect(results.map((r) => r.meta.id)).toEqual(["aaa", "zzz"]);
+    expect(results.map((r) => r.meta.id)).toStrictEqual(["aaa", "zzz"]);
   });
 
   it("returns nothing for a prompt with no overlap", () => {
-    expect(resolveSkills("completely unrelated text", catalog)).toEqual([]);
+    expect(resolveSkills("completely unrelated text", catalog)).toStrictEqual([]);
   });
 
   it("does not score a verbose-description skill against an unrelated prompt via stopword overlap", () => {
@@ -57,6 +57,6 @@ describe("resolveSkills", () => {
 
     const results = resolveSkills("can you fix the bug in the login form and check the tests", verbose);
 
-    expect(results).toEqual([]);
+    expect(results).toStrictEqual([]);
   });
 });

@@ -1,5 +1,6 @@
-import { PlanStep, StepRunner, Planner, HistoryEntry, StepStatus } from "./types.js";
-import { CheckpointStore } from "../runtime/checkpoint.js";
+import type { CheckpointStore } from "../runtime/checkpoint.js";
+
+import type { PlanStep, StepRunner, Planner, HistoryEntry, StepStatus } from "./types.js";
 
 export class OrchestratorError extends Error {}
 
@@ -37,7 +38,7 @@ export interface OrchestratorOptions {
 }
 
 export class Orchestrator {
-  private steps: Map<string, PlanStep>;
+  private readonly steps: Map<string, PlanStep>;
   private readonly runner: StepRunner;
   private readonly planner: Planner;
   private readonly runRollback: (command: string) => Promise<void>;
@@ -58,8 +59,8 @@ export class Orchestrator {
     this.maxRetries = opts.maxRetries ?? DEFAULT_MAX_RETRIES;
     this.maxReplans = opts.maxReplans ?? DEFAULT_MAX_REPLANS;
     this.logger = opts.logger ?? console;
-    this.onStepChange = opts.onStepChange;
-    this.checkpoint = opts.checkpoint;
+    if (opts.onStepChange !== undefined) this.onStepChange = opts.onStepChange;
+    if (opts.checkpoint !== undefined) this.checkpoint = opts.checkpoint;
   }
 
   private saveCheckpoint(): void {
@@ -75,9 +76,9 @@ export class Orchestrator {
 
     for (;;) {
       // All steps whose dependencies are already satisfied run concurrently —
-      // e.g. independent coder/reviewer/tester steps fan out in one round
-      // instead of executing one at a time. Steps that only become ready
-      // because this round completed are picked up in the next round.
+      // E.g. independent coder/reviewer/tester steps fan out in one round
+      // Instead of executing one at a time. Steps that only become ready
+      // Because this round completed are picked up in the next round.
       const ready = order.filter((s) => s.status === "pending" && this.dependenciesSatisfied(s));
       if (!ready.length) break;
 
@@ -112,7 +113,7 @@ export class Orchestrator {
     const from = step.status;
     if (from === to) return;
     const allowed = VALID_TRANSITIONS[from];
-    if (!allowed || !allowed.includes(to)) {
+    if (!allowed?.includes(to)) {
       this.logger.warn(`[Orchestrator] Invalid ASL transition from '${from}' to '${to}' for step ${step.id}`);
       // Do not perform invalid transition; keep current status.
       return;

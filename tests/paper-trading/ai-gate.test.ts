@@ -1,5 +1,6 @@
-import { AiEntryGate, AiGateIntent, ChatCapable, CapabilityLookup } from "../../src/paper-trading/ai-gate.js";
-import { ChatResponse } from "../../src/provider/provider.js";
+import type { AiGateIntent, ChatCapable, CapabilityLookup } from "../../src/paper-trading/ai-gate.js";
+import { AiEntryGate } from "../../src/paper-trading/ai-gate.js";
+import type { ChatResponse } from "../../src/provider/provider.js";
 
 function intent(): AiGateIntent {
   return {

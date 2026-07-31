@@ -1,9 +1,9 @@
 import { runPortfolioBacktest } from "../../src/backtest/portfolio.js";
-import { Candle, StrategyConfig } from "../../src/backtest/types.js";
+import type { Candle, StrategyConfig } from "../../src/backtest/types.js";
 
 function makeCandles(closes: number[], startTime = 0): Candle[] {
   return closes.map((c, i) => ({
-    openTime: startTime + i * 60000, // 1-minute intervals
+    openTime: startTime + i * 60_000, // 1-minute intervals
     open: c,
     high: c * 1.001,
     low: c * 0.999,
@@ -20,13 +20,13 @@ describe("runPortfolioBacktest", () => {
     const btcCloses = Array.from({ length: 60 }, (_, i) => 100 + i);
     const ethCloses = Array.from({ length: 60 }, (_, i) => 200 + i);
 
-    const btcCandles = makeCandles(btcCloses, 1000000);
-    const ethCandles = makeCandles(ethCloses, 1000000);
+    const btcCandles = makeCandles(btcCloses, 1_000_000);
+    const ethCandles = makeCandles(ethCloses, 1_000_000);
 
     const strategy: StrategyConfig = {
       direction: "long",
       entry: [{ type: "rsi_below", period: 14, value: 101 }],
-      risk: { stopPct: 0.5, targetPct: 0.01 }, // tight target
+      risk: { stopPct: 0.5, targetPct: 0.01 }, // Tight target
       feeBps: 0,
     };
 
@@ -34,7 +34,7 @@ describe("runPortfolioBacktest", () => {
     const resultSingle = runPortfolioBacktest(
       { BTCUSDT: btcCandles, ETHUSDT: ethCandles },
       {
-        initialCapital: 10000,
+        initialCapital: 10_000,
         maxConcurrentPositions: 1,
         allocationPerTradePct: 0.5,
         strategy,
@@ -56,13 +56,13 @@ describe("runPortfolioBacktest", () => {
 
     expect(overlaps).toBe(false);
     expect(resultSingle.trades.length).toBeGreaterThan(0);
-    expect(resultSingle.finalCapital).toBeGreaterThan(10000);
+    expect(resultSingle.finalCapital).toBeGreaterThan(10_000);
   });
 
   it("handles empty candidate trades list gracefully", () => {
     const strategy: StrategyConfig = {
       direction: "long",
-      entry: [{ type: "rsi_above", period: 14, value: 100 }], // never triggers
+      entry: [{ type: "rsi_above", period: 14, value: 100 }], // Never triggers
       risk: { stopPct: 0.02, targetPct: 0.02 },
     };
 
@@ -72,7 +72,7 @@ describe("runPortfolioBacktest", () => {
     );
 
     expect(result.trades).toHaveLength(0);
-    expect(result.finalCapital).toBe(10000);
+    expect(result.finalCapital).toBe(10_000);
     expect(result.metrics.totalTrades).toBe(0);
   });
 });

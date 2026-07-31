@@ -1,6 +1,7 @@
-import { ChatMessage } from "../provider/provider.js";
-import { CliConfig } from "./config.js";
-import { SkillContent } from "../skills/types.js";
+import type { ChatMessage } from "../provider/provider.js";
+import type { SkillContent } from "../skills/types.js";
+
+import type { CliConfig } from "./config.js";
 
 interface LearningEntry {
   category: string;
@@ -12,20 +13,20 @@ export class AgentConversation {
 
   buildSystemPrompt(config: CliConfig, learnings: LearningEntry[], _skills: SkillContent[]): string {
     const learningsBlock = learnings.length > 0
-      ? "\n\n[Recalled Past Learnings & User Preferences]:\n" +
-        learnings.map((l) => `- [${l.category}] Lesson: ${l.lesson}`).join("\n")
+      ? `\n\n[Recalled Past Learnings & User Preferences]:\n${ 
+        learnings.map((l) => `- [${l.category}] Lesson: ${l.lesson}`).join("\n")}`
       : "";
 
     return (
-      (config.systemPrompt ?? "") +
-      learningsBlock +
-      "\n\nTrading rules:\n" +
-      "1) Call exactly one tool per turn when appropriate. Prefer data-driven, quantitative analysis.\n" +
-      "2) For market analysis, use technical indicators (binance_technical_indicators) and order book data (binance_order_book) over raw klines.\n" +
-      "3) Backtest strategies before paper trading them. Validate assumptions with historical data.\n" +
-      "4) Think step by step. Test hypotheses before declaring them done. If unsure, use analysis tools to confirm.\n" +
-      "5) Monitor positions, track P&L, and manage risk. Set stop-losses for paper trades.\n" +
-      "6) After tool results, continue toward the user's stated goal with minimal next steps."
+      `${(config.systemPrompt ?? "") +
+      learningsBlock 
+      }\n\nTrading rules:\n` +
+      `1) Call exactly one tool per turn when appropriate. Prefer data-driven, quantitative analysis.\n` +
+      `2) For market analysis, use technical indicators (binance_technical_indicators) and order book data (binance_order_book) over raw klines.\n` +
+      `3) Backtest strategies before paper trading them. Validate assumptions with historical data.\n` +
+      `4) Think step by step. Test hypotheses before declaring them done. If unsure, use analysis tools to confirm.\n` +
+      `5) Monitor positions, track P&L, and manage risk. Set stop-losses for paper trades.\n` +
+      `6) After tool results, continue toward the user's stated goal with minimal next steps.`
     );
   }
 
@@ -36,8 +37,9 @@ export class AgentConversation {
 
   refreshSystemPrompt(config: CliConfig, learnings: LearningEntry[], skills: SkillContent[]): void {
     const header = this.buildSystemPrompt(config, learnings, skills);
-    if (this.messages.length > 0 && this.messages[0].role === "system") {
-      this.messages[0].content = header;
+    const first = this.messages[0];
+    if (first !== undefined && first.role === "system") {
+      first.content = header;
     } else {
       this.messages.unshift({ role: "system", content: header });
     }
@@ -78,6 +80,7 @@ export class AgentConversation {
     if (this.messages.length <= maxMessages) return;
 
     const systemPrompt = this.messages[0];
+    if (systemPrompt === undefined) return;
     const recent = this.messages.slice(-10);
     const middle = this.messages.slice(1, -10);
 

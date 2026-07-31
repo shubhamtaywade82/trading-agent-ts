@@ -1,7 +1,8 @@
+import { writeFileSync, mkdirSync } from "node:fs";
 import { mkdtemp, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { writeFileSync, mkdirSync } from "node:fs";
+
 import { loadConfig } from "../../src/cli/config.js";
 
 describe("loadConfig apiKeys pool", () => {
@@ -25,13 +26,13 @@ describe("loadConfig apiKeys pool", () => {
 
   it("puts OLLAMA_API_KEY first in the pool", () => {
     process.env.OLLAMA_API_KEY = "primary_key";
-    expect(loadConfig().apiKeys).toEqual(["primary_key"]);
+    expect(loadConfig().apiKeys).toStrictEqual(["primary_key"]);
   });
 
   it("appends comma-separated OLLAMA_API_KEYS after the primary key", () => {
     process.env.OLLAMA_API_KEY = "primary_key";
     process.env.OLLAMA_API_KEYS = "second_key, third_key";
-    expect(loadConfig().apiKeys).toEqual(["primary_key", "second_key", "third_key"]);
+    expect(loadConfig().apiKeys).toStrictEqual(["primary_key", "second_key", "third_key"]);
   });
 
   it("merges in keys from the workspace config file and dedupes", () => {
@@ -42,7 +43,7 @@ describe("loadConfig apiKeys pool", () => {
       JSON.stringify({ apiKeys: ["primary_key", "file_key"] }),
     );
 
-    expect(loadConfig().apiKeys).toEqual(["primary_key", "file_key"]);
+    expect(loadConfig().apiKeys).toStrictEqual(["primary_key", "file_key"]);
   });
 });
 
@@ -71,8 +72,8 @@ describe("workspace root resolution (git-root, like most editor tooling)", () =>
 
   it("finds the project root when launched from a subdirectory with no .trading-agent yet", async () => {
     // Regression: a prior session created .trading-agent at the git root; a new
-    // session launched from a different, still-.trading-agent-less subdirectory
-    // must resolve to the same root, not fork off a fresh one.
+    // Session launched from a different, still-.trading-agent-less subdirectory
+    // Must resolve to the same root, not fork off a fresh one.
     const projectRoot = await realpath(await mkdtemp(join(tmpdir(), "gitroot-test-")));
     mkdirSync(join(projectRoot, ".git"));
     mkdirSync(join(projectRoot, ".trading-agent"));

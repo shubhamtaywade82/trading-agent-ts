@@ -1,5 +1,5 @@
 import { BUILTIN_CASES } from "../../src/benchmark/cases.js";
-import { ChatResponse } from "../../src/provider/provider.js";
+import type { ChatResponse } from "../../src/provider/provider.js";
 
 const jsonCase = BUILTIN_CASES.find((c) => c.id === "json-validity")!;
 const toolCase = BUILTIN_CASES.find((c) => c.id === "tool-calling")!;

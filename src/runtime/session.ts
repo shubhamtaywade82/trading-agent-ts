@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { ChatMessage } from "../provider/provider.js";
+
+import type { ChatMessage } from "../provider/provider.js";
 
 /** Persists the LLM conversation transcript so a killed/restarted session can
  * pick back up with the model still remembering prior turns, mirroring the

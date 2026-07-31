@@ -1,5 +1,5 @@
 import { applyTaskTransition, canTransition, readyTasks } from "../../src/runtime/task-machine.js";
-import { Task } from "../../src/runtime/types.js";
+import type { Task } from "../../src/runtime/types.js";
 
 function task(id: string, status: Task["status"], deps: string[] = []): Task {
   return { id, title: id, status, dependencies: deps };
@@ -47,6 +47,6 @@ describe("task state machine", () => {
       task("c", "queued", ["b"]),
       task("d", "blocked", ["a"]),
     ];
-    expect(readyTasks(tasks).map((t) => t.id)).toEqual(["b", "d"]);
+    expect(readyTasks(tasks).map((t) => t.id)).toStrictEqual(["b", "d"]);
   });
 });

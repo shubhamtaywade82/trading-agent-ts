@@ -1,12 +1,14 @@
-import { Provider, ChatMessage, ChatResponse, ChatOptions, OllamaToolSchema } from "../provider/provider.js";
+import type { ChatMessage, ChatResponse, ChatOptions, OllamaToolSchema } from "../provider/provider.js";
+import { Provider } from "../provider/provider.js";
+
 import { resolveOllamaCloudKeys } from "./ollama-cloud.js";
 
 // A real, explicit reversal of the boundary TradeAnalyst/TradeEvaluator hold
 // ("never touches trading state") -- this gate CAN veto or scale a
-// rules-fired entry before it opens. Opt-in (RunnerConfig.aiMode defaults to
+// Rules-fired entry before it opens. Opt-in (RunnerConfig.aiMode defaults to
 // "no-ai"), and deliberately FAILS CLOSED: any timeout, network error, or
-// unparseable response means the trade is skipped, never traded blind. See
-// docs/superpowers/... plan for the full rationale.
+// Unparseable response means the trade is skipped, never traded blind. See
+// Docs/superpowers/... plan for the full rationale.
 
 export interface AiGateConfig {
   tier: "local" | "cloud";
@@ -22,8 +24,8 @@ export interface AiGateIntent {
   entryPrice: number;
   stopPrice: number;
   targetPrice: number;
-  candleContext: string; // caller-formatted recent candles, already fetched -- no extra fetch here
-  symbolPositionSummary: string; // e.g. "flat" | "long 1.2 XRPUSDT @ 3.10, contributors: [strat-a, strat-b]"
+  candleContext: string; // Caller-formatted recent candles, already fetched -- no extra fetch here
+  symbolPositionSummary: string; // E.g. "flat" | "long 1.2 XRPUSDT @ 3.10, contributors: [strat-a, strat-b]"
 }
 
 export interface AiGateDecision {
@@ -32,14 +34,14 @@ export interface AiGateDecision {
   rationale: string;
 }
 
-const GATE_TIER: "local" | "cloud" = process.env.TRADINGAGENT_ANALYST_TIER === "local" ? "local" : "cloud";
+const GATE_TIER: "local" | "cloud" = process.env["TRADINGAGENT_ANALYST_TIER"] === "local" ? "local" : "cloud";
 const GATE_MODEL =
-  process.env.TRADINGAGENT_ANALYST_MODEL || (GATE_TIER === "local" ? "minicpm5-1b" : "gpt-oss:20b");
+  process.env["TRADINGAGENT_ANALYST_MODEL"] || (GATE_TIER === "local" ? "minicpm5-1b" : "gpt-oss:20b");
 
 export const DEFAULT_AI_GATE_CONFIG: AiGateConfig = {
   tier: GATE_TIER,
   model: GATE_MODEL,
-  timeoutMs: 20_000, // well under Provider's own 60s cloud connect timeout -- fail closed fast
+  timeoutMs: 20_000, // Well under Provider's own 60s cloud connect timeout -- fail closed fast
 };
 
 const SYSTEM_PROMPT =
@@ -64,16 +66,18 @@ function buildUserPrompt(intent: AiGateIntent): string {
 }
 
 function parseDecision(text: string): AiGateDecision {
-  const m = text.match(/decision:\s*(APPROVE|REJECT)(?:\s+size=([0-9.]+))?/i);
+  const m = /decision:\s*(APPROVE|REJECT)(?:\s+size=([0-9.]+))?/i.exec(text);
   if (!m) return { approved: false, sizeMultiplier: 0, rationale: `unparseable AI response: ${text.slice(0, 200)}` };
-  if (m[1].toUpperCase() === "REJECT") return { approved: false, sizeMultiplier: 0, rationale: text };
+  const decision = m[1];
+  if (decision === undefined) return { approved: false, sizeMultiplier: 0, rationale: `unparseable AI response: ${text.slice(0, 200)}` };
+  if (decision.toUpperCase() === "REJECT") return { approved: false, sizeMultiplier: 0, rationale: text };
   return { approved: true, sizeMultiplier: Number(m[2] ?? 1), rationale: text };
 }
 
 // Single tool the model must call to render a decision -- replaces free-text
 // + regex with a schema Ollama validates before it ever reaches us. Still
-// re-validated below (parseToolDecision): never trust unvalidated model
-// output on a money-affecting field, schema or not.
+// Re-validated below (parseToolDecision): never trust unvalidated model
+// Output on a money-affecting field, schema or not.
 const DECIDE_TOOL: OllamaToolSchema[] = [
   {
     type: "function",
@@ -119,29 +123,29 @@ function safeJsonParse(text: string): unknown {
 }
 
 // Structural subset of Provider actually used here -- lets tests inject a
-// stub without depending on Provider's concrete constructor/HTTP internals.
+// Stub without depending on Provider's concrete constructor/HTTP internals.
 export interface ChatCapable {
-  chat(messages: ChatMessage[], opts?: ChatOptions): Promise<ChatResponse>;
+  chat: (messages: ChatMessage[], opts?: ChatOptions) => Promise<ChatResponse>;
 }
 
 // Structural subset of ModelCatalog (src/provider/catalog.ts) actually used
-// here -- same rationale as ChatCapable: lets tests inject a hand-built fake
-// without satisfying ModelCatalog's private internals.
+// Here -- same rationale as ChatCapable: lets tests inject a hand-built fake
+// Without satisfying ModelCatalog's private internals.
 export interface CapabilityLookup {
-  all(): Array<{ name: string; tier: "local" | "cloud"; capabilities: string[] }>;
-  refresh(): Promise<unknown>;
+  all: () => Array<{ name: string; tier: "local" | "cloud"; capabilities: string[] }>;
+  refresh: () => Promise<unknown>;
 }
 
 export class AiEntryGate {
-  private provider: ChatCapable;
-  private model: string;
-  private catalog?: CapabilityLookup;
-  private toolsSupported: boolean | null = null; // null = not yet resolved
+  private readonly provider: ChatCapable;
+  private readonly model: string;
+  private readonly catalog?: CapabilityLookup;
+  private toolsSupported: boolean | null = null; // Null = not yet resolved
 
   constructor(cfg: Partial<AiGateConfig> = {}, provider?: ChatCapable, catalog?: CapabilityLookup) {
     const c = { ...DEFAULT_AI_GATE_CONFIG, ...cfg };
     this.model = c.model;
-    this.catalog = catalog;
+    if (catalog !== undefined) this.catalog = catalog;
     if (provider) {
       this.provider = provider;
     } else {
@@ -151,9 +155,9 @@ export class AiEntryGate {
   }
 
   // Lazily resolved once per instance. Local Ollama's /api/tags reports real
-  // per-model capabilities (authoritative); cloud-tier capability detection
-  // is a name heuristic that always claims "tools" support, so it's treated
-  // as unverified and logged once rather than trusted outright.
+  // Per-model capabilities (authoritative); cloud-tier capability detection
+  // Is a name heuristic that always claims "tools" support, so it's treated
+  // As unverified and logged once rather than trusted outright.
   private async resolveToolsSupported(): Promise<boolean> {
     if (this.toolsSupported !== null) return this.toolsSupported;
     if (!this.catalog) return (this.toolsSupported = false);

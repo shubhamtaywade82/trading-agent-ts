@@ -1,6 +1,7 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { AgentConversation } from "../../src/cli/agent-conversation.js";
 import { Agent } from "../../src/cli/agent.js";
 
@@ -14,12 +15,12 @@ describe("AgentConversation context pruning", () => {
       convo.pushUserMessage(`Message ${i}`);
     }
 
-    expect(convo.getMessages().length).toBe(31); // 1 system prompt + 30 user messages
+    expect(convo.getMessages()).toHaveLength(31); // 1 system prompt + 30 user messages
 
     convo.pruneContext(25);
 
     const messages = convo.getMessages();
-    expect(messages.length).toBe(12); // 1 system + 1 bypass notice + 10 recent
+    expect(messages).toHaveLength(12); // 1 system + 1 bypass notice + 10 recent
     expect(messages[0].role).toBe("system");
     expect(messages[1].role).toBe("system");
     expect(messages[1].content).toContain("Bypassed 20 intermediate turns");
@@ -41,7 +42,7 @@ describe("AgentConversation.loadMessages", () => {
     ];
     convo.loadMessages(restored);
 
-    expect(convo.getMessages()).toEqual(restored);
+    expect(convo.getMessages()).toStrictEqual(restored);
   });
 
   it("a stale loaded system prompt self-heals on the next refreshSystemPrompt call", () => {
@@ -54,7 +55,7 @@ describe("AgentConversation.loadMessages", () => {
     convo.refreshSystemPrompt({ model: "test", workspaceRoot: ".", tier: "local", systemPrompt: "fresh prompt" }, [], []);
 
     expect(convo.getMessages()[0].content).toContain("fresh prompt");
-    expect(convo.getMessages()[1]).toEqual({ role: "user", content: "hi" });
+    expect(convo.getMessages()[1]).toStrictEqual({ role: "user", content: "hi" });
   });
 });
 
@@ -79,7 +80,7 @@ describe("Agent non-critical task model delegation", () => {
         };
       }
 
-      const line = JSON.stringify({ message: { role: "assistant", content: "ok" }, done: true }) + "\n";
+      const line = `${JSON.stringify({ message: { role: "assistant", content: "ok" }, done: true })  }\n`;
       let delivered = false;
       const reader = {
         read: async () => {
@@ -109,7 +110,7 @@ describe("Agent non-critical task model delegation", () => {
     expect(agent.currentModel).toBe("original-model");
     // Verify it was switched to hermes during execution by checking the mock fetch history
     const calls = (globalThis.fetch as jest.Mock).mock.calls;
-    const postCall = calls.find((c) => c[1] && c[1].body);
+    const postCall = calls.find((c) => c[1]?.body);
     expect(postCall).toBeDefined();
     const firstCallBody = JSON.parse(postCall![1].body);
     expect(firstCallBody.model).toBe("hermes3:latest");
@@ -132,7 +133,7 @@ describe("Agent non-critical task model delegation", () => {
         };
       }
 
-      const line = JSON.stringify({ message: { role: "assistant", content: "ok" }, done: true }) + "\n";
+      const line = `${JSON.stringify({ message: { role: "assistant", content: "ok" }, done: true })  }\n`;
       let delivered = false;
       const reader = {
         read: async () => {
@@ -159,7 +160,7 @@ describe("Agent non-critical task model delegation", () => {
 
     expect(agent.currentModel).toBe("original-model");
     const calls = (globalThis.fetch as jest.Mock).mock.calls;
-    const postCall = calls.find((c) => c[1] && c[1].body);
+    const postCall = calls.find((c) => c[1]?.body);
     expect(postCall).toBeDefined();
     const firstCallBody = JSON.parse(postCall![1].body);
     expect(firstCallBody.model).toBe("opencode:latest");
@@ -176,7 +177,7 @@ describe("Agent vision/reasoning capability routing", () => {
       if (urlStr.includes("/api/tags") || urlStr.includes("/v1/models")) {
         return { ok: true, status: 200, json: async () => ({ models: models.map((name) => ({ name })) }) };
       }
-      const line = JSON.stringify({ message: { role: "assistant", content: "ok" }, done: true }) + "\n";
+      const line = `${JSON.stringify({ message: { role: "assistant", content: "ok" }, done: true })  }\n`;
       let delivered = false;
       const reader = {
         read: async () => {
@@ -196,7 +197,7 @@ describe("Agent vision/reasoning capability routing", () => {
 
   function chatCallBody(): { model: string } {
     const calls = (globalThis.fetch as jest.Mock).mock.calls;
-    const postCall = calls.find((c) => c[1] && c[1].body);
+    const postCall = calls.find((c) => c[1]?.body);
     expect(postCall).toBeDefined();
     return JSON.parse(postCall![1].body);
   }
@@ -225,7 +226,7 @@ describe("Agent vision/reasoning capability routing", () => {
   });
 
   it("falls back to the primary model when no vision model is installed", async () => {
-    mockFetchWithModels(["qwen3:8b"]); // no vision-capable model in the catalog
+    mockFetchWithModels(["qwen3:8b"]); // No vision-capable model in the catalog
     const agent = new Agent({ config: { workspaceRoot: tempDir, tier: "local", model: "original-model" } });
 
     await agent.runUserMessage("Look at this screenshot and tell me what's wrong");

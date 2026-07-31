@@ -1,15 +1,15 @@
-import {
-  TradingConcepts,
+import type {
   AnalysisResult,
   Candle as ConceptsCandle,
   HTFContext,
-  TradingConceptsConfigOverrides,
+  TradingConceptsConfigOverrides} from 'trading-concepts-ts';
+import {
+  TradingConcepts,
   calculateVolumeProfile,
   calculateVWAP,
-  VolumeProfileConfig,
-  VWAPConfig,
 } from 'trading-concepts-ts';
-import { Candle } from '../backtest/types.js';
+
+import type { Candle } from '../backtest/types.js';
 
 // ── Per-bar signals from full analysis ──
 
@@ -51,15 +51,15 @@ export interface PerBarSignals {
   belowVWAP: boolean[];
 
   // Most recent HTF structure signal (BOS/CHoCH/MSS) at-or-before this bar's
-  // time, direction-matched. Only populated when an htfContext was supplied
+  // Time, direction-matched. Only populated when an htfContext was supplied
   // (see ConceptsEngineOptions.htfContext) — all false otherwise, same as
-  // every other signal that depends on optional context.
+  // Every other signal that depends on optional context.
   htfAlignedBullish: boolean[];
   htfAlignedBearish: boolean[];
   // A liquidity sweep or judas swing occurred within LOOKAROUND_BARS of this
-  // bar — zone-relative "was there a sweep near here", distinct from
-  // buysideSweep/sellsideSweep above (which mark a sweep firing on ITS OWN
-  // bar, unrelated to any particular zone).
+  // Bar — zone-relative "was there a sweep near here", distinct from
+  // BuysideSweep/sellsideSweep above (which mark a sweep firing on ITS OWN
+  // Bar, unrelated to any particular zone).
   liquiditySweptNearZone: boolean[];
 }
 
@@ -101,8 +101,8 @@ function computeCvdSeries(candles: Candle[]): number[] {
 }
 
 // Matches trading-concepts-ts's own DEFAULT_CHECKLIST_SCORE_CONFIG.lookaroundBars —
-// the window (in bars) used to decide whether a sweep/structure event counts
-// as "near" a given zone/bar.
+// The window (in bars) used to decide whether a sweep/structure event counts
+// As "near" a given zone/bar.
 const LOOKAROUND_BARS = 5;
 
 // ── Build per-bar signal arrays from AnalysisResult + indicators ──
@@ -128,12 +128,12 @@ function buildPerBarSignals(candles: Candle[], ar: AnalysisResult, htfContext?: 
   }
 
   // NOT gated on !mitigated: trading-concepts-ts computes `mitigated` by
-  // scanning forward from formation to the END of the whole candles array
+  // Scanning forward from formation to the END of the whole candles array
   // (findOrderBlocks/findFVGs in trading-concepts-ts). Gating "is this a
-  // fresh OB/FVG" on "and does it survive unfilled for the rest of history"
-  // is hindsight information in a batch backtest — a zone's own formation
-  // bar can never know its future mitigation status causally. These arrays
-  // mean "a zone formed here," matching the `new*` naming and the pre-
+  // Fresh OB/FVG" on "and does it survive unfilled for the rest of history"
+  // Is hindsight information in a batch backtest — a zone's own formation
+  // Bar can never know its future mitigation status causally. These arrays
+  // Mean "a zone formed here," matching the `new*` naming and the pre-
   // ConceptsEngine behavior these condition types had.
   const newBullishOB = new Array<boolean>(n).fill(false);
   const newBearishOB = new Array<boolean>(n).fill(false);
@@ -193,6 +193,7 @@ function buildPerBarSignals(candles: Candle[], ar: AnalysisResult, htfContext?: 
     const oteHi = Math.max(pdz.oteZone.start, pdz.oteZone.end);
     for (let i = Math.max(0, pdz.index); i < Math.min(n, pdz.endIndex); i++) {
       const px = closes[i];
+      if (px === undefined) continue;
       if (pdz.direction === 'bullish') {
         inPremium[i] = inPremium[i] || px > eq;
         inDiscount[i] = inDiscount[i] || px < eq;
@@ -207,7 +208,7 @@ function buildPerBarSignals(candles: Candle[], ar: AnalysisResult, htfContext?: 
   const maxConfluenceScore = new Array<number>(n).fill(0);
   const bestConfluenceDirection = new Array<'bullish' | 'bearish' | null>(n).fill(null);
   for (const cs of ar.confluenceScores) {
-    if (cs.score > maxConfluenceScore[cs.zoneIndex]) {
+    if (cs.score > (maxConfluenceScore[cs.zoneIndex] ?? 0)) {
       maxConfluenceScore[cs.zoneIndex] = cs.score;
       bestConfluenceDirection[cs.zoneIndex] = cs.direction;
     }
@@ -228,6 +229,7 @@ function buildPerBarSignals(candles: Candle[], ar: AnalysisResult, htfContext?: 
     const hvnBot = Math.min(...hvnLevels, Infinity);
     for (let i = 0; i < n; i++) {
       const px = closes[i];
+      if (px === undefined) continue;
       atPOC[i] = pocLevel > 0 && Math.abs(px - pocLevel) / px < 0.002;
       for (const hl of hvnLevels) {
         aboveHVN[i] = aboveHVN[i] || px > hl;
@@ -253,8 +255,8 @@ function buildPerBarSignals(candles: Candle[], ar: AnalysisResult, htfContext?: 
     const earlier = cvdPerBar.slice(i - cvdLookback * 2, i - cvdLookback).reduce((s, v) => s + v, 0);
     cvdRising[i] = recent > earlier * 1.05;
     cvdFalling[i] = recent < earlier * 0.95;
-    cvdPositive[i] = cvdPerBar[i] > 0;
-    cvdNegative[i] = cvdPerBar[i] < 0;
+    cvdPositive[i] = (cvdPerBar[i] ?? 0) > 0;
+    cvdNegative[i] = (cvdPerBar[i] ?? 0) < 0;
   }
 
   // VWAP
@@ -263,16 +265,16 @@ function buildPerBarSignals(candles: Candle[], ar: AnalysisResult, htfContext?: 
   const belowVWAP = new Array<boolean>(n).fill(false);
   for (let i = 0; i < n; i++) {
     const v = vwapArr[i];
-    if (v !== null && !Number.isNaN(v)) {
-      aboveVWAP[i] = closes[i] > v;
-      belowVWAP[i] = closes[i] < v;
-    }
+    const close = closes[i];
+    if (v === undefined || v === null || Number.isNaN(v) || close === undefined) continue;
+    aboveVWAP[i] = close > v;
+    belowVWAP[i] = close < v;
   }
 
   // HTF structure alignment — most recent HTF structure signal at-or-before
-  // each bar's own time, direction-matched. Time-filtered (not index-based,
-  // since HTF and LTF candle arrays have unrelated indices) so this can
-  // never see an HTF event that hadn't happened yet as of this LTF bar.
+  // Each bar's own time, direction-matched. Time-filtered (not index-based,
+  // Since HTF and LTF candle arrays have unrelated indices) so this can
+  // Never see an HTF event that hadn't happened yet as of this LTF bar.
   const htfAlignedBullish = new Array<boolean>(n).fill(false);
   const htfAlignedBearish = new Array<boolean>(n).fill(false);
   const htfStructure = htfContext?.structure;
@@ -280,19 +282,26 @@ function buildPerBarSignals(candles: Candle[], ar: AnalysisResult, htfContext?: 
     const sorted = [...htfStructure].sort((a, b) => a.time - b.time);
     let cursor = 0;
     for (let i = 0; i < n; i++) {
-      const t = candles[i].openTime;
-      while (cursor + 1 < sorted.length && sorted[cursor + 1].time <= t) cursor++;
-      if (sorted[cursor].time <= t) {
-        htfAlignedBullish[i] = sorted[cursor].direction === 'bullish';
-        htfAlignedBearish[i] = sorted[cursor].direction === 'bearish';
+      const candle = candles[i];
+      if (candle === undefined) continue;
+      const t = candle.openTime;
+      while (cursor + 1 < sorted.length) {
+        const next = sorted[cursor + 1];
+        if (next === undefined || next.time > t) break;
+        cursor++;
+      }
+      const cur = sorted[cursor];
+      if (cur !== undefined && cur.time <= t) {
+        htfAlignedBullish[i] = cur.direction === 'bullish';
+        htfAlignedBearish[i] = cur.direction === 'bearish';
       }
     }
   }
 
   // Zone-relative liquidity sweep: a sweep (scored) or judas swing landed
-  // within LOOKAROUND_BARS of this bar. Applies uniformly to OB- and
+  // Within LOOKAROUND_BARS of this bar. Applies uniformly to OB- and
   // FVG-triggered signals since scoreLiquiditySweep/findJudasSwings work
-  // off liquidity zones generically, not order-block-scoped.
+  // Off liquidity zones generically, not order-block-scoped.
   const liquiditySweptNearZone = new Array<boolean>(n).fill(false);
   for (const sw of ar.liquiditySweepScores) {
     for (let i = Math.max(0, sw.sweepIndex - LOOKAROUND_BARS); i <= Math.min(n - 1, sw.sweepIndex + LOOKAROUND_BARS); i++) {
@@ -324,12 +333,12 @@ function buildPerBarSignals(candles: Candle[], ar: AnalysisResult, htfContext?: 
 // ── ConceptsEngine ──
 
 export class ConceptsEngine {
-  private candles: Candle[];
-  private adapted: ConceptsCandle[];
+  private readonly candles: Candle[];
+  private readonly adapted: ConceptsCandle[];
   private analysis: AnalysisResult | null = null;
   private signals: PerBarSignals | null = null;
-  private tc: TradingConcepts;
-  private htfContext?: HTFContext;
+  private readonly tc: TradingConcepts;
+  private readonly htfContext?: HTFContext;
 
   constructor(candles: Candle[], options?: ConceptsEngineOptions) {
     this.candles = candles;
@@ -340,7 +349,9 @@ export class ConceptsEngine {
     } else {
       this.tc = new TradingConcepts(this.adapted, overrides);
     }
-    this.htfContext = options?.htfContext;
+    if (options?.htfContext !== undefined) {
+      this.htfContext = options.htfContext;
+    }
     if (this.htfContext) {
       this.tc.setHTFContext(this.htfContext);
     }
@@ -366,8 +377,8 @@ export class ConceptsEngine {
 
   getSignals(): PerBarSignals {
     if (!this.signals) {
-      this.analyze();
-      this.signals = buildPerBarSignals(this.candles, this.analysis!, this.htfContext);
+      const analysis = this.analyze();
+      this.signals = buildPerBarSignals(this.candles, analysis, this.htfContext);
     }
     return this.signals;
   }
@@ -387,12 +398,12 @@ export class ConceptsEngine {
       if (direction === 'long') {
         const hasBullishStructure = sig.bullishMSS[i] || sig.bullishCHoCH[i] || sig.bullishBOS[i];
         const hasBullishOB = sig.newBullishOB[i];
-        const hasConfluence = sig.maxConfluenceScore[i] >= minConfidence && sig.bestConfluenceDirection[i] === 'bullish';
+        const hasConfluence = (sig.maxConfluenceScore[i] ?? 0) >= minConfidence && sig.bestConfluenceDirection[i] === 'bullish';
         mask[i] = hasBullishStructure || hasBullishOB || hasConfluence;
       } else {
         const hasBearishStructure = sig.bearishMSS[i] || sig.bearishCHoCH[i] || sig.bearishBOS[i];
         const hasBearishOB = sig.newBearishOB[i];
-        const hasConfluence = sig.maxConfluenceScore[i] >= minConfidence && sig.bestConfluenceDirection[i] === 'bearish';
+        const hasConfluence = (sig.maxConfluenceScore[i] ?? 0) >= minConfidence && sig.bestConfluenceDirection[i] === 'bearish';
         mask[i] = hasBearishStructure || hasBearishOB || hasConfluence;
       }
     }
@@ -403,50 +414,84 @@ export class ConceptsEngine {
     return mask;
   }
 
-  evaluator(conditions: { type: string; period?: number; value?: number }[]): (i: number) => boolean {
+  evaluator(conditions: Array<{ type: string; period?: number; value?: number }>): (i: number) => boolean {
     const sig = this.getSignals();
 
     return (i: number) => conditions.every(c => {
       switch (c.type) {
-        case 'concepts_bullish_mss': return sig.bullishMSS[i] ?? false;
-        case 'concepts_bearish_mss': return sig.bearishMSS[i] ?? false;
-        case 'concepts_bullish_choch': return sig.bullishCHoCH[i] ?? false;
-        case 'concepts_bearish_choch': return sig.bearishCHoCH[i] ?? false;
-        case 'concepts_bullish_bos': return sig.bullishBOS[i] ?? false;
-        case 'concepts_bearish_bos': return sig.bearishBOS[i] ?? false;
-        case 'concepts_bullish_ob': return sig.newBullishOB[i] ?? false;
-        case 'concepts_bearish_ob': return sig.newBearishOB[i] ?? false;
-        case 'concepts_bullish_fvg': return sig.newBullishFVG[i] ?? false;
-        case 'concepts_bearish_fvg': return sig.newBearishFVG[i] ?? false;
-        case 'concepts_bullish_breaker': return sig.newBullishBreaker[i] ?? false;
-        case 'concepts_bearish_breaker': return sig.newBearishBreaker[i] ?? false;
-        case 'concepts_bullish_invfvg': return sig.newBullishInvFVG[i] ?? false;
-        case 'concepts_bearish_invfvg': return sig.newBearishInvFVG[i] ?? false;
-        case 'concepts_buyside_sweep': return sig.buysideSweep[i] ?? false;
-        case 'concepts_sellside_sweep': return sig.sellsideSweep[i] ?? false;
-        case 'concepts_judas_swing': return sig.judasSwingBullish[i] || sig.judasSwingBearish[i];
-        case 'concepts_in_premium': return sig.inPremium[i] ?? false;
-        case 'concepts_in_discount': return sig.inDiscount[i] ?? false;
-        case 'concepts_in_ote': return sig.inOTE[i] ?? false;
+        case 'concepts_bullish_mss': { return sig.bullishMSS[i] ?? false;
+        }
+        case 'concepts_bearish_mss': { return sig.bearishMSS[i] ?? false;
+        }
+        case 'concepts_bullish_choch': { return sig.bullishCHoCH[i] ?? false;
+        }
+        case 'concepts_bearish_choch': { return sig.bearishCHoCH[i] ?? false;
+        }
+        case 'concepts_bullish_bos': { return sig.bullishBOS[i] ?? false;
+        }
+        case 'concepts_bearish_bos': { return sig.bearishBOS[i] ?? false;
+        }
+        case 'concepts_bullish_ob': { return sig.newBullishOB[i] ?? false;
+        }
+        case 'concepts_bearish_ob': { return sig.newBearishOB[i] ?? false;
+        }
+        case 'concepts_bullish_fvg': { return sig.newBullishFVG[i] ?? false;
+        }
+        case 'concepts_bearish_fvg': { return sig.newBearishFVG[i] ?? false;
+        }
+        case 'concepts_bullish_breaker': { return sig.newBullishBreaker[i] ?? false;
+        }
+        case 'concepts_bearish_breaker': { return sig.newBearishBreaker[i] ?? false;
+        }
+        case 'concepts_bullish_invfvg': { return sig.newBullishInvFVG[i] ?? false;
+        }
+        case 'concepts_bearish_invfvg': { return sig.newBearishInvFVG[i] ?? false;
+        }
+        case 'concepts_buyside_sweep': { return sig.buysideSweep[i] ?? false;
+        }
+        case 'concepts_sellside_sweep': { return sig.sellsideSweep[i] ?? false;
+        }
+        case 'concepts_judas_swing': { return sig.judasSwingBullish[i] || sig.judasSwingBearish[i];
+        }
+        case 'concepts_in_premium': { return sig.inPremium[i] ?? false;
+        }
+        case 'concepts_in_discount': { return sig.inDiscount[i] ?? false;
+        }
+        case 'concepts_in_ote': { return sig.inOTE[i] ?? false;
+        }
         case 'concepts_confluence_gte': {
           const threshold = c.value ?? 65;
-          return sig.maxConfluenceScore[i] >= threshold;
+          return (sig.maxConfluenceScore[i] ?? 0) >= threshold;
         }
-        case 'concepts_cvd_rising': return sig.cvdRising[i] ?? false;
-        case 'concepts_cvd_falling': return sig.cvdFalling[i] ?? false;
-        case 'concepts_cvd_positive': return sig.cvdPositive[i] ?? false;
-        case 'concepts_cvd_negative': return sig.cvdNegative[i] ?? false;
-        case 'concepts_above_vwap': return sig.aboveVWAP[i] ?? false;
-        case 'concepts_below_vwap': return sig.belowVWAP[i] ?? false;
-        case 'concepts_above_hvn': return sig.aboveHVN[i] ?? false;
-        case 'concepts_below_hvn': return sig.belowHVN[i] ?? false;
-        case 'concepts_at_poc': return sig.atPOC[i] ?? false;
-        case 'concepts_at_lvn': return sig.atLVN[i] ?? false;
-        case 'concepts_htf_aligned_bullish': return sig.htfAlignedBullish[i] ?? false;
-        case 'concepts_htf_aligned_bearish': return sig.htfAlignedBearish[i] ?? false;
-        case 'concepts_liquidity_swept_near': return sig.liquiditySweptNearZone[i] ?? false;
-        default:
+        case 'concepts_cvd_rising': { return sig.cvdRising[i] ?? false;
+        }
+        case 'concepts_cvd_falling': { return sig.cvdFalling[i] ?? false;
+        }
+        case 'concepts_cvd_positive': { return sig.cvdPositive[i] ?? false;
+        }
+        case 'concepts_cvd_negative': { return sig.cvdNegative[i] ?? false;
+        }
+        case 'concepts_above_vwap': { return sig.aboveVWAP[i] ?? false;
+        }
+        case 'concepts_below_vwap': { return sig.belowVWAP[i] ?? false;
+        }
+        case 'concepts_above_hvn': { return sig.aboveHVN[i] ?? false;
+        }
+        case 'concepts_below_hvn': { return sig.belowHVN[i] ?? false;
+        }
+        case 'concepts_at_poc': { return sig.atPOC[i] ?? false;
+        }
+        case 'concepts_at_lvn': { return sig.atLVN[i] ?? false;
+        }
+        case 'concepts_htf_aligned_bullish': { return sig.htfAlignedBullish[i] ?? false;
+        }
+        case 'concepts_htf_aligned_bearish': { return sig.htfAlignedBearish[i] ?? false;
+        }
+        case 'concepts_liquidity_swept_near': { return sig.liquiditySweptNearZone[i] ?? false;
+        }
+        default: {
           return false;
+        }
       }
     });
   }

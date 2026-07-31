@@ -1,20 +1,24 @@
 import "dotenv/config";
-import path from "node:path";
 import { execSync } from "node:child_process";
 import { appendFileSync, mkdirSync } from "node:fs";
-import React from "react";
+import path from "node:path";
+
 import { render } from "ink";
+import React from "react";
+
 import { Agent } from "../cli/agent.js";
 import { loadConfig } from "../cli/config.js";
 import { EventBus } from "../runtime/events.js";
 import { initialRuntimeState, Store } from "../runtime/store.js";
-import { wireAgentBridge, BridgeableAgent } from "./agent-bridge.js";
+
 import { App } from "./App.js";
+import type { BridgeableAgent } from "./agent-bridge.js";
+import { wireAgentBridge } from "./agent-bridge.js";
 function enableTerminalFeatures(): () => void {
   if (!process.stdin.isTTY) return () => {};
-  process.stdout.write("\x1b[?1000h\x1b[?1002h\x1b[?1006h\x1b[?2004h");
+  process.stdout.write("\x1B[?1000h\x1B[?1002h\x1B[?1006h\x1B[?2004h");
   return () => {
-    process.stdout.write("\x1b[?2004l\x1b[?1006l\x1b[?1002l\x1b[?1000l");
+    process.stdout.write("\x1B[?2004l\x1B[?1006l\x1B[?1002l\x1B[?1000l");
   };
 }
 
@@ -31,7 +35,7 @@ function currentBranch(workspaceRoot: string): string {
   }
 }
 
-if (process.env.TRADINGAGENT_DEBUG_STDIN === "1" && process.stdin.isTTY) {
+if (process.env["TRADINGAGENT_DEBUG_STDIN"] === "1" && process.stdin.isTTY) {
   const debugDir = path.join(process.cwd(), ".trading-agent");
   mkdirSync(debugDir, { recursive: true });
   const logPath = path.join(debugDir, "paste-debug.log");
@@ -58,20 +62,20 @@ const cfg = loadConfig();
 
   // Agent.on<E extends AgentEventName> is structurally compatible with
   // BridgeableAgent.on<E extends string> at runtime (the bridge only uses
-  // event names Agent emits), but TypeScript's generic-method variance rules
-  // reject the assignment statically because AgentEventName is narrower than
-  // string. Cast at this single bootstrap boundary.
+  // Event names Agent emits), but TypeScript's generic-method variance rules
+  // Reject the assignment statically because AgentEventName is narrower than
+  // String. Cast at this single bootstrap boundary.
   wireAgentBridge(agent as unknown as BridgeableAgent, bus);
 
   const shellAgent = {
     runUserMessage: (message: string) => agent.runUserMessage(message),
-    setModel: (model: string) => agent.setModel(model),
-    setTier: (tier: string) => agent.setTier(tier),
-    resetContext: () => agent.resetContext(),
+    setModel: (model: string) => { agent.setModel(model); },
+    setTier: (tier: string) => { agent.setTier(tier); },
+    resetContext: () => { agent.resetContext(); },
     listModels: () => agent.listModels(),
     validateModel: () => agent.validateModel(),
     getSkillsRegistry: () => agent.getSkillsRegistry(),
-    pinSkill: (id: string | null) => agent.pinSkill(id),
+    pinSkill: (id: string | null) => { agent.pinSkill(id); },
   };
 
   const disableFeatures = enableTerminalFeatures();

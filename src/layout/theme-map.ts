@@ -4,24 +4,30 @@
  * red = error/blocked, purple = thinking/model activity, gray = muted.
  */
 
-import { ActorHealth } from "../runtime/types.js";
+import type { ActorHealth } from "../runtime/types.js";
 
 export type SemanticColor = "green" | "blue" | "yellow" | "red" | "magenta" | "gray";
 
 export function semanticColor(health: ActorHealth): SemanticColor {
   switch (health) {
-    case "healthy":
+    case "healthy": {
       return "green";
-    case "active":
+    }
+    case "active": {
       return "blue";
-    case "waiting":
+    }
+    case "waiting": {
       return "yellow";
-    case "error":
+    }
+    case "error": {
       return "red";
-    case "thinking":
+    }
+    case "thinking": {
       return "magenta";
-    case "muted":
+    }
+    case "muted": {
       return "gray";
+    }
   }
 }
 

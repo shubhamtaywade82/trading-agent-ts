@@ -1,5 +1,5 @@
-import React from "react";
 import { Box, Text } from "ink";
+import React from "react";
 
 export interface PromptBarProps {
   text: string;
@@ -31,7 +31,7 @@ export function PromptBar({ text, ghost, width, busy }: PromptBarProps): JSX.Ele
   const lines = text.split("\n");
   const isPasted = isPastedPlaceholder(lines);
   const hiddenCount = isPasted ? lines.length - 1 : 0;
-  const lastLine = isPasted ? lines[0]! : (lines[lines.length - 1] ?? "");
+  const lastLine = isPasted ? lines[0]! : (lines.at(-1) ?? "");
   const available = Math.max(1, width - 2);
   const visibleLine = lastLine.length > available ? lastLine.slice(lastLine.length - available) : lastLine;
   const ghostRoom = available - visibleLine.length - 1;

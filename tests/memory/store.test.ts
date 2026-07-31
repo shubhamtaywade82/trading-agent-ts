@@ -1,6 +1,7 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { MemoryStore } from "../../src/memory/store.js";
 
 describe("MemoryStore", () => {
@@ -13,7 +14,7 @@ describe("MemoryStore", () => {
 
     const messages = store.recentMessages(10);
 
-    expect(messages.map((m) => m.content)).toEqual(["first", "second"]);
+    expect(messages.map((m) => m.content)).toStrictEqual(["first", "second"]);
     store.close();
   });
 
@@ -25,7 +26,7 @@ describe("MemoryStore", () => {
 
     const messages = store.recentMessages(2);
 
-    expect(messages.map((m) => m.content)).toEqual(["msg-3", "msg-4"]);
+    expect(messages.map((m) => m.content)).toStrictEqual(["msg-3", "msg-4"]);
     store.close();
   });
 
@@ -49,7 +50,7 @@ describe("MemoryStore", () => {
     store1.close();
 
     const store2 = new MemoryStore(path);
-    expect(store2.recentMessages(10).map((m) => m.content)).toEqual(["persisted"]);
+    expect(store2.recentMessages(10).map((m) => m.content)).toStrictEqual(["persisted"]);
     store2.close();
   });
 

@@ -1,15 +1,16 @@
-import React from "react";
 import { Box, Text } from "ink";
-import { UniversalPicker } from "./UniversalPicker.js";
+import React from "react";
+
 import { OverlayFrame } from "./OverlayFrame.js";
+import { UniversalPicker } from "./UniversalPicker.js";
 
 export interface ModelSwitcherProps {
   current: string;
-  models: string[] | null; // null = still loading
+  models: string[] | null; // Null = still loading
   width: number;
   rows: number;
   active: boolean;
-  onSelect(model: string): void;
+  onSelect: (model: string) => void;
 }
 
 /** Ctrl+M — switch model via the universal picker. */
@@ -27,7 +28,7 @@ export function ModelSwitcher({ current, models, width, rows, active, onSelect }
   return (
     <UniversalPicker
       title="Switch Model"
-      items={all.map((m) => ({ id: m, label: m, detail: m === current ? "current" : undefined }))}
+      items={all.map((m) => ({ id: m, label: m, ...(m === current ? { detail: "current" } : {}) }))}
       width={width}
       rows={rows}
       active={active}

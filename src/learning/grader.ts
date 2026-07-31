@@ -1,4 +1,4 @@
-import { Episode, Grade } from "./types.js";
+import type { Episode, Grade } from "./types.js";
 
 /**
  * Grades an episode from hard signals only: exit codes, error labels, and
@@ -12,7 +12,7 @@ export function gradeEpisode(episode: Episode): Grade {
   const total = events.length || 1;
   const errors = events.filter((event) => !event.ok);
   const testEvents = events.filter((event) => TEST_TOOLS.has(event.name));
-  const lastTest = testEvents[testEvents.length - 1];
+  const lastTest = testEvents.at(-1);
   const testsRan = testEvents.length > 0;
   const testsPassed = testsRan ? (lastTest?.ok ?? false) : null;
   const pathEscapes = errors.filter((event) => event.errorLabel === "PathEscapeError").length;
@@ -23,6 +23,7 @@ export function gradeEpisode(episode: Episode): Grade {
   for (let i = 1; i < events.length; i++) {
     const previous = events[i - 1];
     const current = events[i];
+    if (previous === undefined || current === undefined) continue;
     const same =
       current.name === previous.name && current.errorLabel !== undefined && current.errorLabel === previous.errorLabel;
     run = same ? run + 1 : 0;
@@ -40,7 +41,7 @@ export function gradeEpisode(episode: Episode): Grade {
     retriedSameToolMax,
   };
 
-  let score = 1.0;
+  let score = 1;
   if (episode.terminal === "loop_abort" || episode.terminal === "error") score -= 0.6;
   if (episode.terminal === "turn_budget") score -= 0.4;
   score -= Math.min(0.3, signals.toolErrorRate * 0.6);
@@ -50,6 +51,6 @@ export function gradeEpisode(episode: Episode): Grade {
   if (testsRan && testsPassed === true) score += 0.1;
   score = Math.max(0, Math.min(1, score));
 
-  const verdict: Grade["verdict"] = score >= 0.75 ? "success" : score >= 0.4 ? "partial" : "failure";
+  const verdict: Grade["verdict"] = score >= 0.75 ? "success" : (score >= 0.4 ? "partial" : "failure");
   return { score, signals, verdict };
 }

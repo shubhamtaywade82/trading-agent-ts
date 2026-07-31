@@ -1,5 +1,6 @@
-import { PaperPosition } from "../exchange/paper-trading.js";
-import { TradingConfig } from "./trading-config.js";
+import type { PaperPosition } from "../exchange/paper-trading.js";
+
+import type { TradingConfig } from "./trading-config.js";
 
 export interface OrderRequest {
   idempotencyKey: string;
@@ -33,22 +34,22 @@ export interface AccountBalance {
 }
 
 export interface BrokerageService {
-  placeOrder(req: OrderRequest): Promise<OrderResult>;
-  cancelOrder(orderId: string): Promise<boolean>;
-  getAccountBalance(): Promise<AccountBalance>;
-  getOpenPositions(symbol?: string): Promise<PaperPosition[]>;
-  markToMarket(prices: Record<string, number>): void;
+  placeOrder: (req: OrderRequest) => Promise<OrderResult>;
+  cancelOrder: (orderId: string) => Promise<boolean>;
+  getAccountBalance: () => Promise<AccountBalance>;
+  getOpenPositions: (symbol?: string) => Promise<PaperPosition[]>;
+  markToMarket: (prices: Record<string, number>) => void;
 }
 
 export class PaperTradingBrokerageService implements BrokerageService {
   private cashBalance: number;
   private realizedPnl = 0;
-  private positions: PaperPosition[] = [];
-  private processedKeys = new Map<string, OrderResult>();
-  private orderHistory: OrderResult[] = [];
+  private readonly positions: PaperPosition[] = [];
+  private readonly processedKeys = new Map<string, OrderResult>();
+  private readonly orderHistory: OrderResult[] = [];
   private nextId = 1;
 
-  constructor(private config: TradingConfig) {
+  constructor(private readonly config: TradingConfig) {
     this.cashBalance = config.initialCapital;
   }
 
@@ -107,13 +108,13 @@ export class PaperTradingBrokerageService implements BrokerageService {
       direction: req.direction,
       entryPrice: req.entryPrice,
       quantity: req.quantity,
-      stopPrice: req.stopPrice,
-      targetPrice: req.targetPrice,
       openedAt: Date.now(),
       closedAt: null,
       closePrice: null,
       closeReason: null,
       realizedPnlPct: null,
+      ...(req.stopPrice !== undefined && { stopPrice: req.stopPrice }),
+      ...(req.targetPrice !== undefined && { targetPrice: req.targetPrice }),
     };
     this.positions.push(pos);
 
@@ -139,6 +140,7 @@ export class PaperTradingBrokerageService implements BrokerageService {
     if (posIndex === -1) return false;
 
     const pos = this.positions[posIndex];
+    if (pos === undefined) return false;
     pos.closedAt = Date.now();
     pos.closeReason = "manual";
     pos.closePrice = pos.entryPrice;
@@ -192,7 +194,7 @@ export class PaperTradingBrokerageService implements BrokerageService {
   }
 
   async getAccountBalance(): Promise<AccountBalance> {
-    let unrealizedPnl = 0;
+    const unrealizedPnl = 0;
     for (const p of this.positions) {
       if (p.closedAt !== null) continue;
       // In absence of live tick inside balance check, unrealized is 0 until marked to market

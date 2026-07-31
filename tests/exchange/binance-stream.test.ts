@@ -1,7 +1,8 @@
-import { BinanceStreamManager, detectLiquidationCluster, Liquidation } from "../../src/exchange/binance-stream.js";
+import type { Liquidation } from "../../src/exchange/binance-stream.js";
+import { BinanceStreamManager, detectLiquidationCluster } from "../../src/exchange/binance-stream.js";
 
 // Real WebSocket connection to Binance's public ticker stream, same spirit
-// as the real-Chromium browser tests — verify the actual integration.
+// As the real-Chromium browser tests — verify the actual integration.
 describe("BinanceStreamManager (real network)", () => {
   let manager: BinanceStreamManager;
 
@@ -23,20 +24,20 @@ describe("BinanceStreamManager (real network)", () => {
       if (!tick) await new Promise((r) => setTimeout(r, 250));
     }
     expect(tick).toBeDefined();
-    expect(tick!.symbol).toBe("BTCUSDT");
-    expect(tick!.price).toBeGreaterThan(0);
-  }, 20000);
+    expect(tick.symbol).toBe("BTCUSDT");
+    expect(tick.price).toBeGreaterThan(0);
+  }, 20_000);
 
   it("unsubscribe stops tracking the symbol", async () => {
     await manager.subscribe("ETHUSDT");
     expect(manager.unsubscribe("ETHUSDT")).toBe(true);
     expect(manager.isSubscribed("ETHUSDT")).toBe(false);
     expect(manager.getLatest("ETHUSDT")).toBeUndefined();
-  }, 20000);
+  }, 20_000);
 
   it("triggers an alert once the live price crosses an always-true threshold", async () => {
     await manager.subscribe("BTCUSDT");
-    const alert = manager.addAlert("BTCUSDT", "above", 0); // any positive price trips this
+    const alert = manager.addAlert("BTCUSDT", "above", 0); // Any positive price trips this
     for (let i = 0; i < 40; i++) {
       if (manager.listAlerts().find((a) => a.id === alert.id)?.triggered) break;
       await new Promise((r) => setTimeout(r, 250));
@@ -44,7 +45,7 @@ describe("BinanceStreamManager (real network)", () => {
     const found = manager.listAlerts().find((a) => a.id === alert.id);
     expect(found?.triggered).toBe(true);
     expect(found?.triggeredPrice).toBeGreaterThan(0);
-  }, 20000);
+  }, 20_000);
 
   it("removeAlert removes it from the list", async () => {
     const alert = manager.addAlert("BTCUSDT", "below", 1);
@@ -56,11 +57,11 @@ describe("BinanceStreamManager (real network)", () => {
     await manager.subscribeLiquidations();
     expect(manager.isSubscribedToLiquidations()).toBe(true);
     // Liquidations are bursty and unpredictable — just prove the connection
-    // opened and the getter doesn't throw; don't wait on a specific event.
+    // Opened and the getter doesn't throw; don't wait on a specific event.
     expect(Array.isArray(manager.getLiquidations())).toBe(true);
     expect(manager.unsubscribeLiquidations()).toBe(true);
     expect(manager.isSubscribedToLiquidations()).toBe(false);
-  }, 20000);
+  }, 20_000);
 });
 
 describe("detectLiquidationCluster", () => {
@@ -98,7 +99,7 @@ describe("detectLiquidationCluster", () => {
   it("ignores liquidations outside the trailing window", () => {
     const now = 1_700_000_000_000;
     const liqs: Liquidation[] = Array.from({ length: 5 }, (_, i) => ({
-      symbol: "XRPUSDT", side: "SELL", price: 1, quantity: 100, time: now - (6 * 60 * 1000) - i * 1000, // all 6+ min old
+      symbol: "XRPUSDT", side: "SELL", price: 1, quantity: 100, time: now - (6 * 60 * 1000) - i * 1000, // All 6+ min old
     }));
     const result = detectLiquidationCluster(fakeStream(liqs), "XRPUSDT", 5 * 60 * 1000, 5, now);
     expect(result).toBeNull();

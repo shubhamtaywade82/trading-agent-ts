@@ -1,8 +1,10 @@
-import React from "react";
 import { Box, Text } from "ink";
-import { SkillMeta, SkillUsageStats } from "../../skills/types.js";
-import { UniversalPicker } from "./UniversalPicker.js";
+import React from "react";
+
+import type { SkillMeta, SkillUsageStats } from "../../skills/types.js";
+
 import { OverlayFrame } from "./OverlayFrame.js";
+import { UniversalPicker } from "./UniversalPicker.js";
 
 export interface SkillsOverlayProps {
   skills: SkillMeta[];
@@ -10,7 +12,7 @@ export interface SkillsOverlayProps {
   width: number;
   rows: number;
   active: boolean;
-  onSelect(id: string): void;
+  onSelect: (id: string) => void;
 }
 
 /** Browse installed skills and pin one — reached via /skills or the command palette. */
@@ -27,11 +29,14 @@ export function SkillsOverlay({ skills, usage, width, rows, active, onSelect }: 
   return (
     <UniversalPicker
       title="Skills"
-      items={skills.map((s) => ({
-        id: s.id,
-        label: s.name,
-        detail: usage?.[s.id] ? `used ${usage[s.id].useCount}×` : s.tags.join(", "),
-      }))}
+      items={skills.map((s) => {
+        const used = usage?.[s.id];
+        return {
+          id: s.id,
+          label: s.name,
+          detail: used ? `used ${used.useCount}×` : s.tags.join(", "),
+        };
+      })}
       width={width}
       rows={rows}
       active={active}

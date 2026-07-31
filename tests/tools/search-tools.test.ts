@@ -1,6 +1,7 @@
 import { mkdtemp, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { SearchCodeTool } from "../../src/tools/search-tools.js";
 
 describe("SearchCodeTool", () => {
@@ -11,8 +12,8 @@ describe("SearchCodeTool", () => {
 
     const result = await tool.call({ query: "function bar" });
 
-    const matches = result.matches as { path: string; line: number; text: string }[];
-    expect(matches).toEqual(
+    const matches = result.matches as Array<{ path: string; line: number; text: string }>;
+    expect(matches).toStrictEqual(
       expect.arrayContaining([expect.objectContaining({ path: "a.ts", line: 2 })]),
     );
   });
@@ -26,7 +27,7 @@ describe("SearchCodeTool", () => {
 
     const result = await tool.call({ query: "TODO", path: "sub" });
 
-    const matches = result.matches as { path: string }[];
+    const matches = result.matches as Array<{ path: string }>;
     expect(matches.every((m) => m.path.startsWith("sub/"))).toBe(true);
   });
 
@@ -44,6 +45,6 @@ describe("SearchCodeTool", () => {
 
     const result = await tool.call({ query: "zzz_not_present" });
 
-    expect(result.matches).toEqual([]);
+    expect(result.matches).toStrictEqual([]);
   });
 });

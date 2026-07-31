@@ -1,6 +1,8 @@
 import React from "react";
-import { CommandEffect, SlashCommandRegistry } from "../../interaction/slash-commands.js";
+
+import type { CommandEffect, SlashCommandRegistry } from "../../interaction/slash-commands.js";
 import { VIEW_ORDER } from "../../runtime/types.js";
+
 import { UniversalPicker } from "./UniversalPicker.js";
 
 export interface PaletteAction {
@@ -31,7 +33,7 @@ export interface CommandPaletteProps {
   width: number;
   rows: number;
   active: boolean;
-  onAction(effect: CommandEffect): void;
+  onAction: (effect: CommandEffect) => void;
 }
 
 /** Ctrl+P — global searchable action palette (actions, not commands). */

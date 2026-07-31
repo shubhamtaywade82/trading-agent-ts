@@ -1,9 +1,11 @@
+/* eslint-disable security/detect-non-literal-fs-filename -- every fs call below operates on a path already validated by resolveWorkspacePath() */
 import { readFile, writeFile, rename, unlink, mkdir, stat } from "node:fs/promises";
 import { dirname } from "node:path";
-import { Tool } from "./tool.js";
-import { resolveWorkspacePath, PathEscapeError } from "./path-utils.js";
 
-export { PathEscapeError };
+import { resolveWorkspacePath } from "./path-utils.js";
+import { Tool } from "./tool.js";
+
+
 
 export class ReadFileTool extends Tool {
   constructor(private readonly root: string) {
@@ -26,12 +28,12 @@ export class ReadFileTool extends Tool {
     return ["read", "file", "view", "cat", "open", "show", "inspect"];
   }
 
-  get parameters(): Record<string, unknown> {
+  override get parameters(): Record<string, unknown> {
     return { type: "object", properties: { path: { type: "string" } }, required: ["path"] };
   }
 
   async call(args: Record<string, unknown>): Promise<Record<string, unknown>> {
-    const relPath = args.path as string;
+    const relPath = args["path"] as string;
     const path = resolveWorkspacePath(this.root, relPath);
 
     const content = await readFile(path, "utf-8");
@@ -60,7 +62,7 @@ export class WriteFileTool extends Tool {
     return ["write", "file", "create", "save", "update", "new"];
   }
 
-  get parameters(): Record<string, unknown> {
+  override get parameters(): Record<string, unknown> {
     return {
       type: "object",
       properties: { path: { type: "string" }, content: { type: "string" } },
@@ -69,8 +71,8 @@ export class WriteFileTool extends Tool {
   }
 
   async call(args: Record<string, unknown>): Promise<Record<string, unknown>> {
-    const relPath = args.path as string;
-    const content = args.content as string;
+    const relPath = args["path"] as string;
+    const content = args["content"] as string;
     const path = resolveWorkspacePath(this.root, relPath);
     await mkdir(dirname(path), { recursive: true });
 
@@ -84,8 +86,10 @@ export class WriteFileTool extends Tool {
         await stat(tmp);
         await unlink(tmp);
       } catch {
-        // tmp already gone (rename succeeded) — nothing to clean up
+        // Tmp already gone (rename succeeded) — nothing to clean up
       }
     }
   }
 }
+
+export {PathEscapeError} from "./path-utils.js";

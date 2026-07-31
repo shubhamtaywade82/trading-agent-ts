@@ -4,8 +4,10 @@
  * closing an overlay or switching views can never stop an actor.
  */
 
-import { VIEW_ORDER, ViewId } from "../runtime/types.js";
-import { UiCommand } from "./keybindings.js";
+import type { ViewId } from "../runtime/types.js";
+import { VIEW_ORDER } from "../runtime/types.js";
+
+import type { UiCommand } from "./keybindings.js";
 
 export type OverlayId = "palette" | "help" | "actors" | "diff" | "model" | "search" | "skills" | "mode";
 
@@ -22,34 +24,46 @@ export function initialUiState(): UiState {
 function cycleView(current: ViewId, delta: number): ViewId {
   const idx = VIEW_ORDER.indexOf(current);
   const next = (idx + delta + VIEW_ORDER.length) % VIEW_ORDER.length;
-  return VIEW_ORDER[next];
+  return VIEW_ORDER[next] ?? current;
 }
 
 export function uiReduce(state: UiState, command: UiCommand): UiState {
   switch (command.type) {
-    case "focus-view":
+    case "focus-view": {
       return { ...state, activeView: command.view };
-    case "next-view":
+    }
+    case "next-view": {
       return { ...state, activeView: cycleView(state.activeView, 1) };
-    case "prev-view":
+    }
+    case "prev-view": {
       return { ...state, activeView: cycleView(state.activeView, -1) };
-    case "open-overlay":
+    }
+    case "open-overlay": {
       return { ...state, overlay: command.overlay };
-    case "close-overlay":
+    }
+    case "close-overlay": {
       return { ...state, overlay: null };
-    case "toggle-zoom":
+    }
+    case "toggle-zoom": {
       return { ...state, zoom: !state.zoom };
-    case "view-diff":
+    }
+    case "view-diff": {
       return { ...state, overlay: state.overlay === "diff" ? null : "diff" };
-    case "clear-conversation":
-      return state; // handled by App.tsx
-    case "open-mode":
+    }
+    case "clear-conversation": {
+      return state; // Handled by App.tsx
+    }
+    case "open-mode": {
       return { ...state, overlay: "mode" };
-    case "next-mode":
-      return state; // handled by App.tsx
-    case "cancel":
+    }
+    case "next-mode": {
+      return state; // Handled by App.tsx
+    }
+    case "cancel": {
       return state;
-    default:
+    }
+    default: {
       return state;
+    }
   }
 }

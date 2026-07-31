@@ -18,14 +18,18 @@ export type DetailLevel = "compact" | "normal" | "expanded" | "full";
 
 export function detailForDensity(density: Density): DetailLevel {
   switch (density) {
-    case "high":
+    case "high": {
       return "full";
-    case "normal":
+    }
+    case "normal": {
       return "expanded";
-    case "compact":
+    }
+    case "compact": {
       return "normal";
-    case "minimal":
+    }
+    case "minimal": {
       return "compact";
+    }
   }
 }
 

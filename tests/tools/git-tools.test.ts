@@ -1,8 +1,9 @@
+import { execFile } from "node:child_process";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+
 import { GitTool } from "../../src/tools/git-tools.js";
 
 const exec = promisify(execFile);

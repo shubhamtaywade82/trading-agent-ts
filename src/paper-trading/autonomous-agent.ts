@@ -1,8 +1,9 @@
+import type { BrokerageService, OrderResult } from "./brokerage.js";
 import { AgentFSM } from "./fsm.js";
 import { StructuredLogger } from "./logger.js";
-import { TradingConfig, calculatePositionQuantity } from "./trading-config.js";
-import { DecoupledRuleEngine, MarketContext, RuleSignal } from "./rules-engine.js";
-import { BrokerageService, OrderResult } from "./brokerage.js";
+import type { DecoupledRuleEngine, MarketContext, RuleSignal } from "./rules-engine.js";
+import type { TradingConfig} from "./trading-config.js";
+import { calculatePositionQuantity } from "./trading-config.js";
 
 export class AutonomousTradingAgent {
   public fsm: AgentFSM;

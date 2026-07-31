@@ -1,10 +1,11 @@
 import Database from "better-sqlite3";
-import { Tool } from "./tool.js";
-import { resolveWorkspacePath } from "./path-utils.js";
 
-// ponytail: read-only by design (SELECT/PRAGMA/EXPLAIN only) — a DB tool that
-// lets an LLM silently DROP/DELETE a project's database is a real destructive-
-// action risk. Add an explicit write mode later if a task genuinely needs it.
+import { resolveWorkspacePath } from "./path-utils.js";
+import { Tool } from "./tool.js";
+
+// Ponytail: read-only by design (SELECT/PRAGMA/EXPLAIN only) — a DB tool that
+// Lets an LLM silently DROP/DELETE a project's database is a real destructive-
+// Action risk. Add an explicit write mode later if a task genuinely needs it.
 const READ_ONLY_PATTERN = /^\s*(select|pragma|explain)\b/i;
 
 export class SqliteQueryTool extends Tool {
@@ -20,11 +21,11 @@ export class SqliteQueryTool extends Tool {
     return "Inspect a SQLite database file: list tables, show a table's schema, or run a read-only query (SELECT/PRAGMA/EXPLAIN only).";
   }
 
-  get tags(): string[] {
+  override get tags(): string[] {
     return ["database", "sqlite", "sql"];
   }
 
-  get parameters(): Record<string, unknown> {
+  override get parameters(): Record<string, unknown> {
     return {
       type: "object",
       properties: {
@@ -38,8 +39,8 @@ export class SqliteQueryTool extends Tool {
   }
 
   async call(args: Record<string, unknown>): Promise<Record<string, unknown>> {
-    const dbPath = args.dbPath as string;
-    const operation = args.operation as string;
+    const dbPath = args["dbPath"] as string;
+    const operation = args["operation"] as string;
     if (!dbPath || !operation) {
       return { error: "ArgumentError", message: "dbPath and operation are required" };
     }
@@ -65,14 +66,14 @@ export class SqliteQueryTool extends Tool {
       }
 
       if (operation === "schema") {
-        const table = args.table as string;
+        const table = args["table"] as string;
         if (!table) return { error: "ArgumentError", message: "table is required for operation=schema" };
         const rows = db.prepare(`PRAGMA table_info(${quoteIdentifier(table)})`).all();
         return { table, columns: rows };
       }
 
       if (operation === "query") {
-        const sql = args.sql as string;
+        const sql = args["sql"] as string;
         if (!sql) return { error: "ArgumentError", message: "sql is required for operation=query" };
         if (!READ_ONLY_PATTERN.test(sql)) {
           return { error: "WriteQueryBlockedError", message: "only SELECT, PRAGMA, and EXPLAIN queries are allowed" };
@@ -91,5 +92,5 @@ export class SqliteQueryTool extends Tool {
 }
 
 function quoteIdentifier(name: string): string {
-  return `"${name.replace(/"/g, '""')}"`;
+  return `"${name.replaceAll('"', '""')}"`;
 }

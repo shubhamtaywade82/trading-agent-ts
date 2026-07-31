@@ -1,7 +1,9 @@
-import React from "react";
 import { Box, Text } from "ink";
+import React from "react";
+
 import { tail, truncate } from "../../layout/truncate.js";
-import { ViewProps } from "./ConversationView.js";
+
+import type { ViewProps } from "./ConversationView.js";
 
 /** MCP: connected servers, latency, errors, exposed tools. */
 export function McpView({ state, width, rows, detail }: ViewProps): JSX.Element {

@@ -3,7 +3,7 @@
  * task graph can never drift into an inconsistent shape.
  */
 
-import { Task, TaskStatus } from "./types.js";
+import type { Task, TaskStatus } from "./types.js";
 
 const TRANSITIONS: Record<TaskStatus, readonly TaskStatus[]> = {
   queued: ["running", "blocked", "cancelled"],
@@ -29,7 +29,10 @@ export function applyTaskTransition(tasks: Task[], taskId: string, status: TaskS
   const statusChanges = task.status !== status;
   if (statusChanges && !canTransition(task.status, status)) return tasks;
   if (!statusChanges && progress === undefined) return tasks;
-  return tasks.map((t) => (t.id === taskId ? { ...t, status, progress: progress ?? t.progress } : t));
+  return tasks.map((t) => {
+    if (t.id !== taskId) return t;
+    return progress !== undefined ? { ...t, status, progress } : { ...t, status };
+  });
 }
 
 /** Tasks whose dependencies are all completed and are ready to run. */

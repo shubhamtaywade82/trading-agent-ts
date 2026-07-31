@@ -1,8 +1,10 @@
-import React from "react";
 import { Box, Text } from "ink";
-import { MemoryItem } from "../../runtime/types.js";
+import React from "react";
+
 import { tail, truncate, wrapText } from "../../layout/truncate.js";
-import { ViewProps } from "./ConversationView.js";
+import type { MemoryItem } from "../../runtime/types.js";
+
+import type { ViewProps } from "./ConversationView.js";
 
 const KIND_LABEL: Record<MemoryItem["kind"], string> = {
   repo: "repo",
@@ -36,7 +38,7 @@ export function MemoryView({ state, width, rows }: ViewProps): JSX.Element {
           <Text color="yellow">{`[${KIND_LABEL[item.kind]}] `}</Text>
           <Text color="blue">{item.key}</Text>
           <Text color="gray">{" — "}</Text>
-          <Text>{truncate(item.value.replace(/\n/g, " "), Math.max(10, width - item.key.length - 12))}</Text>
+          <Text>{truncate(item.value.replaceAll('\n', " "), Math.max(10, width - item.key.length - 12))}</Text>
         </Text>
       ))}
     </Box>

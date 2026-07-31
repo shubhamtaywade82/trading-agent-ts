@@ -1,7 +1,8 @@
 import { AutonomousTradingAgent } from "../../src/paper-trading/autonomous-agent.js";
-import { DEFAULT_TRADING_CONFIG } from "../../src/paper-trading/trading-config.js";
-import { DecoupledRuleEngine, buildConditionFromJson, MarketContext } from "../../src/paper-trading/rules-engine.js";
 import { PaperTradingBrokerageService } from "../../src/paper-trading/brokerage.js";
+import type { MarketContext } from "../../src/paper-trading/rules-engine.js";
+import { DecoupledRuleEngine, buildConditionFromJson } from "../../src/paper-trading/rules-engine.js";
+import { DEFAULT_TRADING_CONFIG } from "../../src/paper-trading/trading-config.js";
 
 describe("AutonomousTradingAgent", () => {
   let agent: AutonomousTradingAgent;
@@ -27,8 +28,8 @@ describe("AutonomousTradingAgent", () => {
   test("runs tick loop autonomously and executes trade on matching rule", async () => {
     const marketCtx: MarketContext = {
       symbol: "BTCUSDT",
-      currentPrice: 50000,
-      candles: [{ openTime: 1, open: 50000, high: 50100, low: 49900, close: 50000, volume: 100 }],
+      currentPrice: 50_000,
+      candles: [{ openTime: 1, open: 50_000, high: 50_100, low: 49_900, close: 50_000, volume: 100 }],
       indicators: { rsi: 20 },
     };
 
@@ -40,15 +41,15 @@ describe("AutonomousTradingAgent", () => {
     expect(agent.fsm.getState()).toBe("IDLE");
 
     const positions = await brokerage.getOpenPositions("BTCUSDT");
-    expect(positions.length).toBe(1);
-    expect(positions[0].stopPrice).toBeCloseTo(49000, 0);
+    expect(positions).toHaveLength(1);
+    expect(positions[0].stopPrice).toBeCloseTo(49_000, 0);
   });
 
   test("returns null and remains IDLE if no rule triggers", async () => {
     const marketCtx: MarketContext = {
       symbol: "BTCUSDT",
-      currentPrice: 50000,
-      candles: [{ openTime: 1, open: 50000, high: 50100, low: 49900, close: 50000, volume: 100 }],
+      currentPrice: 50_000,
+      candles: [{ openTime: 1, open: 50_000, high: 50_100, low: 49_900, close: 50_000, volume: 100 }],
       indicators: { rsi: 50 },
     };
 
@@ -57,6 +58,6 @@ describe("AutonomousTradingAgent", () => {
     expect(agent.fsm.getState()).toBe("IDLE");
 
     const positions = await brokerage.getOpenPositions();
-    expect(positions.length).toBe(0);
+    expect(positions).toHaveLength(0);
   });
 });

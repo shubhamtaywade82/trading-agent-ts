@@ -1,4 +1,4 @@
-import { Candle } from "./types.js";
+import type { Candle } from "./types.js";
 
 export function alignPairCandles(candlesA: Candle[], candlesB: Candle[]): { a: Candle[]; b: Candle[] } {
   const timesB = new Set(candlesB.map(c => c.openTime));
@@ -14,28 +14,36 @@ export function pearsonCorrelation(a: number[], b: number[]): number {
   const meanB = b.slice(0, n).reduce((s, v) => s + v, 0) / n;
   let cov = 0, varA = 0, varB = 0;
   for (let i = 0; i < n; i++) {
-    const da = a[i] - meanA, db = b[i] - meanB;
+    const va = a[i];
+    const vb = b[i];
+    if (va === undefined || vb === undefined) continue;
+    const da = va - meanA, db = vb - meanB;
     cov += da * db; varA += da * da; varB += db * db;
   }
   const denom = Math.sqrt(varA * varB);
   return denom === 0 ? 0 : cov / denom;
 }
 
-// z[i] compares spread[i] to the mean/std of the TRAILING `lookback` bars
+// Z[i] compares spread[i] to the mean/std of the TRAILING `lookback` bars
 // BEFORE i (not including i) — a live poll asks "is right now unusual
-// relative to recent history", which excluding the current bar answers
-// honestly (including it would let a huge move partly cancel itself out of
-// its own reference window).
+// Relative to recent history", which excluding the current bar answers
+// Honestly (including it would let a huge move partly cancel itself out of
+// Its own reference window).
 export function computeZScoreSeries(closesA: number[], closesB: number[], lookback: number): number[] {
   const n = Math.min(closesA.length, closesB.length);
-  const spread = Array.from({ length: n }, (_, i) => Math.log(closesA[i]) - Math.log(closesB[i]));
+  const spread = Array.from({ length: n }, (_, i) => {
+    const ca = closesA[i];
+    const cb = closesB[i];
+    if (ca === undefined || cb === undefined) return NaN;
+    return Math.log(ca) - Math.log(cb);
+  });
   const z = new Array(n).fill(NaN);
   for (let i = lookback; i < n; i++) {
     const window = spread.slice(i - lookback, i);
     const mean = window.reduce((s, v) => s + v, 0) / lookback;
     const variance = window.reduce((s, v) => s + (v - mean) ** 2, 0) / lookback;
     const std = Math.sqrt(variance);
-    z[i] = std === 0 ? NaN : (spread[i] - mean) / std;
+    z[i] = std === 0 ? NaN : ((spread[i] ?? NaN) - mean) / std;
   }
   return z;
 }
@@ -65,8 +73,8 @@ export function runPairsBacktest(
   const closesA = a.map(c => c.close);
   const closesB = b.map(c => c.close);
   const z = computeZScoreSeries(closesA, closesB, config.lookback);
-  const feeFrac = config.feeBps / 10000;
-  const slipFrac = config.slippageBps / 10000;
+  const feeFrac = config.feeBps / 10_000;
+  const slipFrac = config.slippageBps / 10_000;
 
   const trades: PairsTrade[] = [];
   let pos: {
@@ -76,7 +84,11 @@ export function runPairsBacktest(
 
   for (let i = 0; i < closesA.length; i++) {
     const zi = z[i];
+    if (zi === undefined) continue;
     if (Number.isNaN(zi)) continue;
+    const closeA = closesA[i];
+    const closeB = closesB[i];
+    if (closeA === undefined || closeB === undefined) continue;
 
     if (pos) {
       const barsHeld = i - pos.entryBarIdx;
@@ -85,16 +97,16 @@ export function runPairsBacktest(
       const timedOut = barsHeld >= config.maxHoldBars;
       if (hitExit || hitStop || timedOut) {
         const short = pos.direction === "short_a_long_b";
-        const fillAExit = short ? closesA[i] * (1 + slipFrac) : closesA[i] * (1 - slipFrac);
-        const fillBExit = short ? closesB[i] * (1 - slipFrac) : closesB[i] * (1 + slipFrac);
+        const fillAExit = short ? closeA * (1 + slipFrac) : closeA * (1 - slipFrac);
+        const fillBExit = short ? closeB * (1 - slipFrac) : closeB * (1 + slipFrac);
         const legAPnl = short ? pos.qtyA * (pos.fillA - fillAExit) : pos.qtyA * (fillAExit - pos.fillA);
         const legBPnl = short ? pos.qtyB * (fillBExit - pos.fillB) : pos.qtyB * (pos.fillB - fillBExit);
-        const fees = 2 * config.notionalPerLeg * feeFrac; // feeBps already round-trip, x2 legs
+        const fees = 2 * config.notionalPerLeg * feeFrac; // FeeBps already round-trip, x2 legs
         const pnlUsd = legAPnl + legBPnl - fees;
         trades.push({
           entryBarIdx: pos.entryBarIdx, exitBarIdx: i, direction: pos.direction,
           entryZ: pos.entryZ, exitZ: zi, pnlUsd,
-          exitReason: hitStop ? "stop" : hitExit ? "target" : "timeout",
+          exitReason: hitStop ? "stop" : (hitExit ? "target" : "timeout"),
         });
         pos = null;
       }
@@ -104,10 +116,10 @@ export function runPairsBacktest(
     if (Math.abs(zi) > config.entryZ) {
       const direction: "short_a_long_b" | "long_a_short_b" = zi > 0 ? "short_a_long_b" : "long_a_short_b";
       const short = direction === "short_a_long_b";
-      const qtyA = config.notionalPerLeg / closesA[i];
-      const qtyB = config.notionalPerLeg / closesB[i];
-      const fillA = short ? closesA[i] * (1 - slipFrac) : closesA[i] * (1 + slipFrac);
-      const fillB = short ? closesB[i] * (1 + slipFrac) : closesB[i] * (1 - slipFrac);
+      const qtyA = config.notionalPerLeg / closeA;
+      const qtyB = config.notionalPerLeg / closeB;
+      const fillA = short ? closeA * (1 - slipFrac) : closeA * (1 + slipFrac);
+      const fillB = short ? closeB * (1 + slipFrac) : closeB * (1 - slipFrac);
       pos = { direction, entryBarIdx: i, entryZ: zi, qtyA, qtyB, fillA, fillB };
     }
   }

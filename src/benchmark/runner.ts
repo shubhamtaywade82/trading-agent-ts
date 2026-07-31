@@ -1,5 +1,6 @@
-import { Provider, ChatResponse, Tier } from "../provider/provider.js";
-import { BenchmarkCase, BenchmarkResult } from "./types.js";
+import type { Provider, ChatResponse, Tier } from "../provider/provider.js";
+
+import type { BenchmarkCase, BenchmarkResult } from "./types.js";
 
 export interface BenchmarkTarget {
   model: string;
@@ -21,7 +22,7 @@ export async function runBenchmark(
       const start = Date.now();
       try {
         const response = await target.provider.chat(testCase.messages, {
-          tools: testCase.tools,
+          ...(testCase.tools !== undefined ? { tools: testCase.tools } : {}),
           stream: false,
         });
         const latencyMs = Date.now() - start;
@@ -31,7 +32,7 @@ export async function runBenchmark(
           tier: target.tier,
           caseId: testCase.id,
           pass,
-          reason,
+          ...(reason !== undefined ? { reason } : {}),
           latencyMs,
           tokensPerSec: estimateTokensPerSec(response, latencyMs),
         });
@@ -53,11 +54,11 @@ export async function runBenchmark(
 }
 
 // Ollama's /api/chat response includes eval_count/eval_duration (ns) on the
-// final chunk when available; fall back to a rough content-length estimate
+// Final chunk when available; fall back to a rough content-length estimate
 // (~4 chars/token) when a provider doesn't report them.
 function estimateTokensPerSec(response: ChatResponse, latencyMs: number): number | null {
-  const evalCount = response.eval_count as number | undefined;
-  const evalDurationNs = response.eval_duration as number | undefined;
+  const evalCount = response["eval_count"] as number | undefined;
+  const evalDurationNs = response["eval_duration"] as number | undefined;
   if (typeof evalCount === "number" && typeof evalDurationNs === "number" && evalDurationNs > 0) {
     return evalCount / (evalDurationNs / 1e9);
   }

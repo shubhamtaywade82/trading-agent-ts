@@ -1,7 +1,9 @@
 import React from "react";
-import { RuntimeState, ViewId } from "../../runtime/types.js";
-import { SlashCommandRegistry } from "../../interaction/slash-commands.js";
+
 import { searchItems } from "../../interaction/search.js";
+import type { SlashCommandRegistry } from "../../interaction/slash-commands.js";
+import type { RuntimeState, ViewId } from "../../runtime/types.js";
+
 import { UniversalPicker } from "./UniversalPicker.js";
 
 export interface SearchEverywhereProps {
@@ -10,7 +12,7 @@ export interface SearchEverywhereProps {
   width: number;
   rows: number;
   active: boolean;
-  onSelect(view: ViewId): void;
+  onSelect: (view: ViewId) => void;
 }
 
 /** Ctrl+F — one search over chat, logs, memory, tasks, tools, git, commands. */

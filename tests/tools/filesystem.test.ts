@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, readdir, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { ReadFileTool, WriteFileTool, PathEscapeError } from "../../src/tools/filesystem.js";
 
 describe("ReadFileTool", () => {
@@ -39,7 +40,7 @@ describe("WriteFileTool", () => {
 
     await tool.call({ path: "out/b.txt", content: "data" });
 
-    expect(await readFile(join(dir, "out/b.txt"), "utf-8")).toBe("data");
+    await expect(readFile(join(dir, "out/b.txt"), "utf-8")).resolves.toBe("data");
   });
 
   it("leaves no temp file behind after a successful write", async () => {

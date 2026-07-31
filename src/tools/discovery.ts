@@ -1,5 +1,6 @@
-import { Tool } from "./tool.js";
-import { Provider, ChatMessage } from "../provider/provider.js";
+import type { Provider, ChatMessage } from "../provider/provider.js";
+
+import type { Tool } from "./tool.js";
 
 export type SelectionMode = "heuristic" | "llm" | "hybrid";
 
@@ -17,7 +18,7 @@ export class DynamicToolSelector {
   constructor(opts: SelectorOptions = {}) {
     this.mode = opts.mode ?? "heuristic";
     this.maxActiveTools = opts.maxActiveTools ?? 8;
-    this.provider = opts.provider;
+    if (opts.provider !== undefined) this.provider = opts.provider;
   }
 
   async selectTools(prompt: string, history: ChatMessage[], availableTools: Tool[]): Promise<Tool[]> {
@@ -41,10 +42,11 @@ export class DynamicToolSelector {
     // Hybrid mode: Try heuristic first. If we have high confidence matches, use them.
     // Otherwise, fall back to LLM intent analysis if provider is available.
     const heuristicResults = this.heuristicSelectWithScores(prompt, history, availableTools);
-    const topScore = heuristicResults.length > 0 ? heuristicResults[0].score : 0;
+    const topResult = heuristicResults[0];
+    const topScore = topResult === undefined ? 0 : topResult.score;
 
     // If we have clear matches (score >= 3) and it contains basic shell/file operations, use heuristic
-    if (topScore >= 3.0 && this.hasBasicTools(heuristicResults.map(r => r.tool))) {
+    if (topScore >= 3 && this.hasBasicTools(heuristicResults.map(r => r.tool))) {
       return heuristicResults.map(r => r.tool).slice(0, this.maxActiveTools);
     }
 
@@ -67,12 +69,12 @@ export class DynamicToolSelector {
 
   private heuristicSelectWithScores(prompt: string, history: ChatMessage[], tools: Tool[]): Array<{ tool: Tool; score: number }> {
     const textToAnalyze = (
-      prompt +
-      " " +
+      `${prompt 
+      } ${ 
       history
         .slice(-3)
         .map(m => m.content ?? "")
-        .join(" ")
+        .join(" ")}`
     ).toLowerCase();
     
     const queryTokens = new Set(textToAnalyze.match(/[a-z0-9]+/g) ?? []);
@@ -84,12 +86,12 @@ export class DynamicToolSelector {
         // 1. Match tool name tokens
         const nameTokens = tool.name.toLowerCase().split(/[_-]/);
         for (const token of nameTokens) {
-          if (queryTokens.has(token)) score += 3.0;
+          if (queryTokens.has(token)) score += 3;
         }
 
         // 2. Match exact tool name
         if (queryTokens.has(tool.name.toLowerCase())) {
-          score += 5.0;
+          score += 5;
         }
 
         // 3. Match capabilities
@@ -98,7 +100,7 @@ export class DynamicToolSelector {
           for (const cap of caps) {
             const capTokens = cap.toLowerCase().split(/\s+/);
             for (const token of capTokens) {
-              if (queryTokens.has(token)) score += 2.0;
+              if (queryTokens.has(token)) score += 2;
             }
           }
         }
@@ -121,7 +123,7 @@ export class DynamicToolSelector {
 
         // Baseline boost for critical tools
         if (["read_file", "write_file", "run_shell"].includes(tool.name)) {
-          score += 1.0;
+          score += 1;
         }
 
         return { tool, score };
@@ -141,7 +143,7 @@ ${toolDescriptions}
 Your output MUST be a JSON array of tool name strings, and nothing else. Do not wrap in markdown blocks.
 Example: ["read_file", "run_shell"]`;
 
-    const userMsg = `User Request: ${prompt}\nLast History Context: ${history.slice(-1)[0]?.content ?? "(None)"}`;
+    const userMsg = `User Request: ${prompt}\nLast History Context: ${history.at(-1)?.content ?? "(None)"}`;
 
     const res = await this.provider.chat([
       { role: "system", content: systemPrompt },

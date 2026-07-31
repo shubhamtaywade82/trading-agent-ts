@@ -1,9 +1,12 @@
-import React from "react";
 import { Box, Text } from "ink";
-import { ViewProps } from "./ConversationView.js";
+import React from "react";
+
 import { AGENT_MODE_LABELS } from "../../runtime/types.js";
 
-export function SettingsView({ state, width, rows }: ViewProps): JSX.Element {
+import type { ViewProps } from "./ConversationView.js";
+
+
+export function SettingsView({ state, rows }: ViewProps): JSX.Element {
   const am = AGENT_MODE_LABELS[state.agentMode];
 
   return (

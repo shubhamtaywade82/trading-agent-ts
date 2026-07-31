@@ -22,7 +22,7 @@ describe("indicators", () => {
 
   it("rsi sits at 50 for a flat series", () => {
     const flat = Array.from({ length: 20 }, () => 100);
-    expect(rsi(flat, 14)).toBe(100); // no losses at all -> RSI formula saturates to 100
+    expect(rsi(flat, 14)).toBe(100); // No losses at all -> RSI formula saturates to 100
   });
 
   it("macd histogram is positive when price is accelerating upward", () => {

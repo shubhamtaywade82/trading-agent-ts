@@ -1,13 +1,14 @@
-import { mkdtemp, rm } from "fs/promises";
-import { tmpdir } from "os";
-import { join } from "path";
-import { writeFileSync } from "fs";
+import { writeFileSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { LivePaperRunner } from "../../src/paper-trading/live-runner.js";
 
 function fakeKlines(closes: number[], startMs: number): unknown[][] {
   return closes.map((c, i) => {
-    const t = startMs + i * 3600000;
-    return [t, c, c * 1.001, c * 0.999, c, "100", t + 3599999, "0", 0, "0", "0", "0"];
+    const t = startMs + i * 3_600_000;
+    return [t, c, c * 1.001, c * 0.999, c, "100", t + 3_599_999, "0", 0, "0", "0", "0"];
   });
 }
 
@@ -27,15 +28,15 @@ describe("LivePaperRunner: OI conditions", () => {
   });
 
   it("fetches OI history and passes it to the evaluator when an active strategy uses oi_*", async () => {
-    const start = Date.now() - 20 * 3600000;
-    const closes = [...Array(10).fill(100), 105, 105, 105, 105, 105, 105, 105, 105, 105, 105];
-    const timestamps = closes.map((_, i) => start + i * 3600000);
+    const start = Date.now() - 20 * 3_600_000;
+    const closes = [...Array.from({length: 10}).fill(100), 105, 105, 105, 105, 105, 105, 105, 105, 105, 105];
+    const timestamps = closes.map((_, i) => start + i * 3_600_000);
     let sawOiCall = false;
 
-    // fetchCandlesRange / fetchOpenInterestHist both page with a startTime
-    // cursor until the response comes back empty — the mock must honor
-    // startTime and return [] once exhausted, or the real pagination loop
-    // spins forever re-requesting the same fixed batch.
+    // FetchCandlesRange / fetchOpenInterestHist both page with a startTime
+    // Cursor until the response comes back empty — the mock must honor
+    // StartTime and return [] once exhausted, or the real pagination loop
+    // Spins forever re-requesting the same fixed batch.
     (globalThis as any).fetch = jest.fn().mockImplementation((url: URL) => {
       const href = url.toString();
       const reqStart = Number(url.searchParams.get("startTime") ?? 0);

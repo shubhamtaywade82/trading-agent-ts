@@ -4,18 +4,18 @@
  * bus -> store -> renderer.
  */
 
-import { EventBus } from "../runtime/events.js";
-import { SkillMeta } from "../skills/types.js";
+import type { EventBus } from "../runtime/events.js";
+import type { SkillMeta } from "../skills/types.js";
 
 export interface BridgeableAgent {
-  on<E extends string>(event: E, handler: (...args: any[]) => void): unknown;
-  getSkillsRegistry?(): { list(): SkillMeta[] };
+  on: <E extends string>(event: E, handler: (...args: any[]) => void) => unknown;
+  getSkillsRegistry?: () => { list: () => SkillMeta[] };
 }
 
 export function wireAgentBridge(agent: BridgeableAgent, bus: EventBus): void {
   let toolSeq = 0;
   interface OpenCall { id: string; args: Record<string, unknown> }
-  const openCalls = new Map<string, OpenCall[]>(); // tool name -> stack of open calls
+  const openCalls = new Map<string, OpenCall[]>(); // Tool name -> stack of open calls
 
   agent.on("onAssistantText", (chunk: string) => {
     bus.publish({ type: "conversation.chunk", role: "assistant", chunk });
@@ -39,7 +39,7 @@ export function wireAgentBridge(agent: BridgeableAgent, bus: EventBus): void {
     if (!call) return;
     const { id, args } = call;
     const resultObj = typeof result === "string" ? { output: result } : (result ?? {});
-    const error = resultObj && typeof resultObj.error === "string" ? resultObj.error : null;
+    const error = resultObj && typeof resultObj["error"] === "string" ? resultObj["error"] : null;
     if (error) {
       bus.publish({ type: "tool.failed", id, error });
       bus.publish({ type: "conversation.tool_call", id, name, args, status: "failed", error });

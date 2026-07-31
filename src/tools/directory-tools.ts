@@ -1,19 +1,21 @@
+/* eslint-disable security/detect-non-literal-fs-filename -- every fs call below operates on a path already validated by resolveWorkspacePath() */
 import { readdir, stat, rm, mkdir, copyFile, rename } from "node:fs/promises";
 import { resolve, relative } from "node:path";
-import { Tool } from "./tool.js";
+
 import { resolveWorkspacePath } from "./path-utils.js";
+import { Tool } from "./tool.js";
 
 export class ListDirectoryTool extends Tool {
   constructor(private readonly root: string) { super(); }
   get name(): string { return "list_directory"; }
   get description(): string { return "List files and directories at a path relative to the workspace root. Defaults to workspace root if no path given."; }
-  get parameters(): Record<string, unknown> {
+  override get parameters(): Record<string, unknown> {
     return { type: "object", properties: { path: { type: "string", description: "Directory path relative to workspace root (defaults to root)" } } };
   }
   async call(args: Record<string, unknown>): Promise<Record<string, unknown>> {
-    const path = (args.path as string) || ".";
+    const path = (args["path"] as string) || ".";
     const target = resolveWorkspacePath(this.root, path);
-    const entries: { name: string; path: string; type: "file" | "directory" }[] = [];
+    const entries: Array<{ name: string; path: string; type: "file" | "directory" }> = [];
     try {
       for (const name of await readdir(target)) {
         const item = resolve(target, name);
@@ -33,11 +35,11 @@ export class DeleteFileTool extends Tool {
   constructor(private readonly root: string) { super(); }
   get name(): string { return "delete_file"; }
   get description(): string { return "Remove a file or directory recursively."; }
-  get parameters(): Record<string, unknown> {
+  override get parameters(): Record<string, unknown> {
     return { type: "object", properties: { path: { type: "string" } }, required: ["path"] };
   }
   async call(args: Record<string, unknown>): Promise<Record<string, unknown>> {
-    const path = args.path as string;
+    const path = args["path"] as string;
     if (!path) return { error: "ArgumentError", message: "missing path" };
     const target = resolveWorkspacePath(this.root, path);
     try {
@@ -53,11 +55,11 @@ export class MakeDirectoryTool extends Tool {
   constructor(private readonly root: string) { super(); }
   get name(): string { return "make_directory"; }
   get description(): string { return "Create a directory within the workspace, including parents."; }
-  get parameters(): Record<string, unknown> {
+  override get parameters(): Record<string, unknown> {
     return { type: "object", properties: { path: { type: "string" } }, required: ["path"] };
   }
   async call(args: Record<string, unknown>): Promise<Record<string, unknown>> {
-    const path = args.path as string;
+    const path = args["path"] as string;
     if (!path) return { error: "ArgumentError", message: "missing path" };
     const target = resolveWorkspacePath(this.root, path);
     try {
@@ -73,12 +75,12 @@ export class CopyFileTool extends Tool {
   constructor(private readonly root: string) { super(); }
   get name(): string { return "copy_file"; }
   get description(): string { return "Copy a file or directory within the workspace."; }
-  get parameters(): Record<string, unknown> {
+  override get parameters(): Record<string, unknown> {
     return { type: "object", properties: { source: { type: "string" }, destination: { type: "string" } }, required: ["source", "destination"] };
   }
   async call(args: Record<string, unknown>): Promise<Record<string, unknown>> {
-    const source = args.source as string;
-    const destination = args.destination as string;
+    const source = args["source"] as string;
+    const destination = args["destination"] as string;
     if (!source || !destination) return { error: "ArgumentError", message: "source and destination are required" };
     const src = resolveWorkspacePath(this.root, source);
     const dest = resolveWorkspacePath(this.root, destination);
@@ -95,12 +97,12 @@ export class MoveFileTool extends Tool {
   constructor(private readonly root: string) { super(); }
   get name(): string { return "move_file"; }
   get description(): string { return "Move or rename a file within the workspace."; }
-  get parameters(): Record<string, unknown> {
+  override get parameters(): Record<string, unknown> {
     return { type: "object", properties: { source: { type: "string" }, destination: { type: "string" } }, required: ["source", "destination"] };
   }
   async call(args: Record<string, unknown>): Promise<Record<string, unknown>> {
-    const source = args.source as string;
-    const destination = args.destination as string;
+    const source = args["source"] as string;
+    const destination = args["destination"] as string;
     if (!source || !destination) return { error: "ArgumentError", message: "source and destination are required" };
     const src = resolveWorkspacePath(this.root, source);
     const dest = resolveWorkspacePath(this.root, destination);

@@ -40,9 +40,9 @@ export interface StrategyConfig {
   direction: "long" | "short";
   entry: Condition[];
   risk: RiskModel;
-  feeBps?: number; // round-trip fee, basis points of notional (default 10 = 0.1%)
-  maxHoldBars?: number; // force-exit after N candles if neither stop nor target hit (default 200)
-  symbol?: string; // symbol name
+  feeBps?: number; // Round-trip fee, basis points of notional (default 10 = 0.1%)
+  maxHoldBars?: number; // Force-exit after N candles if neither stop nor target hit (default 200)
+  symbol?: string; // Symbol name
 }
 
 export interface Trade {
@@ -51,13 +51,13 @@ export interface Trade {
   entryPrice: number;
   exitPrice: number;
   direction: "long" | "short";
-  returnPct: number; // net of fees
+  returnPct: number; // Net of fees
   exitReason: "stop" | "target" | "timeout" | "end-of-data";
-  entryTime?: number; // millisecond timestamp
-  exitTime?: number;  // millisecond timestamp
-  symbol?: string;    // symbol traded
-  allocatedCapital?: number; // capital allocated in portfolio context
-  realizedProfit?: number; // realized profit in currency in portfolio context
+  entryTime?: number; // Millisecond timestamp
+  exitTime?: number;  // Millisecond timestamp
+  symbol?: string;    // Symbol traded
+  allocatedCapital?: number; // Capital allocated in portfolio context
+  realizedProfit?: number; // Realized profit in currency in portfolio context
 }
 
 export interface BacktestMetrics {
@@ -71,20 +71,20 @@ export interface BacktestMetrics {
   maxDrawdownPct: number;
   
   // Intraday & Swing specific metrics
-  avgDurationBars?: number;           // average hold time in bars
-  avgDurationMs?: number;             // average hold time in milliseconds
+  avgDurationBars?: number;           // Average hold time in bars
+  avgDurationMs?: number;             // Average hold time in milliseconds
   sharpeRatio?: number;              // Sharpe Ratio (trade-based)
   sortinoRatio?: number;             // Sortino Ratio (trade-based)
   calmarRatio?: number;              // Calmar Ratio (trade-based)
   maxConsecutiveWins?: number;
   maxConsecutiveLosses?: number;
-  profitToLossRatio?: number;        // avg win / avg loss
-  winRateByHour?: Record<number, number>; // hourly win rate distribution
+  profitToLossRatio?: number;        // Avg win / avg loss
+  winRateByHour?: Record<number, number>; // Hourly win rate distribution
   totalPnlUsd?: number;              // PnL in USD (optional)
 }
 
 export interface BacktestResult {
   trades: Trade[];
   metrics: BacktestMetrics;
-  equityCurve: number[]; // cumulative return multiplier per trade, starting at 1
+  equityCurve: number[]; // Cumulative return multiplier per trade, starting at 1
 }

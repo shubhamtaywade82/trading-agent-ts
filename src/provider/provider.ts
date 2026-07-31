@@ -6,8 +6,8 @@ const MAX_ERROR_BODY_CHARS = 500;
 
 function redactSecrets(text: string): string {
   return text
-    .replace(/Bearer\s+[A-Za-z0-9._-]+/gi, "Bearer [REDACTED]")
-    .replace(/sk-[A-Za-z0-9]{6,}/g, "[REDACTED]")
+    .replaceAll(/Bearer\s+[A-Za-z0-9._-]+/gi, "Bearer [REDACTED]")
+    .replaceAll(/sk-[A-Za-z0-9]{6,}/g, "[REDACTED]")
     .slice(0, MAX_ERROR_BODY_CHARS);
 }
 
@@ -65,8 +65,8 @@ export class Provider {
     this.model = opts.model;
     this.host =
       opts.host ??
-      (opts.tier === "cloud" ? "https://ollama.com" : process.env.OLLAMA_HOST ?? "http://localhost:11434");
-    this.apiKeys = opts.apiKeys && opts.apiKeys.length > 0 ? opts.apiKeys : opts.apiKey ? [opts.apiKey] : [];
+      (opts.tier === "cloud" ? "https://ollama.com" : process.env["OLLAMA_HOST"] ?? "http://localhost:11434");
+    this.apiKeys = opts.apiKeys && opts.apiKeys.length > 0 ? opts.apiKeys : (opts.apiKey ? [opts.apiKey] : []);
     // Cloud has a 60s connect timeout; local has no timeout — never kill a running generation.
     this.timeoutMs = opts.timeoutMs ?? (opts.tier === "cloud" ? 60_000 : 0);
   }
@@ -97,15 +97,15 @@ export class Provider {
     }
 
     const body: Record<string, unknown> = { model: this.model, messages, stream: opts.stream ?? false };
-    if (opts.tools) body.tools = opts.tools;
+    if (opts.tools) body["tools"] = opts.tools;
 
     // Cloud with multiple keys: rotate to the next key on a 429 and retry
-    // before giving up — resilience across your own accounts, not a router.
+    // Before giving up — resilience across your own accounts, not a router.
     const maxAttempts = this.tier === "cloud" ? this.apiKeys.length : 1;
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (this.tier === "cloud") headers.Authorization = `Bearer ${this.apiKeys[this.apiKeyIndex]}`;
+      if (this.tier === "cloud") headers["Authorization"] = `Bearer ${this.apiKeys[this.apiKeyIndex]}`;
 
       let resp: Response;
       if (this.tier === "local" || this.timeoutMs === 0) {
@@ -118,10 +118,10 @@ export class Provider {
       } else {
         // Cloud: use a connect timeout only for the initial HTTP response headers.
         // Once headers arrive the stream is open; we cancel the abort so the body
-        // reads freely without a hard deadline.
+        // Reads freely without a hard deadline.
         const connectAbort = new AbortController();
         const connectTimer = setTimeout(
-          () => connectAbort.abort(new TimeoutError(`connect timeout after ${this.timeoutMs}ms`)),
+          () => { connectAbort.abort(new TimeoutError(`connect timeout after ${this.timeoutMs}ms`)); },
           this.timeoutMs,
         );
         try {
@@ -159,13 +159,13 @@ export class Provider {
     const headers: Record<string, string> = {};
     if (this.tier === "cloud") {
       if (this.apiKeys.length === 0) throw new ProviderError("missing apiKey for cloud availableModels");
-      headers.Authorization = `Bearer ${this.apiKeys[this.apiKeyIndex]}`;
+      headers["Authorization"] = `Bearer ${this.apiKeys[this.apiKeyIndex]}`;
     }
 
     let resp: Response;
     if (this.timeoutMs > 0) {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(new TimeoutError(`availableModels timeout after ${this.timeoutMs}ms`)), this.timeoutMs);
+      const timer = setTimeout(() => { controller.abort(new TimeoutError(`availableModels timeout after ${this.timeoutMs}ms`)); }, this.timeoutMs);
       try { resp = await fetch(`${this.host}${path}`, { headers, signal: controller.signal }); }
       finally { clearTimeout(timer); }
     } else {

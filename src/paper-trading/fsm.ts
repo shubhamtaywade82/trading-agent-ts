@@ -20,7 +20,7 @@ const VALID_TRANSITIONS: Record<AgentState, AgentState[]> = {
 export class AgentFSM {
   private currentState: AgentState = "INITIALIZING";
 
-  constructor(private logger: StructuredLogger = new StructuredLogger("AgentFSM")) {}
+  constructor(private readonly logger: StructuredLogger = new StructuredLogger("AgentFSM")) {}
 
   getState(): AgentState {
     return this.currentState;
@@ -28,7 +28,7 @@ export class AgentFSM {
 
   transitionTo(nextState: AgentState, reason?: string): boolean {
     const allowed = VALID_TRANSITIONS[this.currentState];
-    if (!allowed || !allowed.includes(nextState)) {
+    if (!allowed?.includes(nextState)) {
       this.logger.error(`Invalid FSM transition: ${this.currentState} -> ${nextState}`, { reason });
       return false;
     }

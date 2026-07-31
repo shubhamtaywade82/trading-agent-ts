@@ -1,7 +1,9 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import Database from "better-sqlite3";
+
 import { SqliteQueryTool } from "../../src/tools/database-tools.js";
 
 describe("SqliteQueryTool", () => {
@@ -22,20 +24,20 @@ describe("SqliteQueryTool", () => {
   it("lists tables", async () => {
     const tool = new SqliteQueryTool(dir);
     const result = await tool.call({ dbPath: "app.sqlite3", operation: "tables" });
-    expect(result.tables).toEqual(["users"]);
+    expect(result.tables).toStrictEqual(["users"]);
   });
 
   it("shows a table's schema", async () => {
     const tool = new SqliteQueryTool(dir);
     const result = await tool.call({ dbPath: "app.sqlite3", operation: "schema", table: "users" });
     const columns = result.columns as Array<{ name: string }>;
-    expect(columns.map((c) => c.name)).toEqual(["id", "name"]);
+    expect(columns.map((c) => c.name)).toStrictEqual(["id", "name"]);
   });
 
   it("runs a SELECT query", async () => {
     const tool = new SqliteQueryTool(dir);
     const result = await tool.call({ dbPath: "app.sqlite3", operation: "query", sql: "SELECT name FROM users ORDER BY name" });
-    expect(result.rows).toEqual([{ name: "ada" }, { name: "grace" }]);
+    expect(result.rows).toStrictEqual([{ name: "ada" }, { name: "grace" }]);
   });
 
   it("blocks a write query", async () => {

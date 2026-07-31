@@ -1,4 +1,5 @@
-import { correlationScale, computeEntryMargin, EntryMarginInputs } from "../../src/paper-trading/live-runner.js";
+import type { EntryMarginInputs } from "../../src/paper-trading/live-runner.js";
+import { correlationScale, computeEntryMargin } from "../../src/paper-trading/live-runner.js";
 
 describe("correlationScale", () => {
   it("returns 1 (no downsize) at or below the threshold", () => {
@@ -24,18 +25,18 @@ describe("correlationScale", () => {
 
 describe("computeEntryMargin", () => {
   const base: EntryMarginInputs = {
-    symbolCapital: 10000, stopPct: 0.02, leverage: 10,
+    symbolCapital: 10_000, stopPct: 0.02, leverage: 10,
     marginPerTradePct: 0.25, riskPerTradePct: 0.015,
-    maxMarginUtilizationPct: 0.60, existingSameDirMargin: 0, sizeScale: 1,
+    maxMarginUtilizationPct: 0.6, existingSameDirMargin: 0, sizeScale: 1,
   };
 
   it("uses risk-based sizing when it's below the marginPerTradePct ceiling", () => {
-    // riskMargin = 10000 * 0.015 / 0.02 / 10 = 750; flatMargin = 2500 -> risk wins
+    // RiskMargin = 10000 * 0.015 / 0.02 / 10 = 750; flatMargin = 2500 -> risk wins
     expect(computeEntryMargin(base)).toBeCloseTo(750, 5);
   });
 
   it("caps at marginPerTradePct when a tight stop would demand more than the ceiling", () => {
-    // stopPct 0.001 -> riskMargin = 10000*0.015/0.001/10 = 15000, way above flatMargin=2500
+    // StopPct 0.001 -> riskMargin = 10000*0.015/0.001/10 = 15000, way above flatMargin=2500
     const result = computeEntryMargin({ ...base, stopPct: 0.001 });
     expect(result).toBeCloseTo(2500, 5);
   });
@@ -46,7 +47,7 @@ describe("computeEntryMargin", () => {
   });
 
   it("clips to the exposure-cap headroom when an existing same-direction position already uses most of it", () => {
-    // headroom = 10000*0.60 - existing 5900 = 100, well below the 750 risk-based margin
+    // Headroom = 10000*0.60 - existing 5900 = 100, well below the 750 risk-based margin
     const result = computeEntryMargin({ ...base, existingSameDirMargin: 5900 });
     expect(result).toBeCloseTo(100, 5);
   });
@@ -54,7 +55,7 @@ describe("computeEntryMargin", () => {
   it("returns 0 (never negative) once the exposure cap is fully exhausted", () => {
     const result = computeEntryMargin({ ...base, existingSameDirMargin: 6000 }); // = cap exactly
     expect(result).toBe(0);
-    const overCap = computeEntryMargin({ ...base, existingSameDirMargin: 9000 }); // over cap
+    const overCap = computeEntryMargin({ ...base, existingSameDirMargin: 9000 }); // Over cap
     expect(overCap).toBe(0);
   });
 });

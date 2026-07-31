@@ -4,7 +4,7 @@
  * it reads the store.
  */
 
-import {
+import type {
   AgentMode,
   ApprovalRequest,
   CardItem,
@@ -60,10 +60,10 @@ export type RuntimeEvent =
 export type EventListener = (event: RuntimeEvent) => void;
 
 export class EventBus {
-  private listeners = new Set<EventListener>();
+  private readonly listeners = new Set<EventListener>();
 
   publish(event: RuntimeEvent): void {
-    for (const listener of [...this.listeners]) {
+    for (const listener of this.listeners) {
       listener(event);
     }
   }

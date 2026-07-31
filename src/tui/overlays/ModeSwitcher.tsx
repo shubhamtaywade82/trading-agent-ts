@@ -1,6 +1,9 @@
-import React, { useState } from "react";
 import { Box, Text } from "ink";
-import { AGENT_MODES, AGENT_MODE_LABELS, AgentMode } from "../../runtime/types.js";
+import React, { useState } from "react";
+
+import type { AgentMode } from "../../runtime/types.js";
+import { AGENT_MODES, AGENT_MODE_LABELS } from "../../runtime/types.js";
+
 import { OverlayFrame } from "./OverlayFrame.js";
 
 interface ModeSwitcherProps {
@@ -11,22 +14,14 @@ interface ModeSwitcherProps {
   onSelect: (mode: AgentMode) => void;
 }
 
-export function ModeSwitcher({ current, width, rows, active, onSelect }: ModeSwitcherProps): JSX.Element {
-  const [filter, setFilter] = useState("");
-  const [selectedIndex, setSelectedIndex] = useState(AGENT_MODES.indexOf(current));
+export function ModeSwitcher({ current, width, rows, active: _active, onSelect: _onSelect }: ModeSwitcherProps): JSX.Element {
+  const [filter] = useState("");
+  const [selectedIndex] = useState(AGENT_MODES.indexOf(current));
 
   const filtered = AGENT_MODES.filter((m) => {
     const label = AGENT_MODE_LABELS[m].label.toLowerCase();
     return !filter || label.includes(filter.toLowerCase());
   });
-
-  const handleKey = (ch: string) => {
-    if (active) {
-      if (ch.length === 1) {
-        setFilter((f) => f + ch);
-      }
-    }
-  };
 
   return (
     <OverlayFrame title="Agent Mode" width={width} rows={rows}>
@@ -45,7 +40,7 @@ export function ModeSwitcher({ current, width, rows, active, onSelect }: ModeSwi
             <Box key={mode} height={2}>
               <Box marginLeft={1}>
                 <Text
-                  color={isSelected ? "blue" : isCurrent ? "green" : "white"}
+                  color={isSelected ? "blue" : (isCurrent ? "green" : "white")}
                   inverse={isSelected}
                   bold={isCurrent}
                 >

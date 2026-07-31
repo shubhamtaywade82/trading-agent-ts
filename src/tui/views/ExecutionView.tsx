@@ -1,8 +1,10 @@
-import React from "react";
 import { Box, Text } from "ink";
-import { ExecutionStep } from "../../runtime/types.js";
+import React from "react";
+
 import { tail, truncate } from "../../layout/truncate.js";
-import { ViewProps } from "./ConversationView.js";
+import type { ExecutionStep } from "../../runtime/types.js";
+
+import type { ViewProps } from "./ConversationView.js";
 
 const STEP_GLYPH: Record<ExecutionStep["status"], { glyph: string; color: string }> = {
   pending: { glyph: "○", color: "gray" },
@@ -37,7 +39,7 @@ export function ExecutionView({ state, width, rows, detail }: ViewProps): JSX.El
         return (
           <Text key={step.id} wrap="truncate">
             <Text color={s.color}>{` ${s.glyph} `}</Text>
-            <Text color={step.status === "running" ? "blue" : undefined}>{truncate(step.description, width - 4)}</Text>
+            <Text {...(step.status === "running" ? { color: "blue" } : {})}>{truncate(step.description, width - 4)}</Text>
           </Text>
         );
       })}
@@ -55,7 +57,7 @@ export function ExecutionView({ state, width, rows, detail }: ViewProps): JSX.El
       )}
       {reasoningRow > 0 && (
         <Text wrap="truncate" color="gray" italic>
-          {truncate(execution.reasoning.replace(/\n/g, " "), width)}
+          {truncate(execution.reasoning.replaceAll('\n', " "), width)}
         </Text>
       )}
     </Box>

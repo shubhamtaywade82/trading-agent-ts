@@ -1,8 +1,9 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { Orchestrator, OrchestratorError } from "../../src/orchestrator/orchestrator.js";
-import { PlanStep, StepRunner, Planner, StepOutcome } from "../../src/orchestrator/types.js";
+import type { PlanStep, StepRunner, Planner, StepOutcome } from "../../src/orchestrator/types.js";
 import { CheckpointStore, sanitizeResumedSteps } from "../../src/runtime/checkpoint.js";
 
 const noopLogger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
@@ -38,7 +39,7 @@ describe("Orchestrator", () => {
     });
     await orchestrator.run();
 
-    expect(executed).toEqual(["a", "b"]);
+    expect(executed).toStrictEqual(["a", "b"]);
   });
 
   it("retries a retryable failure up to the cap, then triggers a re-plan", async () => {
@@ -108,12 +109,12 @@ describe("Orchestrator", () => {
     });
     await orchestrator.run();
 
-    expect(rolledBack).toEqual(["rollback-b", "rollback-a"]);
+    expect(rolledBack).toStrictEqual(["rollback-b", "rollback-a"]);
   });
 
   it("runs independent steps concurrently instead of one at a time", async () => {
     // "coder" and "reviewer" both depend only on "planner" — once it
-    // completes they should overlap in-flight, not run sequentially.
+    // Completes they should overlap in-flight, not run sequentially.
     const steps = [makeStep("planner"), makeStep("coder", ["planner"]), makeStep("reviewer", ["planner"])];
     const inFlight = new Set<string>();
     let maxConcurrent = 0;
@@ -160,7 +161,7 @@ describe("Orchestrator", () => {
     });
     await orchestrator.run();
 
-    expect(startOrder).toEqual(["a", "b"]);
+    expect(startOrder).toStrictEqual(["a", "b"]);
   });
 
   it("throws on a dependency cycle", async () => {
@@ -212,7 +213,7 @@ describe("Orchestrator", () => {
 
     await orchestrator.run();
 
-    expect(transitions).toEqual([
+    expect(transitions).toStrictEqual([
       "s1:analyzing",
       "s1:planning",
       "s1:implementing",
@@ -262,7 +263,7 @@ describe("Orchestrator checkpointing", () => {
       async run(step) {
         if (step.id === "a") {
           // Simulate a crash right after "a" finishes but before "b" starts:
-          // read the checkpoint a fresh CheckpointStore instance would see.
+          // Read the checkpoint a fresh CheckpointStore instance would see.
           const snapshot = new CheckpointStore(checkpointPath).load();
           seenMidRunSnapshot = snapshot?.steps.map((s) => `${s.id}:${s.status}`) ?? null;
         }
@@ -280,12 +281,12 @@ describe("Orchestrator checkpointing", () => {
     });
     await orchestrator.run();
 
-    expect(seenMidRunSnapshot).toEqual(expect.arrayContaining(["a:implementing", "b:pending"]));
+    expect(seenMidRunSnapshot).toStrictEqual(expect.arrayContaining(["a:implementing", "b:pending"]));
   });
 
   it("resumes an interrupted plan without re-running completed steps", async () => {
     // "a" already completed before the crash; "b" was mid-flight (implementing)
-    // when the process died, so its outcome is unknown.
+    // When the process died, so its outcome is unknown.
     const crashedSteps: PlanStep[] = [
       { id: "a", description: "a", status: "completed", dependencies: [], retryCount: 0 },
       { id: "b", description: "b", status: "implementing", dependencies: ["a"], retryCount: 0 },
@@ -312,7 +313,7 @@ describe("Orchestrator checkpointing", () => {
     });
     const result = await orchestrator.run();
 
-    expect(executed).toEqual(["b"]);
+    expect(executed).toStrictEqual(["b"]);
     expect(result.find((s) => s.id === "a")?.status).toBe("completed");
     expect(result.find((s) => s.id === "b")?.status).toBe("completed");
     expect(checkpoint.load()).toBeNull();

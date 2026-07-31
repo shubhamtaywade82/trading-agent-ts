@@ -1,10 +1,11 @@
 import { spawn } from "node:child_process";
+
 import { Tool } from "./tool.js";
 
 const ALLOWED_SUBCOMMANDS = new Set(["build", "run", "stop", "logs", "exec", "compose", "ps", "images", "inspect"]);
 
-// ponytail: single flag blocked (container escape risk). Extend the list if
-// another destructive/host-exposing flag shows up in practice.
+// Ponytail: single flag blocked (container escape risk). Extend the list if
+// Another destructive/host-exposing flag shows up in practice.
 const DISALLOWED_FLAG_PATTERNS = [/^--privileged$/];
 
 export class DockerTool extends Tool {
@@ -20,11 +21,11 @@ export class DockerTool extends Tool {
     return "Run a docker subcommand (build, run, stop, logs, exec, compose, ps, images, inspect). --privileged is blocked.";
   }
 
-  get tags(): string[] {
+  override get tags(): string[] {
     return ["docker", "container", "infra"];
   }
 
-  get parameters(): Record<string, unknown> {
+  override get parameters(): Record<string, unknown> {
     return {
       type: "object",
       properties: { args: { type: "array", items: { type: "string" } } },
@@ -33,13 +34,13 @@ export class DockerTool extends Tool {
   }
 
   async call(args: Record<string, unknown>): Promise<Record<string, unknown>> {
-    const dockerArgs = args.args as string[];
+    const dockerArgs = args["args"] as string[];
     if (!Array.isArray(dockerArgs) || dockerArgs.length === 0) {
       return { error: "ArgumentError", message: "args must be a non-empty string array" };
     }
 
     const subcommand = dockerArgs[0];
-    if (!ALLOWED_SUBCOMMANDS.has(subcommand)) {
+    if (subcommand === undefined || !ALLOWED_SUBCOMMANDS.has(subcommand)) {
       return { error: "DisallowedDockerCommandError", message: `docker ${subcommand} is not on the allowlist` };
     }
     if (dockerArgs.some((a) => DISALLOWED_FLAG_PATTERNS.some((p) => p.test(a)))) {

@@ -1,17 +1,17 @@
-import { Candle, StrategyConfig, Trade, BacktestResult, BacktestMetrics } from "./types.js";
-import { buildIndicatorSeries, evaluateAll } from "./conditions.js";
 import { buildSignalEvaluator } from "../tools/backtest-tools.js";
+
+import type { Candle, StrategyConfig, Trade, BacktestResult, BacktestMetrics } from "./types.js";
 
 const DEFAULT_MAX_HOLD_BARS = 200;
 const DEFAULT_FEE_BPS = 10;
 
 // Simple long-only-or-short-only event-driven backtest: scans candles in
-// order, enters when all entry conditions agree, holds until stop, target,
-// or maxHoldBars timeout. One position at a time (no pyramiding/overlap) —
-// ponytail: add position sizing/overlap if a strategy genuinely needs it.
+// Order, enters when all entry conditions agree, holds until stop, target,
+// Or maxHoldBars timeout. One position at a time (no pyramiding/overlap) —
+// Ponytail: add position sizing/overlap if a strategy genuinely needs it.
 export function runBacktest(candles: Candle[], config: StrategyConfig): BacktestResult {
   const evaluator = buildSignalEvaluator(candles, config.entry);
-  const feeFraction = (config.feeBps ?? DEFAULT_FEE_BPS) / 10000;
+  const feeFraction = (config.feeBps ?? DEFAULT_FEE_BPS) / 10_000;
   const maxHold = config.maxHoldBars ?? DEFAULT_MAX_HOLD_BARS;
   const trades: Trade[] = [];
 
@@ -23,21 +23,25 @@ export function runBacktest(candles: Candle[], config: StrategyConfig): Backtest
     }
 
     const entryIndex = i;
-    const entryPrice = candles[entryIndex].close;
+    const entryCandle = candles[entryIndex];
+    if (entryCandle === undefined) break;
+    const entryPrice = entryCandle.close;
     const stopPrice = config.direction === "long" ? entryPrice * (1 - config.risk.stopPct) : entryPrice * (1 + config.risk.stopPct);
     const targetPrice = config.direction === "long" ? entryPrice * (1 + config.risk.targetPct) : entryPrice * (1 - config.risk.targetPct);
 
     let exitIndex = candles.length - 1;
-    let exitPrice = candles[exitIndex].close;
+    const exitCandle = candles[exitIndex];
+    let exitPrice = exitCandle === undefined ? entryPrice : exitCandle.close;
     let exitReason: Trade["exitReason"] = "end-of-data";
 
     for (let j = entryIndex + 1; j < candles.length && j <= entryIndex + maxHold; j++) {
       const bar = candles[j];
+      if (bar === undefined) break;
       const hitStop = config.direction === "long" ? bar.low <= stopPrice : bar.high >= stopPrice;
       const hitTarget = config.direction === "long" ? bar.high >= targetPrice : bar.low <= targetPrice;
 
       // Conservative: if both stop and target are inside the same bar's
-      // range, assume the worse outcome (stop) rather than guessing intrabar order.
+      // Range, assume the worse outcome (stop) rather than guessing intrabar order.
       if (hitStop) {
         exitIndex = j;
         exitPrice = stopPrice;
@@ -60,6 +64,8 @@ export function runBacktest(candles: Candle[], config: StrategyConfig): Backtest
     const rawReturn = config.direction === "long" ? (exitPrice - entryPrice) / entryPrice : (entryPrice - exitPrice) / entryPrice;
     const returnPct = rawReturn - feeFraction;
 
+    const entryTime = entryCandle.openTime;
+    const exitTime = exitCandle?.openTime;
     trades.push({
       entryIndex,
       exitIndex,
@@ -68,9 +74,9 @@ export function runBacktest(candles: Candle[], config: StrategyConfig): Backtest
       direction: config.direction,
       returnPct,
       exitReason,
-      entryTime: candles[entryIndex]?.openTime,
-      exitTime: candles[exitIndex]?.openTime,
-      symbol: config.symbol,
+      entryTime,
+      ...(exitTime !== undefined && { exitTime }),
+      ...(config.symbol !== undefined && { symbol: config.symbol }),
     });
     i = exitIndex + 1;
   }
@@ -122,10 +128,10 @@ export function computeMetrics(trades: Trade[]): BacktestMetrics {
 
   const grossProfit = wins.reduce((s, t) => s + t.returnPct, 0);
   const grossLoss = Math.abs(losses.reduce((s, t) => s + t.returnPct, 0));
-  const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? Infinity : 0;
+  const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : (grossProfit > 0 ? Infinity : 0);
 
   const curve = computeEquityCurve(trades);
-  const totalReturnPct = curve[curve.length - 1] - 1;
+  const totalReturnPct = (curve.at(-1) ?? 1) - 1;
 
   let peak = 1;
   let maxDrawdownPct = 0;
@@ -139,9 +145,9 @@ export function computeMetrics(trades: Trade[]): BacktestMetrics {
   const totalBars = trades.reduce((sum, t) => sum + (t.exitIndex - t.entryIndex), 0);
   const avgDurationBars = totalBars / trades.length;
 
-  const validTimedTrades = trades.filter((t) => t.entryTime !== undefined && t.exitTime !== undefined);
+  const validTimedTrades = trades.filter((t): t is Trade & { entryTime: number; exitTime: number } => t.entryTime !== undefined && t.exitTime !== undefined);
   const avgDurationMs = validTimedTrades.length > 0
-    ? validTimedTrades.reduce((sum, t) => sum + (t.exitTime! - t.entryTime!), 0) / validTimedTrades.length
+    ? validTimedTrades.reduce((sum, t) => sum + (t.exitTime - t.entryTime), 0) / validTimedTrades.length
     : 0;
 
   const returns = trades.map((t) => t.returnPct);
@@ -173,7 +179,7 @@ export function computeMetrics(trades: Trade[]): BacktestMetrics {
     }
   }
 
-  const profitToLossRatio = avgLossPct !== 0 ? avgWinPct / Math.abs(avgLossPct) : avgWinPct > 0 ? Infinity : 0;
+  const profitToLossRatio = avgLossPct !== 0 ? avgWinPct / Math.abs(avgLossPct) : (avgWinPct > 0 ? Infinity : 0);
 
   const hourlyTrades: Record<number, { trades: number; wins: number }> = {};
   for (const t of trades) {
@@ -192,6 +198,7 @@ export function computeMetrics(trades: Trade[]): BacktestMetrics {
   for (const hourStr of Object.keys(hourlyTrades)) {
     const hour = Number(hourStr);
     const stats = hourlyTrades[hour];
+    if (stats === undefined) continue;
     winRateByHour[hour] = stats.trades > 0 ? stats.wins / stats.trades : 0;
   }
 
@@ -215,3 +222,99 @@ export function computeMetrics(trades: Trade[]): BacktestMetrics {
     winRateByHour,
   };
 }
+
+import type { Strategy as RuleStrategy } from "../paper-trading/rules-engine.js";
+
+export function runRuleEngineBacktest(
+  candles: Candle[],
+  engine: RuleStrategy,
+  options: { feeBps?: number; defaultStopPct?: number; defaultTargetPct?: number; maxHoldBars?: number } = {},
+): BacktestResult {
+  const feeFraction = (options.feeBps ?? DEFAULT_FEE_BPS) / 10_000;
+  const maxHold = options.maxHoldBars ?? DEFAULT_MAX_HOLD_BARS;
+  const defaultStopPct = options.defaultStopPct ?? 0.02;
+  const defaultTargetPct = options.defaultTargetPct ?? 0.04;
+  const trades: Trade[] = [];
+
+  let i = 0;
+  while (i < candles.length) {
+    const bar = candles[i];
+    if (bar === undefined) {
+      i++;
+      continue;
+    }
+
+    const ctx = {
+      symbol: "BACKTEST",
+      currentPrice: bar.close,
+      candles: candles.slice(0, i + 1),
+    };
+    const signal = engine.evaluate(ctx);
+    if (!signal || signal.direction === "flat") {
+      i++;
+      continue;
+    }
+
+    const entryIndex = i;
+    const entryCandle = bar;
+
+
+    const direction = signal.direction;
+    const entryPrice = entryCandle.close;
+    const stopPct = signal.stopLossPct ?? defaultStopPct;
+    const targetPct = signal.takeProfitPct ?? defaultTargetPct;
+
+    const stopPrice = direction === "long" ? entryPrice * (1 - stopPct) : entryPrice * (1 + stopPct);
+    const targetPrice = direction === "long" ? entryPrice * (1 + targetPct) : entryPrice * (1 - targetPct);
+
+    let exitIndex = candles.length - 1;
+    const exitCandle = candles[exitIndex];
+    let exitPrice = exitCandle === undefined ? entryPrice : exitCandle.close;
+    let exitReason: Trade["exitReason"] = "end-of-data";
+
+    for (let j = entryIndex + 1; j < candles.length && j <= entryIndex + maxHold; j++) {
+      const bar = candles[j];
+      if (bar === undefined) break;
+      const hitStop = direction === "long" ? bar.low <= stopPrice : bar.high >= stopPrice;
+      const hitTarget = direction === "long" ? bar.high >= targetPrice : bar.low <= targetPrice;
+
+      if (hitStop) {
+        exitIndex = j;
+        exitPrice = stopPrice;
+        exitReason = "stop";
+        break;
+      }
+      if (hitTarget) {
+        exitIndex = j;
+        exitPrice = targetPrice;
+        exitReason = "target";
+        break;
+      }
+      if (j === entryIndex + maxHold) {
+        exitIndex = j;
+        exitPrice = bar.close;
+        exitReason = "timeout";
+      }
+    }
+
+    const rawReturn = direction === "long" ? (exitPrice - entryPrice) / entryPrice : (entryPrice - exitPrice) / entryPrice;
+    const returnPct = rawReturn - feeFraction;
+
+    trades.push({
+      entryIndex,
+      exitIndex,
+      entryPrice,
+      exitPrice,
+      direction,
+      returnPct,
+      exitReason,
+      entryTime: entryCandle.openTime,
+      ...(exitCandle?.openTime !== undefined && { exitTime: exitCandle.openTime }),
+      symbol: "BACKTEST",
+    });
+    i = exitIndex + 1;
+  }
+
+  return { trades, metrics: computeMetrics(trades), equityCurve: computeEquityCurve(trades) };
+}
+

@@ -1,5 +1,5 @@
-import { Provider, ChatMessage } from "../provider/provider.js";
-import { PlanStep } from "../orchestrator/types.js";
+import type { PlanStep } from "../orchestrator/types.js";
+import type { Provider, ChatMessage } from "../provider/provider.js";
 
 export class PlanGenerationError extends Error {}
 
@@ -43,7 +43,7 @@ function validateSteps(parsed: unknown): PlanStep[] {
     return {
       id: raw.id,
       description: raw.description,
-      dependencies: raw.dependencies as string[],
+      dependencies: raw.dependencies,
       status: "pending",
       retryCount: 0,
     };

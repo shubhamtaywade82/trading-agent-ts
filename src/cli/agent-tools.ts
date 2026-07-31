@@ -1,39 +1,39 @@
-import { Registry } from "../tools/registry.js";
-import { ReadFileTool, WriteFileTool } from "../tools/filesystem.js";
-import { ShellTool } from "../tools/shell.js";
-import {
-  ListDirectoryTool, DeleteFileTool, MakeDirectoryTool, CopyFileTool, MoveFileTool,
-} from "../tools/directory-tools.js";
-import { PatchTool, AppendTool } from "../tools/edit-tools.js";
-import { SnapshotBackupTool } from "../tools/backup-tools.js";
-import { WatchTool } from "../tools/watch-tool.js";
-import { SearchCodeTool } from "../tools/search-tools.js";
-import { GitTool } from "../tools/git-tools.js";
-import { DockerTool } from "../tools/docker-tools.js";
-import { GitHubTool } from "../tools/github-tools.js";
-import { SqliteQueryTool } from "../tools/database-tools.js";
-import { RunTestsTool, RunLintTool, RunFormatTool, RunBuildTool } from "../tools/project-tools.js";
-import {
-  BrowserNavigateTool, BrowserClickTool, BrowserFillTool,
-  BrowserGetTextTool, BrowserScreenshotTool, BrowserEvaluateTool, BrowserCloseTool,
-} from "../tools/browser-tools.js";
-import { BrowserManager } from "../browser/manager.js";
-import {
-  BinancePublicApiTool, BinanceTechnicalIndicatorsTool, BinanceOrderBookTool,
-  BinanceFuturesStatsTool, BinanceScreenerTool, BinanceWatchPriceTool,
-  BinanceUnwatchPriceTool, BinancePriceAlertTool, BinanceLiquidationsTool,
-} from "../tools/binance-tools.js";
-import { BinanceStreamManager } from "../exchange/binance-stream.js";
+import type { BrowserManager } from "../browser/manager.js";
+import { BinanceConceptsBacktestTool, BinanceConceptsAnalyzeTool, BinanceConceptsMarketStateTool } from "../concepts/tools.js";
+import type { BinanceStreamManager } from "../exchange/binance-stream.js";
+import { PaperTradingManager } from "../exchange/paper-trading.js";
+import { connectMcpServer } from "../mcp/client.js";
 import {
   BinanceBacktestTool, BinanceWalkForwardTool, BinanceMonteCarloTool, BinanceParamSweepTool,
   BinancePortfolioBacktestTool, BinanceFuturesBacktestTool, BinanceFuturesSweepTool, BinanceSignalFusionTool,
   BinanceMultiTimeframeSweepTool,
 } from "../tools/backtest-tools.js";
+import { SnapshotBackupTool } from "../tools/backup-tools.js";
+import {
+  BinancePublicApiTool, BinanceTechnicalIndicatorsTool, BinanceOrderBookTool,
+  BinanceFuturesStatsTool, BinanceScreenerTool, BinanceWatchPriceTool,
+  BinanceUnwatchPriceTool, BinancePriceAlertTool, BinanceLiquidationsTool,
+} from "../tools/binance-tools.js";
+import {
+  BrowserNavigateTool, BrowserClickTool, BrowserFillTool,
+  BrowserGetTextTool, BrowserScreenshotTool, BrowserEvaluateTool, BrowserCloseTool,
+} from "../tools/browser-tools.js";
+import { SqliteQueryTool } from "../tools/database-tools.js";
+import {
+  ListDirectoryTool, DeleteFileTool, MakeDirectoryTool, CopyFileTool, MoveFileTool,
+} from "../tools/directory-tools.js";
+import { DockerTool } from "../tools/docker-tools.js";
+import { PatchTool, AppendTool } from "../tools/edit-tools.js";
+import { ReadFileTool, WriteFileTool } from "../tools/filesystem.js";
+import { GitTool } from "../tools/git-tools.js";
+import { GitHubTool } from "../tools/github-tools.js";
 import { BinancePaperTradeTool } from "../tools/paper-trading-tools.js";
-import { BinanceConceptsBacktestTool, BinanceConceptsAnalyzeTool, BinanceConceptsMarketStateTool } from "../concepts/tools.js";
-import { PaperTradingManager } from "../exchange/paper-trading.js";
-import { connectMcpServer } from "../mcp/client.js";
-import { Tool } from "../tools/tool.js";
+import { RunTestsTool, RunLintTool, RunFormatTool, RunBuildTool } from "../tools/project-tools.js";
+import { Registry } from "../tools/registry.js";
+import { SearchCodeTool } from "../tools/search-tools.js";
+import { ShellTool } from "../tools/shell.js";
+import type { Tool } from "../tools/tool.js";
+import { WatchTool } from "../tools/watch-tool.js";
 
 export type ToolOnOutput = (stream: "stdout" | "stderr", chunk: string) => void;
 

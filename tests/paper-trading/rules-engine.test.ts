@@ -1,13 +1,14 @@
-import { DecoupledRuleEngine, buildConditionFromJson, MarketContext } from "../../src/paper-trading/rules-engine.js";
+import type { MarketContext } from "../../src/paper-trading/rules-engine.js";
+import { DecoupledRuleEngine, buildConditionFromJson } from "../../src/paper-trading/rules-engine.js";
 
 describe("DecoupledRuleEngine", () => {
   const dummyCtx: MarketContext = {
     symbol: "BTCUSDT",
-    currentPrice: 50000,
+    currentPrice: 50_000,
     candles: [
-      { openTime: 1, open: 49000, high: 50500, low: 48900, close: 50000, volume: 10 },
+      { openTime: 1, open: 49_000, high: 50_500, low: 48_900, close: 50_000, volume: 10 },
     ],
-    indicators: { rsi: 25, ema20: 49500 },
+    indicators: { rsi: 25, ema20: 49_500 },
   };
 
   test("evaluates matching rules in order", () => {

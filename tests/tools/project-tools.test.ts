@@ -1,6 +1,7 @@
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { RunTestsTool, RunLintTool, RunFormatTool, RunBuildTool } from "../../src/tools/project-tools.js";
 
 async function initProject(scripts: Record<string, string>) {
@@ -11,7 +12,7 @@ async function initProject(scripts: Record<string, string>) {
 }
 
 describe("RunTestsTool", () => {
-  jest.setTimeout(10000);
+  jest.setTimeout(10_000);
 
   it("runs the test script and reports exit code", async () => {
     const dir = await initProject({ test: "node -e \"process.exit(0)\"" });

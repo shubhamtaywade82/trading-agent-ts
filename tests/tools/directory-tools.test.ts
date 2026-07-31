@@ -1,6 +1,7 @@
 import { mkdtemp, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import {
   ListDirectoryTool,
   DeleteFileTool,
@@ -18,8 +19,8 @@ describe("ListDirectoryTool", () => {
 
     const result = await tool.call({ path: "." });
 
-    const entries = result.entries as { name: string; type: string }[];
-    expect(entries).toEqual(
+    const entries = result.entries as Array<{ name: string; type: string }>;
+    expect(entries).toStrictEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: "a.txt", type: "file" }),
         expect.objectContaining({ name: "sub", type: "directory" }),
@@ -35,8 +36,8 @@ describe("ListDirectoryTool", () => {
     const result = await tool.call({});
 
     expect(result.path).toBe(".");
-    const entries = result.entries as { name: string; type: string }[];
-    expect(entries).toEqual(
+    const entries = result.entries as Array<{ name: string; type: string }>;
+    expect(entries).toStrictEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: "a.txt", type: "file" }),
       ]),

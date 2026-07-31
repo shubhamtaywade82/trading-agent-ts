@@ -1,23 +1,26 @@
-import { readFileSync, existsSync } from "fs";
-import { Provider, OllamaToolSchema, ChatMessage } from "../provider/provider.js";
+import { readFileSync, existsSync } from "node:fs";
+
+import type { OllamaToolSchema, ChatMessage } from "../provider/provider.js";
+import { Provider } from "../provider/provider.js";
+
 import { resolveOllamaCloudKeys } from "./ollama-cloud.js";
 import { assessReadiness, DEFAULT_READINESS_CRITERIA } from "./readiness.js";
-import { TradeEvaluator } from "./trade-evaluator.js";
 import { TradeAnalyst, reconstructClosedTrades } from "./trade-analyst.js";
+import { TradeEvaluator } from "./trade-evaluator.js";
 
 // Read-only conversational assistant over the paper-trading system's on-disk
-// state. Every tool below wraps an existing read function — no new business
-// logic, no write path. There is deliberately NO place_order/close_position/
-// modify_stop tool: the tool array passed to Provider.chat() is the complete
-// enforcement — the model cannot call a function that isn't in the list, no
-// matter what a prompt injection or a confused user asks it to do.
+// State. Every tool below wraps an existing read function — no new business
+// Logic, no write path. There is deliberately NO place_order/close_position/
+// Modify_stop tool: the tool array passed to Provider.chat() is the complete
+// Enforcement — the model cannot call a function that isn't in the list, no
+// Matter what a prompt injection or a confused user asks it to do.
 //
 // Runs as its own process (scripts/paper-trade-chat.ts), reading the same
-// journal/state files LivePaperRunner and friends write. No in-process
-// coupling to a running bot — works whether or not one is currently active.
+// Journal/state files LivePaperRunner and friends write. No in-process
+// Coupling to a running bot — works whether or not one is currently active.
 
 // Matches LivePaperRunner's RunnerState (live-runner.ts) -- one net position
-// per symbol (shared across strategies), one capital pool per symbol.
+// Per symbol (shared across strategies), one capital pool per symbol.
 interface PaperState {
   strategyStats: Record<string, { trades: number; wins: number; losses: number; paused?: boolean }>;
   symbolCapital: Record<string, number>;
@@ -29,6 +32,11 @@ interface PaperState {
 
 const EMPTY_STATE: PaperState = { strategyStats: {}, symbolCapital: {}, symbolPositions: {} };
 
+interface ChatPoolStrategy {
+  id: string; label: string; direction: string; tf: string;
+  risk: unknown; metrics: unknown;
+}
+
 export interface ChatAssistantConfig {
   stateFile: string;
   journalFile: string;
@@ -38,8 +46,8 @@ export interface ChatAssistantConfig {
   maxToolRounds: number;
 }
 
-const TIER: "local" | "cloud" = process.env.TRADINGAGENT_ANALYST_TIER === "local" ? "local" : "cloud";
-const MODEL = process.env.TRADINGAGENT_ANALYST_MODEL || (TIER === "local" ? "minicpm5-1b" : "gpt-oss:20b");
+const TIER: "local" | "cloud" = process.env["TRADINGAGENT_ANALYST_TIER"] === "local" ? "local" : "cloud";
+const MODEL = process.env["TRADINGAGENT_ANALYST_MODEL"] || (TIER === "local" ? "minicpm5-1b" : "gpt-oss:20b");
 
 export const DEFAULT_CHAT_CONFIG: ChatAssistantConfig = {
   stateFile: ".trading-agent/paper-state.json",
@@ -81,9 +89,9 @@ const TOOLS: OllamaToolSchema[] = [
 ];
 
 export class ChatAssistant {
-  private cfg: ChatAssistantConfig;
-  private provider: Provider;
-  private history: ChatMessage[] = [];
+  private readonly cfg: ChatAssistantConfig;
+  private readonly provider: Provider;
+  private readonly history: ChatMessage[] = [];
 
   constructor(cfg: Partial<ChatAssistantConfig> = {}) {
     this.cfg = { ...DEFAULT_CHAT_CONFIG, ...cfg };
@@ -106,7 +114,7 @@ export class ChatAssistant {
       case "get_portfolio_status": {
         const state = loadPaperState(this.cfg.stateFile);
         const pool = loadPool(this.cfg.poolPath);
-        const perSymbolCapital = pool.config?.initialCapital ?? 10000;
+        const perSymbolCapital = pool.config?.initialCapital ?? 10_000;
         const symbolCount = Object.keys(state.symbolCapital).length;
         const totalCapital = Object.values(state.symbolCapital).reduce((s, c) => s + c, 0);
         let usedMargin = 0, openCount = 0;
@@ -132,8 +140,8 @@ export class ChatAssistant {
         const state = loadPaperState(this.cfg.stateFile);
         const pool = loadPool(this.cfg.poolPath);
         const symbolOf: Record<string, string> = {};
-        for (const [symbol, strats] of Object.entries(pool.symbols) as [string, any[]][]) {
-          for (const s of strats) symbolOf[s.id] = symbol;
+        for (const [symbol, strats] of Object.entries(pool.symbols)) {
+          for (const s of strats as ChatPoolStrategy[]) symbolOf[s.id] = symbol;
         }
         const closed = reconstructClosedTrades(this.cfg.journalFile);
         const rowFor = (sid: string) => {
@@ -148,15 +156,16 @@ export class ChatAssistant {
             winRate: st.trades > 0 ? st.wins / st.trades : null, contributesToOpenPosition,
           };
         };
-        const id = args.strategyId as string | undefined;
+        const id = args["strategyId"] as string | undefined;
         if (id) return rowFor(id);
         return Object.keys(state.strategyStats).map(rowFor);
       }
-      case "get_recent_fills":
-        return tailJournal(this.cfg.journalFile, Number(args.count ?? 10));
+      case "get_recent_fills": {
+        return tailJournal(this.cfg.journalFile, Number(args["count"] ?? 10));
+      }
       case "get_recent_trade_evaluations": {
         const evaluator = new TradeEvaluator();
-        return evaluator.getRecentEvaluations(Number(args.count ?? 5));
+        return evaluator.getRecentEvaluations(Number(args["count"] ?? 5));
       }
       case "get_analyst_summary": {
         const analyst = new TradeAnalyst();
@@ -168,14 +177,15 @@ export class ChatAssistant {
       }
       case "get_strategy_backtest_reference": {
         const pool = loadPool(this.cfg.poolPath);
-        for (const strats of Object.values(pool.symbols) as any[][]) {
-          const found = strats.find(s => s.id === args.strategyId);
+        for (const strats of Object.values(pool.symbols)) {
+          const found = (strats as ChatPoolStrategy[]).find(s => s.id === args["strategyId"]);
           if (found) return { id: found.id, label: found.label, direction: found.direction, tf: found.tf, risk: found.risk, metrics: found.metrics };
         }
-        return { error: `strategy ${args.strategyId} not found in pool` };
+        return { error: `strategy ${args["strategyId"]} not found in pool` };
       }
-      default:
+      default: {
         return { error: `unknown tool ${name}` };
+      }
     }
   }
 

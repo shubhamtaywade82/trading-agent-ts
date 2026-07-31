@@ -4,9 +4,10 @@
  * the view that owns it.
  */
 
-import { RuntimeState, ViewId } from "../runtime/types.js";
-import { SlashCommandRegistry } from "./slash-commands.js";
-import { PickerItem } from "./picker.js";
+import type { RuntimeState, ViewId } from "../runtime/types.js";
+
+import type { PickerItem } from "./picker.js";
+import type { SlashCommandRegistry } from "./slash-commands.js";
 
 export interface SearchItem extends PickerItem {
   view: ViewId;
@@ -15,7 +16,7 @@ export interface SearchItem extends PickerItem {
 const MAX_PER_SOURCE = 50;
 
 function firstLine(text: string, max = 80): string {
-  const line = text.split("\n")[0];
+  const line = text.split("\n")[0] ?? "";
   return line.length > max ? `${line.slice(0, max - 1)}…` : line;
 }
 

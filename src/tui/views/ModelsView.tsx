@@ -1,6 +1,7 @@
-import React from "react";
 import { Box, Text } from "ink";
-import { ViewProps } from "./ConversationView.js";
+import React from "react";
+
+import type { ViewProps } from "./ConversationView.js";
 
 function row(label: string, value: React.ReactNode): JSX.Element {
   return (
@@ -27,7 +28,7 @@ export function ModelsView({ state, rows }: ViewProps): JSX.Element {
         ctxPct == null ? (
           <Text>-</Text>
         ) : (
-          <Text color={ctxPct > 85 ? "red" : ctxPct > 65 ? "yellow" : "green"}>
+          <Text color={ctxPct > 85 ? "red" : (ctxPct > 65 ? "yellow" : "green")}>
             {`${model.contextUsed}/${model.contextLimit} (${ctxPct}%)`}
           </Text>
         ),

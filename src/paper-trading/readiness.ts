@@ -1,22 +1,24 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from "fs";
-import { dirname } from "path";
-import { reconstructClosedTrades, ClosedTrade } from "./trade-analyst.js";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from "node:fs";
+import { dirname } from "node:path";
+
 import { terminalBell, sendTelegram } from "./notifier.js";
+import type { ClosedTrade } from "./trade-analyst.js";
+import { reconstructClosedTrades } from "./trade-analyst.js";
 
 // Deterministic (not LLM-judged) readiness gate — the whole point of every
-// prior round of this research was "don't trust a vibes-based ready/not
-// ready call," so this stays a plain rule check against real accumulated
-// paper-trading data, same spirit as buildSignalEvaluator being the one
-// source of truth for entries. The AI analyst may comment on a strategy;
-// it never decides readiness.
+// Prior round of this research was "don't trust a vibes-based ready/not
+// Ready call," so this stays a plain rule check against real accumulated
+// Paper-trading data, same spirit as buildSignalEvaluator being the one
+// Source of truth for entries. The AI analyst may comment on a strategy;
+// It never decides readiness.
 
 export interface ReadinessCriteria {
   minTrades: number;
-  minProfitFactor: number;       // live PF must clear this
+  minProfitFactor: number;       // Live PF must clear this
   maxWinRateDivergence: number;  // |liveWR - backtestWR| must be <= this
   requirePositivePnl: boolean;
-  portfolioReadyFraction: number; // fraction of evaluable strategies that must be individually ready
-  portfolioMinEvaluable: number;  // need at least this many strategies with enough trades before judging the pool
+  portfolioReadyFraction: number; // Fraction of evaluable strategies that must be individually ready
+  portfolioMinEvaluable: number;  // Need at least this many strategies with enough trades before judging the pool
 }
 
 export const DEFAULT_READINESS_CRITERIA: ReadinessCriteria = {
@@ -29,20 +31,21 @@ export const DEFAULT_READINESS_CRITERIA: ReadinessCriteria = {
 };
 
 interface BacktestRef { winRate: number; pf: number; label: string }
+interface PoolStrategyRef { id: string; label: string; metrics: BacktestRef }
 function loadBacktestRefs(poolPath: string): Record<string, BacktestRef> {
   const cfg = JSON.parse(readFileSync(poolPath, "utf-8"));
   const out: Record<string, BacktestRef> = {};
-  for (const strats of Object.values(cfg.symbols) as any[][]) {
-    for (const s of strats) out[s.id] = { winRate: s.metrics.winRate, pf: s.metrics.pf, label: s.label };
+  for (const strats of Object.values(cfg.symbols)) {
+    for (const s of strats as PoolStrategyRef[]) out[s.id] = { winRate: s.metrics.winRate, pf: s.metrics.pf, label: s.label };
   }
   return out;
 }
 
 // Every WR/PF number this whole research produced — backtest AND paper —
-// was computed at THIS leverage/margin. "Ready for live" only means ready
-// at these settings; sizing up leverage changes risk (and drawdown) in ways
-// that were never tested, so the notification states it explicitly rather
-// than leaving it implicit.
+// Was computed at THIS leverage/margin. "Ready for live" only means ready
+// At these settings; sizing up leverage changes risk (and drawdown) in ways
+// That were never tested, so the notification states it explicitly rather
+// Than leaving it implicit.
 function loadSizingConfig(poolPath: string): { leverage: number; marginPerTradePct: number } {
   const cfg = JSON.parse(readFileSync(poolPath, "utf-8"));
   return { leverage: cfg.config?.leverage ?? 5, marginPerTradePct: cfg.config?.marginPerTradePct ?? 0.05 };
@@ -52,7 +55,7 @@ export interface StrategyReadiness {
   strategyId: string; label: string; ready: boolean; evaluable: boolean;
   trades: number; liveWinRate: number; livePf: number; totalPnl: number;
   backtestWinRate: number; backtestPf: number;
-  reasons: string[]; // why not ready, empty if ready
+  reasons: string[]; // Why not ready, empty if ready
 }
 
 function computeStrategyReadiness(id: string, trades: ClosedTrade[], ref: BacktestRef | undefined, c: ReadinessCriteria): StrategyReadiness {
@@ -60,7 +63,7 @@ function computeStrategyReadiness(id: string, trades: ClosedTrade[], ref: Backte
   const liveWinRate = trades.length > 0 ? wins / trades.length : 0;
   const grossProfit = trades.filter(t => t.pnl > 0).reduce((s, t) => s + t.pnl, 0);
   const grossLoss = Math.abs(trades.filter(t => t.pnl <= 0).reduce((s, t) => s + t.pnl, 0));
-  const livePf = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? Infinity : 0;
+  const livePf = grossLoss > 0 ? grossProfit / grossLoss : (grossProfit > 0 ? Infinity : 0);
   const totalPnl = trades.reduce((s, t) => s + t.pnl, 0);
   const evaluable = trades.length >= c.minTrades;
 
@@ -94,7 +97,7 @@ export function assessReadiness(journalFile: string, poolPath: string, criteria:
     if (arr) arr.push(t); else byStrategy.set(t.strategyId, [t]);
   }
   // Include every strategy in the pool, even ones with 0 closed trades, so
-  // the caller can see "not evaluable yet" rather than it silently missing.
+  // The caller can see "not evaluable yet" rather than it silently missing.
   const allIds = new Set([...Object.keys(refs), ...byStrategy.keys()]);
   const strategies = [...allIds].map(id => computeStrategyReadiness(id, byStrategy.get(id) ?? [], refs[id], criteria));
 
@@ -131,13 +134,13 @@ export const DEFAULT_READINESS_MONITOR_CONFIG: ReadinessMonitorConfig = {
 interface MonitorState { notifiedStrategyIds: string[]; portfolioNotified: boolean }
 
 // Notifies ONCE per strategy the first time it crosses the bar (and once for
-// the portfolio), tracked in a state file so restarts don't re-fire. If a
-// strategy later falls back below the bar and re-crosses, it notifies again
+// The portfolio), tracked in a state file so restarts don't re-fire. If a
+// Strategy later falls back below the bar and re-crosses, it notifies again
 // (a real re-earned readiness, not spam from noise near the threshold —
-// crossing requires clearing minTrades again from wherever the state reset).
+// Crossing requires clearing minTrades again from wherever the state reset).
 export class ReadinessMonitor {
-  private cfg: ReadinessMonitorConfig;
-  private state: MonitorState = { notifiedStrategyIds: [], portfolioNotified: false };
+  private readonly cfg: ReadinessMonitorConfig;
+  private readonly state: MonitorState = { notifiedStrategyIds: [], portfolioNotified: false };
 
   constructor(cfg: Partial<ReadinessMonitorConfig> = {}) {
     this.cfg = { ...DEFAULT_READINESS_MONITOR_CONFIG, ...cfg, criteria: { ...DEFAULT_READINESS_CRITERIA, ...cfg.criteria } };
@@ -155,11 +158,11 @@ export class ReadinessMonitor {
   private log(entry: Record<string, unknown>) {
     const dir = dirname(this.cfg.logFile);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    appendFileSync(this.cfg.logFile, JSON.stringify({ ts: new Date().toISOString(), ...entry }) + "\n");
+    appendFileSync(this.cfg.logFile, `${JSON.stringify({ ts: new Date().toISOString(), ...entry })  }\n`);
   }
 
   // Call this periodically (same cadence as the trading tick is fine — it's
-  // cheap, pure computation over the journal, no network unless notifying).
+  // Cheap, pure computation over the journal, no network unless notifying).
   async check(): Promise<{ strategies: StrategyReadiness[]; portfolio: PortfolioReadiness; newlyReady: StrategyReadiness[]; portfolioNewlyReady: boolean }> {
     const { strategies, portfolio } = assessReadiness(this.cfg.journalFile, this.cfg.poolPath, this.cfg.criteria);
     const sizing = loadSizingConfig(this.cfg.poolPath);

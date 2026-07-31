@@ -1,17 +1,17 @@
-import { Candle, StrategyConfig, Trade, BacktestMetrics } from "./types.js";
 import { runBacktest, computeMetrics } from "./engine.js";
+import type { Candle, StrategyConfig, Trade, BacktestMetrics } from "./types.js";
 
 export interface PortfolioConfig {
   initialCapital?: number;
   maxConcurrentPositions?: number;
-  allocationPerTradePct?: number; // fraction, e.g. 0.10 for 10%
+  allocationPerTradePct?: number; // Fraction, e.g. 0.10 for 10%
   strategy: StrategyConfig;
 }
 
 export interface PortfolioResult {
   trades: Trade[];
   metrics: BacktestMetrics;
-  equityCurve: number[]; // capital balance over time
+  equityCurve: number[]; // Capital balance over time
   initialCapital: number;
   finalCapital: number;
   totalReturnPct: number;
@@ -26,9 +26,9 @@ export function runPortfolioBacktest(
   symbolsData: Record<string, Candle[]>,
   config: PortfolioConfig
 ): PortfolioResult {
-  const initialCapital = config.initialCapital ?? 10000;
+  const initialCapital = config.initialCapital ?? 10_000;
   const maxPositions = config.maxConcurrentPositions ?? 5;
-  const allocationPct = config.allocationPerTradePct ?? 0.10;
+  const allocationPct = config.allocationPerTradePct ?? 0.1;
   const strategy = config.strategy;
 
   // 1. Generate candidate trades for each symbol
@@ -82,6 +82,7 @@ export function runPortfolioBacktest(
     let p = 0;
     while (p < activePositions.length) {
       const pos = activePositions[p];
+      if (pos === undefined) break;
       if (pos.exitTime <= entryTime) {
         const returnVal = pos.allocatedCapital * (1 + pos.trade.returnPct);
         const profit = returnVal - pos.allocatedCapital;

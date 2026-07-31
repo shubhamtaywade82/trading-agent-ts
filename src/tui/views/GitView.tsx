@@ -1,8 +1,10 @@
-import React from "react";
 import { Box, Text } from "ink";
-import { GitFileChange } from "../../runtime/types.js";
+import React from "react";
+
 import { elidePath, tail } from "../../layout/truncate.js";
-import { ViewProps } from "./ConversationView.js";
+import type { GitFileChange } from "../../runtime/types.js";
+
+import type { ViewProps } from "./ConversationView.js";
 
 const STATUS_GLYPH: Record<GitFileChange["status"], { glyph: string; color: string }> = {
   modified: { glyph: "M", color: "yellow" },

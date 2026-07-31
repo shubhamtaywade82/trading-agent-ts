@@ -60,27 +60,27 @@ export interface ClosedKline {
   volume: number;
 }
 
-// ponytail: one manager, in-memory only — no persistence across restarts,
-// add a store if alerts need to survive a process crash.
+// Ponytail: one manager, in-memory only — no persistence across restarts,
+// Add a store if alerts need to survive a process crash.
 export class BinanceStreamManager {
-  private sockets = new Map<string, WebSocket>();
-  private latest = new Map<string, Tick>();
+  private readonly sockets = new Map<string, WebSocket>();
+  private readonly latest = new Map<string, Tick>();
   private alerts: Alert[] = [];
   private nextAlertId = 1;
   private liquidations: Liquidation[] = [];
-  private closedKlines = new Map<string, ClosedKline>();
+  private readonly closedKlines = new Map<string, ClosedKline>();
   // Binance drops idle/long-lived connections routinely (~24h) — without
-  // reconnect, subscribeKline's event-driven entry trigger silently goes
-  // dead until process restart (the REST poll in LivePaperRunner.tick()
-  // still catches exits/stops either way, but entries stop firing promptly).
+  // Reconnect, subscribeKline's event-driven entry trigger silently goes
+  // Dead until process restart (the REST poll in LivePaperRunner.tick()
+  // Still catches exits/stops either way, but entries stop firing promptly).
   // Tracked per stream key so unsubscribe/closeAll can suppress the retry.
-  private closedIntentionally = new Set<string>();
-  private reconnectDelay = new Map<string, number>();
+  private readonly closedIntentionally = new Set<string>();
+  private readonly reconnectDelay = new Map<string, number>();
 
   // Shared connect-with-reconnect helper. Resolves/rejects on the FIRST
-  // connection attempt only (preserves the original subscribe*() contract);
-  // any drop after that reconnects silently in the background with
-  // exponential backoff, capped at MAX_RECONNECT_DELAY_MS.
+  // Connection attempt only (preserves the original subscribe*() contract);
+  // Any drop after that reconnects silently in the background with
+  // Exponential backoff, capped at MAX_RECONNECT_DELAY_MS.
   private connect(streamKey: string, url: string, onMessage: (data: Buffer) => void): Promise<void> {
     this.closedIntentionally.delete(streamKey);
     return new Promise((resolve, reject) => {
@@ -100,13 +100,13 @@ export class BinanceStreamManager {
         });
         ws.on("message", onMessage);
         ws.on("error", () => {
-          // swallow post-open errors; close handler below drives reconnect
+          // Swallow post-open errors; close handler below drives reconnect
         });
         ws.on("close", () => {
           if (this.closedIntentionally.has(streamKey)) return;
           const delay = this.reconnectDelay.get(streamKey) ?? 1000;
           this.reconnectDelay.set(streamKey, Math.min(delay * 2, MAX_RECONNECT_DELAY_MS));
-          setTimeout(() => attempt(false), delay);
+          setTimeout(() => { attempt(false); }, delay);
         });
         this.sockets.set(streamKey, ws);
       };
@@ -195,7 +195,7 @@ export class BinanceStreamManager {
     return this.connect(stream, `${STREAM_BASE}/${stream}`, (data: Buffer) => {
       const msg = JSON.parse(data.toString());
       const k = msg.k;
-      if (!k || !k.x) return; // only store closed candles
+      if (!k?.x) return; // Only store closed candles
       const key = `${sym}:${interval}`;
       const closed: ClosedKline = {
         symbol: sym, interval,

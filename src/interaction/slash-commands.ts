@@ -3,8 +3,9 @@
  * discoverable by prefix for autocomplete and executed by the prompt.
  */
 
-import { ViewId } from "../runtime/types.js";
-import { OverlayId } from "./ui-state.js";
+import type { ViewId } from "../runtime/types.js";
+
+import type { OverlayId } from "./ui-state.js";
 
 /** Effects a command can request; the shell interprets them. */
 export type CommandEffect =
@@ -30,7 +31,7 @@ export interface SlashCommand {
   name: string;
   aliases: string[];
   description: string;
-  execute(args: string): CommandEffect;
+  execute: (args: string) => CommandEffect;
 }
 
 export class SlashCommandRegistry {

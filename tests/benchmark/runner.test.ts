@@ -1,6 +1,7 @@
-import { Provider, ChatResponse } from "../../src/provider/provider.js";
 import { runBenchmark } from "../../src/benchmark/runner.js";
-import { BenchmarkCase } from "../../src/benchmark/types.js";
+import type { BenchmarkCase } from "../../src/benchmark/types.js";
+import type { ChatResponse } from "../../src/provider/provider.js";
+import { Provider } from "../../src/provider/provider.js";
 
 function response(content: string, extra: Partial<ChatResponse> = {}): ChatResponse {
   return { message: { role: "assistant", content }, done: true, ...extra };
@@ -72,7 +73,7 @@ describe("runBenchmark", () => {
   it("falls back to a content-length estimate when eval fields are absent", async () => {
     const provider = new Provider({ tier: "local", model: "x" });
     jest.spyOn(provider, "chat").mockImplementation(
-      () => new Promise((resolve) => setTimeout(() => resolve(response("a".repeat(40))), 5)),
+      () => new Promise((resolve) => setTimeout(() => { resolve(response("a".repeat(40))); }, 5)),
     );
 
     const results = await runBenchmark([{ model: "qwen3:8b", tier: "local", provider }], [passingCase]);

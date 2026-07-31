@@ -1,6 +1,8 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from "fs";
-import { dirname } from "path";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from "node:fs";
+import { dirname } from "node:path";
+
 import { fetchSpotPrice, fetchFuturesStats } from "../tools/binance-tools.js";
+
 import { fetchFundingRates, fundingPnl, EIGHT_H } from "./live-runner.js";
 
 export interface FundingArbPosition {
@@ -43,22 +45,22 @@ export interface FundingArbDeps {
 const REAL_DEPS: FundingArbDeps = { fetchSpotPrice, fetchFuturesStats, fetchFundingRates };
 
 // Cash-and-carry PnL: funding collected is tracked separately (accruedFundingUsd);
-// this is the OTHER half — the residual price-exposure risk left over because the
-// spot and perp legs' price moves cancel except for the CHANGE in basis between
-// entry and now. Short perp profits when basis narrows toward spot; long perp
-// profits when basis widens away from spot (mirror image).
+// This is the OTHER half — the residual price-exposure risk left over because the
+// Spot and perp legs' price moves cancel except for the CHANGE in basis between
+// Entry and now. Short perp profits when basis narrows toward spot; long perp
+// Profits when basis widens away from spot (mirror image).
 export function computeBasisPnl(qty: number, entryBasis: number, currentBasis: number, perpDirection: "long" | "short"): number {
   const sign = perpDirection === "short" ? 1 : -1;
   return sign * qty * (entryBasis - currentBasis);
 }
 
 export class FundingArbTracker {
-  private cfg: FundingArbConfig;
-  private deps: FundingArbDeps;
+  private readonly cfg: FundingArbConfig;
+  private readonly deps: FundingArbDeps;
   private state: Record<string, FundingArbPosition | null> = {};
   private running = false;
 
-  constructor(private symbols: string[], cfg: Partial<FundingArbConfig> = {}, deps: Partial<FundingArbDeps> = {}) {
+  constructor(private readonly symbols: string[], cfg: Partial<FundingArbConfig> = {}, deps: Partial<FundingArbDeps> = {}) {
     this.cfg = { ...DEFAULT_FUNDING_ARB_CONFIG, ...cfg };
     this.deps = { ...REAL_DEPS, ...deps };
     this.loadState();
@@ -82,7 +84,7 @@ export class FundingArbTracker {
   private journal(event: Record<string, unknown>) {
     const dir = dirname(this.cfg.journalFile);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    appendFileSync(this.cfg.journalFile, JSON.stringify({ ts: new Date().toISOString(), ...event }) + "\n");
+    appendFileSync(this.cfg.journalFile, `${JSON.stringify({ ts: new Date().toISOString(), ...event })  }\n`);
   }
 
   async tick(now: number = Date.now()): Promise<{ opened: string[]; closed: string[] }> {
@@ -121,8 +123,8 @@ export class FundingArbTracker {
       if (Math.abs(stats.lastFundingRate) > this.cfg.entryThreshold) {
         const spotResult = await this.deps.fetchSpotPrice(symbol);
         if ("error" in spotResult) continue;
-        // ponytail: long-perp/short-spot (negative funding case) simulates
-        // shorting spot with no real borrow constraint modeled — paper-only.
+        // Ponytail: long-perp/short-spot (negative funding case) simulates
+        // Shorting spot with no real borrow constraint modeled — paper-only.
         const perpDirection: "long" | "short" = stats.lastFundingRate > 0 ? "short" : "long";
         const qty = this.cfg.notionalPerPosition / spotResult.price;
         const entryBasis = stats.markPrice - spotResult.price;
@@ -161,13 +163,14 @@ export class FundingArbTracker {
 }
 
 export function summarizeFundingArbJournal(
-  entries: { type: string; symbol: string; reason?: string; realizedPnlUsd?: number; accruedFundingUsd?: number; basisPnl?: number }[],
+  entries: Array<{ type: string; symbol: string; reason?: string; realizedPnlUsd?: number; accruedFundingUsd?: number; basisPnl?: number }>,
 ): Record<string, { closedCount: number; totalRealizedPnlUsd: number; totalFundingCollected: number; totalBasisPnl: number }> {
   const result: ReturnType<typeof summarizeFundingArbJournal> = {};
   for (const e of entries) {
     if (e.type !== "funding_arb_close") continue;
     if (!result[e.symbol]) result[e.symbol] = { closedCount: 0, totalRealizedPnlUsd: 0, totalFundingCollected: 0, totalBasisPnl: 0 };
     const s = result[e.symbol];
+    if (s === undefined) continue;
     s.closedCount++;
     s.totalRealizedPnlUsd += e.realizedPnlUsd ?? 0;
     s.totalFundingCollected += e.accruedFundingUsd ?? 0;

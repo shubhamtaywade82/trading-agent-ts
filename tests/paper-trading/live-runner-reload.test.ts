@@ -1,7 +1,8 @@
-import { mkdtemp, rm, readFile } from "fs/promises";
-import { tmpdir } from "os";
-import { join } from "path";
-import { writeFileSync } from "fs";
+import { writeFileSync } from "node:fs";
+import { mkdtemp, rm, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { LivePaperRunner } from "../../src/paper-trading/live-runner.js";
 
 function pool(strats: any[]) {
@@ -40,12 +41,12 @@ describe("LivePaperRunner.reloadPool", () => {
   it("picks up a new id (existing add-only behavior, unchanged)", () => {
     writeFileSync(poolPath, JSON.stringify(pool([strat("a")])));
     const runner = makeRunner();
-    expect(runner.getStatus().map(s => s.id)).toEqual(["a"]);
+    expect(runner.getStatus().map(s => s.id)).toStrictEqual(["a"]);
 
     writeFileSync(poolPath, JSON.stringify(pool([strat("a"), strat("b")])));
     const added = runner.reloadPool(poolPath);
     expect(added).toBe(1);
-    expect(runner.getStatus().map(s => s.id).sort()).toEqual(["a", "b"]);
+    expect(runner.getStatus().map(s => s.id).sort()).toStrictEqual(["a", "b"]);
   });
 
   it("updates sizeMultiplier in place for an existing id without touching entry/risk", async () => {
@@ -55,7 +56,7 @@ describe("LivePaperRunner.reloadPool", () => {
     writeFileSync(poolPath, JSON.stringify(pool([strat("a", { sizeMultiplier: 0.5 })])));
     runner.reloadPool(poolPath);
 
-    expect(runner.getStatus().map(s => s.id)).toEqual(["a"]); // still present, not removed
+    expect(runner.getStatus().map(s => s.id)).toStrictEqual(["a"]); // Still present, not removed
     const journal = await readFile(join(dir, "paper-trades.jsonl"), "utf-8");
     expect(journal).toContain("size_multiplier_updated");
     expect(journal).toContain('"to":0.5');
@@ -64,12 +65,12 @@ describe("LivePaperRunner.reloadPool", () => {
   it("removes an id from the active pool when enabled:false, logging the prune", async () => {
     writeFileSync(poolPath, JSON.stringify(pool([strat("a"), strat("b")])));
     const runner = makeRunner();
-    expect(runner.getStatus().map(s => s.id).sort()).toEqual(["a", "b"]);
+    expect(runner.getStatus().map(s => s.id).sort()).toStrictEqual(["a", "b"]);
 
     writeFileSync(poolPath, JSON.stringify(pool([strat("a"), strat("b", { enabled: false })])));
     runner.reloadPool(poolPath);
 
-    expect(runner.getStatus().map(s => s.id)).toEqual(["a"]);
+    expect(runner.getStatus().map(s => s.id)).toStrictEqual(["a"]);
     const journal = await readFile(join(dir, "paper-trades.jsonl"), "utf-8");
     expect(journal).toContain("strategy_pruned");
   });
@@ -77,6 +78,6 @@ describe("LivePaperRunner.reloadPool", () => {
   it("a freshly-constructed runner filters out enabled:false strategies from the start", () => {
     writeFileSync(poolPath, JSON.stringify(pool([strat("a"), strat("b", { enabled: false })])));
     const runner = makeRunner();
-    expect(runner.getStatus().map(s => s.id)).toEqual(["a"]);
+    expect(runner.getStatus().map(s => s.id)).toStrictEqual(["a"]);
   });
 });

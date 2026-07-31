@@ -1,5 +1,5 @@
-import { Candle, StrategyConfig, BacktestMetrics, Condition } from "./types.js";
-import { runBacktest, computeMetrics } from "./engine.js";
+import { runBacktest,  } from "./engine.js";
+import type { Candle, StrategyConfig, BacktestMetrics, Condition } from "./types.js";
 
 export interface WalkForwardWindow {
   fromIndex: number;
@@ -10,10 +10,10 @@ export interface WalkForwardWindow {
 export interface WalkForwardResult {
   windows: WalkForwardWindow[];
   // Stddev of per-window expectancy relative to its mean — high = the "edge"
-  // is regime-dependent, not a stable behavior. Not a re-optimizing walk
-  // forward (no parameter search per fold) — a stability check across time.
+  // Is regime-dependent, not a stable behavior. Not a re-optimizing walk
+  // Forward (no parameter search per fold) — a stability check across time.
   expectancyStability: number;
-  consistentDirection: boolean; // did every window with trades have the same expectancy sign?
+  consistentDirection: boolean; // Did every window with trades have the same expectancy sign?
 }
 
 export function walkForward(candles: Candle[], config: StrategyConfig, folds = 4): WalkForwardResult {
@@ -33,7 +33,8 @@ export function walkForward(candles: Candle[], config: StrategyConfig, folds = 4
   const mean = expectancies.length > 0 ? expectancies.reduce((s, v) => s + v, 0) / expectancies.length : 0;
   const variance = expectancies.length > 0 ? expectancies.reduce((s, v) => s + (v - mean) ** 2, 0) / expectancies.length : 0;
   const expectancyStability = Math.sqrt(variance);
-  const consistentDirection = expectancies.length > 0 && expectancies.every((v) => Math.sign(v) === Math.sign(mean || expectancies[0]));
+  const firstExpectancy = expectancies[0];
+  const consistentDirection = expectancies.length > 0 && expectancies.every((v) => Math.sign(v) === Math.sign(mean || (firstExpectancy ?? 0)));
 
   return { windows, expectancyStability, consistentDirection };
 }
@@ -48,19 +49,19 @@ export interface MonteCarloResult {
 }
 
 // Bootstrap resampling: reshuffle the trade sequence (sample with
-// replacement) N times to see how much of the equity curve's shape depends
-// on the specific order trades happened to occur in, versus the edge itself.
+// Replacement) N times to see how much of the equity curve's shape depends
+// On the specific order trades happened to occur in, versus the edge itself.
 // This is not a source of NEW predictive information — it's a stability
-// check on the trade sample already observed.
-export function monteCarlo(trades: { returnPct: number }[], simulations = 1000, seedSequence?: number[]): MonteCarloResult {
+// Check on the trade sample already observed.
+export function monteCarlo(trades: Array<{ returnPct: number }>, simulations = 1000, seedSequence?: number[]): MonteCarloResult {
   if (trades.length === 0) {
     return { simulations: 0, medianReturnPct: 0, p5ReturnPct: 0, p95ReturnPct: 0, medianMaxDrawdownPct: 0, probabilityOfLoss: 1 };
   }
 
   const returns: number[] = [];
   const drawdowns: number[] = [];
-  // seedSequence lets tests be deterministic; production calls omit it and
-  // fall back to Math.random() (fine here — this module never runs inside a
+  // SeedSequence lets tests be deterministic; production calls omit it and
+  // Fall back to Math.random() (fine here — this module never runs inside a
   // Workflow script where Math.random() is unavailable).
   const rand = seedSequence ? indexedRandom(seedSequence) : Math.random;
 
@@ -70,6 +71,7 @@ export function monteCarlo(trades: { returnPct: number }[], simulations = 1000, 
     let maxDrawdown = 0;
     for (let t = 0; t < trades.length; t++) {
       const pick = trades[Math.floor(rand() * trades.length)];
+      if (pick === undefined) continue;
       equity *= 1 + pick.returnPct;
       if (equity > peak) peak = equity;
       const dd = (peak - equity) / peak;
@@ -81,7 +83,7 @@ export function monteCarlo(trades: { returnPct: number }[], simulations = 1000, 
 
   returns.sort((a, b) => a - b);
   drawdowns.sort((a, b) => a - b);
-  const percentile = (arr: number[], p: number) => arr[Math.min(arr.length - 1, Math.floor(p * arr.length))];
+  const percentile = (arr: number[], p: number) => arr[Math.min(arr.length - 1, Math.floor(p * arr.length))] ?? 0;
 
   return {
     simulations,
@@ -95,11 +97,11 @@ export function monteCarlo(trades: { returnPct: number }[], simulations = 1000, 
 
 function indexedRandom(seed: number[]): () => number {
   let i = 0;
-  return () => seed[i++ % seed.length];
+  return () => seed[i++ % seed.length] ?? 0;
 }
 
 export interface ParamRange {
-  conditionIndex: number; // which entry condition to vary
+  conditionIndex: number; // Which entry condition to vary
   field: "period" | "value";
   values: number[];
 }
@@ -110,9 +112,9 @@ export interface ParamSweepCandidate {
 }
 
 // Grid search over the given parameter ranges (NOT Bayesian optimization —
-// no Gaussian-process library exists in this stack and hand-rolling one
-// isn't proportionate to a handful of TA parameters; grid/random search is
-// the honest, simple substitute for a search space this small).
+// No Gaussian-process library exists in this stack and hand-rolling one
+// Isn't proportionate to a handful of TA parameters; grid/random search is
+// The honest, simple substitute for a search space this small).
 export function paramSweep(candles: Candle[], baseConfig: StrategyConfig, ranges: ParamRange[], rankBy: keyof BacktestMetrics = "expectancyPct"): ParamSweepCandidate[] {
   const combos = cartesianProduct(ranges);
   const results: ParamSweepCandidate[] = combos.map((combo) => {
@@ -134,6 +136,7 @@ export function paramSweep(candles: Candle[], baseConfig: StrategyConfig, ranges
 function cartesianProduct(ranges: ParamRange[]): Array<Array<{ conditionIndex: number; field: "period" | "value"; value: number }>> {
   if (ranges.length === 0) return [[]];
   const [first, ...rest] = ranges;
+  if (first === undefined) return [[]];
   const restProduct = cartesianProduct(rest);
   const out: Array<Array<{ conditionIndex: number; field: "period" | "value"; value: number }>> = [];
   for (const value of first.values) {
@@ -144,4 +147,6 @@ function cartesianProduct(ranges: ParamRange[]): Array<Array<{ conditionIndex: n
   return out;
 }
 
-export { computeMetrics };
+
+
+export {computeMetrics} from "./engine.js";

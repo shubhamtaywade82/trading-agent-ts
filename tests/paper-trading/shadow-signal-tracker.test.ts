@@ -1,8 +1,10 @@
-import { mkdtemp, rm, readFile, writeFile } from "fs/promises";
-import { tmpdir } from "os";
-import { join } from "path";
+import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { BinanceStreamManager } from "../../src/exchange/binance-stream.js";
-import { ShadowSignalTracker, CandidateSignal, summarizeShadowJournal } from "../../src/paper-trading/shadow-signal-tracker.js";
+import type { CandidateSignal} from "../../src/paper-trading/shadow-signal-tracker.js";
+import { ShadowSignalTracker, summarizeShadowJournal } from "../../src/paper-trading/shadow-signal-tracker.js";
 
 describe("ShadowSignalTracker (real network)", () => {
   let dir: string;
@@ -25,7 +27,7 @@ describe("ShadowSignalTracker (real network)", () => {
   function alwaysFiresLong(id: string, symbol: string, overrides: Partial<CandidateSignal> = {}): CandidateSignal {
     return {
       id, symbol, shadow: true, checkFire: async () => "long",
-      stopPct: 0.5, targetPct: 0.5, maxHoldMs: 4 * 60 * 60 * 1000, // wide enough not to trigger by accident
+      stopPct: 0.5, targetPct: 0.5, maxHoldMs: 4 * 60 * 60 * 1000, // Wide enough not to trigger by accident
       ...overrides,
     };
   }
@@ -36,7 +38,7 @@ describe("ShadowSignalTracker (real network)", () => {
     const journal = await readFile(journalFile, "utf-8");
     expect(journal).toContain('"type":"shadow_open"');
     expect(journal).toContain('"id":"t1"');
-  }, 20000);
+  }, 20_000);
 
   it("does not open a second position while one is already open for the same candidate", async () => {
     const tracker = new ShadowSignalTracker([alwaysFiresLong("t1", "BTCUSDT")], stream, { stateFile, journalFile });
@@ -45,21 +47,21 @@ describe("ShadowSignalTracker (real network)", () => {
     const journal = await readFile(journalFile, "utf-8");
     const opens = journal.split("\n").filter(l => l.includes('"type":"shadow_open"'));
     expect(opens).toHaveLength(1);
-  }, 20000);
+  }, 20_000);
 
   it("closes on timeout when maxHoldMs has already elapsed", async () => {
     const tracker = new ShadowSignalTracker([alwaysFiresLong("t1", "BTCUSDT", { maxHoldMs: 0 })], stream, { stateFile, journalFile });
-    await tracker.tick(); // opens
-    await tracker.tick(); // next mark-to-market sees maxHoldMs already exceeded
+    await tracker.tick(); // Opens
+    await tracker.tick(); // Next mark-to-market sees maxHoldMs already exceeded
     const journal = await readFile(journalFile, "utf-8");
     expect(journal).toContain('"type":"shadow_close"');
     expect(journal).toContain('"reason":"timeout"');
-  }, 20000);
+  }, 20_000);
 
   it("closes on stop when the live price has already crossed it", async () => {
     // Open once to learn the current live price, then reopen with a stop
-    // guaranteed to already be crossed on the very next mark (same trick
-    // tests/exchange/paper-trading.test.ts uses for its stop-hit test).
+    // Guaranteed to already be crossed on the very next mark (same trick
+    // Tests/exchange/paper-trading.test.ts uses for its stop-hit test).
     const probe = new ShadowSignalTracker([alwaysFiresLong("probe", "BTCUSDT")], stream, {
       stateFile: join(dir, "probe-state.json"), journalFile: join(dir, "probe-journal.jsonl"),
     });
@@ -72,9 +74,9 @@ describe("ShadowSignalTracker (real network)", () => {
     };
     const tracker = new ShadowSignalTracker([candidate], stream, { stateFile, journalFile });
     // Force a stop price above the current price on a long (guaranteed hit)
-    // by opening manually through tick() then rewriting state before the
-    // next mark — simplest way to make this deterministic without waiting
-    // for a real 0.5% move.
+    // By opening manually through tick() then rewriting state before the
+    // Next mark — simplest way to make this deterministic without waiting
+    // For a real 0.5% move.
     await tracker.tick();
     const state = JSON.parse(await readFile(stateFile, "utf-8"));
     state.t1.stopPrice = tick.price * 1.5;
@@ -83,17 +85,17 @@ describe("ShadowSignalTracker (real network)", () => {
     await reloaded.tick();
     const journal = await readFile(journalFile, "utf-8");
     expect(journal).toContain('"reason":"stop"');
-  }, 20000);
+  }, 20_000);
 
   it("persists open positions across a new tracker instance pointed at the same state file", async () => {
     const first = new ShadowSignalTracker([alwaysFiresLong("t1", "BTCUSDT")], stream, { stateFile, journalFile });
     await first.tick();
     const second = new ShadowSignalTracker([alwaysFiresLong("t1", "BTCUSDT")], stream, { stateFile, journalFile });
-    await second.tick(); // should see the position already open, not open a duplicate
+    await second.tick(); // Should see the position already open, not open a duplicate
     const journal = await readFile(journalFile, "utf-8");
     const opens = journal.split("\n").filter(l => l.includes('"type":"shadow_open"'));
     expect(opens).toHaveLength(1);
-  }, 20000);
+  }, 20_000);
 });
 
 describe("summarizeShadowJournal", () => {
@@ -107,7 +109,7 @@ describe("summarizeShadowJournal", () => {
       { type: "shadow_close", id: "obi-ETHUSDT", reason: "timeout", pnlPct: 0.005 },
     ];
     const summary = summarizeShadowJournal(entries);
-    expect(summary["obi-XRPUSDT"]).toEqual({
+    expect(summary["obi-XRPUSDT"]).toStrictEqual({
       fires: 2, wins: 1, losses: 1, winRate: 0.5, pf: 0.03 / 0.015,
       totalPnlPct: 0.03 - 0.015, verdict: "NOT_YET",
     });
@@ -115,7 +117,7 @@ describe("summarizeShadowJournal", () => {
   });
 
   it("flags SURVIVES only at >=20 fires and net-positive totalPnlPct", () => {
-    const entries: { type: string; id: string; reason?: string; pnlPct?: number }[] = [];
+    const entries: Array<{ type: string; id: string; reason?: string; pnlPct?: number }> = [];
     for (let i = 0; i < 20; i++) {
       entries.push({ type: "shadow_open", id: "obi-XRPUSDT" });
       entries.push({ type: "shadow_close", id: "obi-XRPUSDT", reason: i % 2 === 0 ? "target" : "stop", pnlPct: i % 2 === 0 ? 0.03 : -0.01 });

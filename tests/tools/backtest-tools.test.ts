@@ -1,14 +1,14 @@
+import type { StrategyConfig, Candle } from "../../src/backtest/types.js";
 import {
   BinanceBacktestTool, BinanceWalkForwardTool, BinanceMonteCarloTool, BinanceParamSweepTool,
   BinancePortfolioBacktestTool, BinanceFuturesBacktestTool,
   fetchOpenInterestHist, alignOiToCandles, buildSignalEvaluator, runFuturesBacktest,
 } from "../../src/tools/backtest-tools.js";
-import { StrategyConfig, Candle } from "../../src/backtest/types.js";
 
 function fakeKlines(closes: number[]): unknown[][] {
   return closes.map((c, i) => {
-    const t = 1700000000000 + i * 3600000;
-    return [t, c, c * 1.001, c * 0.999, c, "100", t + 3599999, "0", 0, "0", "0", "0"];
+    const t = 1_700_000_000_000 + i * 3_600_000;
+    return [t, c, c * 1.001, c * 0.999, c, "100", t + 3_599_999, "0", 0, "0", "0", "0"];
   });
 }
 
@@ -111,12 +111,12 @@ describe("BinancePortfolioBacktestTool", () => {
       symbols: ["BTCUSDT", "ETHUSDT"],
       interval: "1h",
       strategy: STRATEGY,
-      initialCapital: 10000,
+      initialCapital: 10_000,
       maxConcurrentPositions: 2,
     });
-    expect(result.symbols).toEqual(["BTCUSDT", "ETHUSDT"]);
+    expect(result.symbols).toStrictEqual(["BTCUSDT", "ETHUSDT"]);
     expect(result.totalTradesExecuted).toBeGreaterThan(0);
-    expect(result.finalCapital).toBeGreaterThan(10000);
+    expect(result.finalCapital).toBeGreaterThan(10_000);
   });
 });
 
@@ -128,16 +128,16 @@ describe("fetchOpenInterestHist", () => {
     (globalThis as any).fetch = jest.fn().mockResolvedValue({
       ok: true, status: 200,
       json: async () => [
-        { symbol: "BTCUSDT", sumOpenInterest: "1000.5", sumOpenInterestValue: "1", timestamp: 1700000000000 },
-        { symbol: "BTCUSDT", sumOpenInterest: "1050.0", sumOpenInterestValue: "1", timestamp: 1700003600000 },
+        { symbol: "BTCUSDT", sumOpenInterest: "1000.5", sumOpenInterestValue: "1", timestamp: 1_700_000_000_000 },
+        { symbol: "BTCUSDT", sumOpenInterest: "1050.0", sumOpenInterestValue: "1", timestamp: 1_700_003_600_000 },
       ],
     });
-    const result = await fetchOpenInterestHist("BTCUSDT", "1h", 1700000000000, 1700003600000);
+    const result = await fetchOpenInterestHist("BTCUSDT", "1h", 1_700_000_000_000, 1_700_003_600_000);
     expect("error" in result).toBe(false);
     if (!("error" in result)) {
-      expect(result.points).toEqual([
-        { timestamp: 1700000000000, sumOpenInterest: 1000.5 },
-        { timestamp: 1700003600000, sumOpenInterest: 1050.0 },
+      expect(result.points).toStrictEqual([
+        { timestamp: 1_700_000_000_000, sumOpenInterest: 1000.5 },
+        { timestamp: 1_700_003_600_000, sumOpenInterest: 1050 },
       ]);
     }
   });
@@ -145,12 +145,12 @@ describe("fetchOpenInterestHist", () => {
   it("propagates a fetch error", async () => {
     (globalThis as any).fetch = jest.fn().mockRejectedValue(new Error("network down"));
     const result = await fetchOpenInterestHist("BTCUSDT", "1h", 0, 1);
-    expect(result).toEqual({ error: "RequestError", message: "network down" });
+    expect(result).toStrictEqual({ error: "RequestError", message: "network down" });
   });
 
   it("rejects an unsupported period", async () => {
     const result = await fetchOpenInterestHist("BTCUSDT", "3m", 0, 1);
-    expect(result).toEqual({ error: "InvalidPeriod", message: "period must be one of: 5m, 15m, 30m, 1h, 2h, 4h, 6h, 12h, 1d" });
+    expect(result).toStrictEqual({ error: "InvalidPeriod", message: "period must be one of: 5m, 15m, 30m, 1h, 2h, 4h, 6h, 12h, 1d" });
   });
 });
 
@@ -165,45 +165,45 @@ describe("alignOiToCandles", () => {
       { timestamp: 1500, sumOpenInterest: 100 },
       { timestamp: 2500, sumOpenInterest: 200 },
     ];
-    expect(alignOiToCandles(candles, points)).toEqual([NaN, 100, 200]);
+    expect(alignOiToCandles(candles, points)).toStrictEqual([NaN, 100, 200]);
   });
 
   it("returns an empty array for empty candles", () => {
-    expect(alignOiToCandles([], [{ timestamp: 1, sumOpenInterest: 1 }])).toEqual([]);
+    expect(alignOiToCandles([], [{ timestamp: 1, sumOpenInterest: 1 }])).toStrictEqual([]);
   });
 });
 
 describe("buildSignalEvaluator: OI divergence", () => {
   function candlesWithCloses(closes: number[]): Candle[] {
-    return closes.map((c, i) => ({ openTime: 1000 + i * 3600000, open: c, high: c, low: c, close: c, volume: 1 }));
+    return closes.map((c, i) => ({ openTime: 1000 + i * 3_600_000, open: c, high: c, low: c, close: c, volume: 1 }));
   }
 
   it("fires oi_bearish_divergence when price makes a new high but OI fell", () => {
-    const closes = [...Array(10).fill(100), 105]; // bar 10 is a new high over the prior 10
+    const closes = [...Array.from({length: 10}).fill(100), 105]; // Bar 10 is a new high over the prior 10
     const candles = candlesWithCloses(closes);
-    const oi = [...Array(10).fill(1000), 900]; // -10% vs bar 0
+    const oi = [...Array.from({length: 10}).fill(1000), 900]; // -10% vs bar 0
     const evaluator = buildSignalEvaluator(candles, [{ type: "oi_bearish_divergence", period: 10, value: 0.05 }], { oi });
     expect(evaluator(10)).toBe(true);
   });
 
   it("does not fire oi_bearish_divergence when OI rose", () => {
-    const closes = [...Array(10).fill(100), 105];
+    const closes = [...Array.from({length: 10}).fill(100), 105];
     const candles = candlesWithCloses(closes);
-    const oi = [...Array(10).fill(1000), 1100];
+    const oi = [...Array.from({length: 10}).fill(1000), 1100];
     const evaluator = buildSignalEvaluator(candles, [{ type: "oi_bearish_divergence", period: 10, value: 0.05 }], { oi });
     expect(evaluator(10)).toBe(false);
   });
 
   it("fires oi_bullish_divergence when price makes a new low and OI fell", () => {
-    const closes = [...Array(10).fill(100), 95];
+    const closes = [...Array.from({length: 10}).fill(100), 95];
     const candles = candlesWithCloses(closes);
-    const oi = [...Array(10).fill(1000), 900];
+    const oi = [...Array.from({length: 10}).fill(1000), 900];
     const evaluator = buildSignalEvaluator(candles, [{ type: "oi_bullish_divergence", period: 10, value: 0.05 }], { oi });
     expect(evaluator(10)).toBe(true);
   });
 
   it("is a no-op when extraSeries is not supplied", () => {
-    const closes = [...Array(10).fill(100), 105];
+    const closes = [...Array.from({length: 10}).fill(100), 105];
     const candles = candlesWithCloses(closes);
     const evaluator = buildSignalEvaluator(candles, [{ type: "oi_bearish_divergence" }]);
     expect(evaluator(10)).toBe(false);
@@ -222,7 +222,7 @@ describe("BinanceFuturesBacktestTool: OI conditions", () => {
           ok: true, status: 200,
           json: async () => RISING.map((_, i) => ({
             symbol: "BTCUSDT", sumOpenInterest: String(1000 - i), sumOpenInterestValue: "1",
-            timestamp: 1700000000000 + i * 3600000,
+            timestamp: 1_700_000_000_000 + i * 3_600_000,
           })),
         });
       }
@@ -261,7 +261,7 @@ describe("Backtest tools (real network)", () => {
     const result = await tool.call({ symbol: "BTCUSDT", interval: "1h", limit: 300, strategy: STRATEGY });
     expect(result.candles).toBe(300);
     expect(typeof (result.metrics as any).totalTrades).toBe("number");
-  }, 15000);
+  }, 15_000);
 });
 
 function candle(openTime: number, open: number, high: number, low: number, close: number, volume = 100): Candle {
@@ -270,7 +270,7 @@ function candle(openTime: number, open: number, high: number, low: number, close
 
 describe("runFuturesBacktest risk-based sizing (riskPerTradePct)", () => {
   // Long entry on bar 0, guaranteed stop-out on bar 1 (low dips well below
-  // stop, well above liquidation), zero fees/slippage so PnL is exact.
+  // Stop, well above liquidation), zero fees/slippage so PnL is exact.
   function stopOutCandles(entryPrice: number, stopPrice: number): Candle[] {
     return [
       candle(0, entryPrice, entryPrice, entryPrice, entryPrice),
@@ -280,7 +280,7 @@ describe("runFuturesBacktest risk-based sizing (riskPerTradePct)", () => {
   const enterOnce = (i: number) => i === 0;
 
   it("sizes a stop-out loss to exactly capital * riskPerTradePct, regardless of stopPct", () => {
-    const CAP = 10000, LEVERAGE = 10, RISK_PCT = 0.015, MARGIN_CEILING = 0.99; // ceiling effectively unbound here
+    const CAP = 10_000, LEVERAGE = 10, RISK_PCT = 0.015, MARGIN_CEILING = 0.99; // Ceiling effectively unbound here
 
     const tight = runFuturesBacktest(
       stopOutCandles(100, 99), enterOnce, "long", 0.01, 0.06, 0, 5,
@@ -296,7 +296,7 @@ describe("runFuturesBacktest risk-based sizing (riskPerTradePct)", () => {
   });
 
   it("caps risk-based margin at the marginPerTradePct ceiling for very tight stops", () => {
-    const CAP = 10000, LEVERAGE = 10, RISK_PCT = 0.5, MARGIN_PCT = 0.05; // risk target wants huge margin, ceiling bites
+    const CAP = 10_000, LEVERAGE = 10, RISK_PCT = 0.5, MARGIN_PCT = 0.05; // Risk target wants huge margin, ceiling bites
 
     const result = runFuturesBacktest(
       stopOutCandles(100, 99.9), enterOnce, "long", 0.001, 0.06, 0, 5,
@@ -310,7 +310,7 @@ describe("runFuturesBacktest risk-based sizing (riskPerTradePct)", () => {
   });
 
   it("omitting riskPerTradePct preserves the old flat marginPerTradePct behavior", () => {
-    const CAP = 10000, LEVERAGE = 10, MARGIN_PCT = 0.25;
+    const CAP = 10_000, LEVERAGE = 10, MARGIN_PCT = 0.25;
 
     const result = runFuturesBacktest(
       stopOutCandles(100, 97), enterOnce, "long", 0.03, 0.06, 0, 5,
@@ -325,17 +325,17 @@ describe("runFuturesBacktest risk-based sizing (riskPerTradePct)", () => {
 describe("runFuturesBacktest trailing stop integration", () => {
   const enterOnce = (i: number) => i === 0;
   const TRAIL_CFG = {
-    enabled: true, breakevenAtrMult: 1.0, breakevenOffsetBps: 5,
-    activationAtrMult: 2.0, trailAtrMult: 1.0, minTrailPct: 0.001, maxTrailPct: 0.10,
+    enabled: true, breakevenAtrMult: 1, breakevenOffsetBps: 5,
+    activationAtrMult: 2, trailAtrMult: 1, minTrailPct: 0.001, maxTrailPct: 0.1,
   };
 
-  // bar0: entry at 100. bar1: a big favorable jump (+10.5%) -- well past
-  // trailing's activation threshold on the atrPct fallback (2%, since fewer
-  // than 15 candles are in scope this early). bar2: a pullback that clears
-  // the fixed target (102) but stays above the trailing stop the jump
-  // established (~108.3) -- so a trailing-enabled run should NOT exit at
-  // bar1's target, and should exit later, at a much better price, than a
-  // fixed-stop/fixed-target baseline run on the identical candles.
+  // Bar0: entry at 100. bar1: a big favorable jump (+10.5%) -- well past
+  // Trailing's activation threshold on the atrPct fallback (2%, since fewer
+  // Than 15 candles are in scope this early). bar2: a pullback that clears
+  // The fixed target (102) but stays above the trailing stop the jump
+  // Established (~108.3) -- so a trailing-enabled run should NOT exit at
+  // Bar1's target, and should exit later, at a much better price, than a
+  // Fixed-stop/fixed-target baseline run on the identical candles.
   function candles(): Candle[] {
     return [
       candle(0, 100, 100, 100, 100),
@@ -348,7 +348,7 @@ describe("runFuturesBacktest trailing stop integration", () => {
   }
 
   it("extends a winning trade past the original fixed target once trailing activates", () => {
-    const CAP = 10000, LEVERAGE = 10, MARGIN_PCT = 0.05;
+    const CAP = 10_000, LEVERAGE = 10, MARGIN_PCT = 0.05;
 
     const baseline = runFuturesBacktest(candles(), enterOnce, "long", 0.03, 0.02, 0, 5, CAP, LEVERAGE, MARGIN_PCT, 0) as any;
     const trailing = runFuturesBacktest(candles(), enterOnce, "long", 0.03, 0.02, 0, 5, CAP, LEVERAGE, MARGIN_PCT, 0, undefined, undefined, undefined, TRAIL_CFG) as any;
@@ -357,20 +357,20 @@ describe("runFuturesBacktest trailing stop integration", () => {
     expect(baseline.trades[0]).toMatchObject({ exitReason: "target", holdBars: 1 });
 
     // Trailing skips that same target (disabled once trailing activates on
-    // bar1) and instead rides the position until the trailing stop catches
-    // the bar2 pullback -- a later exit, at a meaningfully better price.
+    // Bar1) and instead rides the position until the trailing stop catches
+    // The bar2 pullback -- a later exit, at a meaningfully better price.
     expect(trailing.trades[0].exitReason).toBe("stop");
     expect(trailing.trades[0].holdBars).toBeGreaterThan(1);
     expect(trailing.metrics.totalPnlUsd).toBeGreaterThan(baseline.metrics.totalPnlUsd);
   });
 
   it("behaves identically whether trailingConfig is omitted or explicitly disabled", () => {
-    const CAP = 10000, LEVERAGE = 10, MARGIN_PCT = 0.05;
+    const CAP = 10_000, LEVERAGE = 10, MARGIN_PCT = 0.05;
 
     const omitted = runFuturesBacktest(candles(), enterOnce, "long", 0.03, 0.02, 0, 5, CAP, LEVERAGE, MARGIN_PCT, 0) as any;
     const disabled = runFuturesBacktest(candles(), enterOnce, "long", 0.03, 0.02, 0, 5, CAP, LEVERAGE, MARGIN_PCT, 0, undefined, undefined, undefined, { ...TRAIL_CFG, enabled: false }) as any;
 
-    expect(disabled.metrics).toEqual(omitted.metrics);
+    expect(disabled.metrics).toStrictEqual(omitted.metrics);
   });
 });
 

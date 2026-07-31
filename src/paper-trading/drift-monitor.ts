@@ -1,15 +1,17 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from "fs";
-import { dirname } from "path";
-import { reconstructClosedTrades, ClosedTrade } from "./trade-analyst.js";
-import { sendTelegram } from "./notifier.js";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from "node:fs";
+import { dirname } from "node:path";
+
 import { readBasisRecords } from "./coindcx-shadow.js";
+import { sendTelegram } from "./notifier.js";
+import type { ClosedTrade } from "./trade-analyst.js";
+import { reconstructClosedTrades } from "./trade-analyst.js";
 
 // Proactive live-vs-backtest divergence watcher. readiness.ts's
-// maxWinRateDivergence only ever gets checked at the 20-trade milestone
-// gate; this recomputes the same live-vs-backtest comparison after every
-// batch of newly-closed trades pool-wide and alerts the moment a strategy
-// crosses a threshold for the first time — so divergence is caught as it
-// develops, not only when someone happens to open the readiness panel.
+// MaxWinRateDivergence only ever gets checked at the 20-trade milestone
+// Gate; this recomputes the same live-vs-backtest comparison after every
+// Batch of newly-closed trades pool-wide and alerts the moment a strategy
+// Crosses a threshold for the first time — so divergence is caught as it
+// Develops, not only when someone happens to open the readiness panel.
 // Pure read/alert — no write path into strategy state or LivePaperRunner.
 
 export interface DriftMonitorConfig {
@@ -17,13 +19,13 @@ export interface DriftMonitorConfig {
   poolPath: string;
   stateFile: string;
   logFile: string;
-  checkEveryNTrades: number;   // recompute after this many new pool-wide closed trades
-  minTradesPerStrategy: number; // don't judge a strategy on too few trades
+  checkEveryNTrades: number;   // Recompute after this many new pool-wide closed trades
+  minTradesPerStrategy: number; // Don't judge a strategy on too few trades
   wrDivergenceThreshold: number; // |liveWR - backtestWR| that triggers an alert
-  pfDropThreshold: number;      // livePF below this triggers an alert
-  basisLogFile: string;         // coindcx-shadow.ts's output (§5.4/§5.7 of the E2E doc)
-  basisWindow: number;          // both the minimum sample size and the rolling window
-  basisThresholdBps: number;    // avg |basisBps| over the window that triggers an alert
+  pfDropThreshold: number;      // LivePF below this triggers an alert
+  basisLogFile: string;         // Coindcx-shadow.ts's output (§5.4/§5.7 of the E2E doc)
+  basisWindow: number;          // Both the minimum sample size and the rolling window
+  basisThresholdBps: number;    // Avg |basisBps| over the window that triggers an alert
   notifyTelegram: boolean;
 }
 
@@ -34,8 +36,8 @@ export const DEFAULT_DRIFT_MONITOR_CONFIG: DriftMonitorConfig = {
   logFile: ".trading-agent/drift-alerts.jsonl",
   checkEveryNTrades: 5,
   minTradesPerStrategy: 5,
-  wrDivergenceThreshold: 0.20,
-  pfDropThreshold: 1.0,
+  wrDivergenceThreshold: 0.2,
+  pfDropThreshold: 1,
   basisLogFile: ".trading-agent/coindcx-basis.jsonl",
   basisWindow: 20,
   basisThresholdBps: 15,
@@ -43,11 +45,12 @@ export const DEFAULT_DRIFT_MONITOR_CONFIG: DriftMonitorConfig = {
 };
 
 interface BacktestRef { winRate: number; pf: number; label: string }
+interface PoolStrategyRef { id: string; label: string; metrics: BacktestRef }
 function loadBacktestRefs(poolPath: string): Record<string, BacktestRef> {
   const cfg = JSON.parse(readFileSync(poolPath, "utf-8"));
   const out: Record<string, BacktestRef> = {};
-  for (const strats of Object.values(cfg.symbols) as any[][]) {
-    for (const s of strats) out[s.id] = { winRate: s.metrics.winRate, pf: s.metrics.pf, label: s.label };
+  for (const strats of Object.values(cfg.symbols)) {
+    for (const s of strats as PoolStrategyRef[]) out[s.id] = { winRate: s.metrics.winRate, pf: s.metrics.pf, label: s.label };
   }
   return out;
 }
@@ -57,7 +60,7 @@ function liveStats(trades: ClosedTrade[]): { winRate: number; pf: number } {
   const winRate = trades.length > 0 ? wins / trades.length : 0;
   const grossProfit = trades.filter(t => t.pnl > 0).reduce((s, t) => s + t.pnl, 0);
   const grossLoss = Math.abs(trades.filter(t => t.pnl <= 0).reduce((s, t) => s + t.pnl, 0));
-  const pf = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? Infinity : 0;
+  const pf = grossLoss > 0 ? grossProfit / grossLoss : (grossProfit > 0 ? Infinity : 0);
   return { winRate, pf };
 }
 
@@ -65,8 +68,8 @@ interface StrategyAlertFlags { wrDivergence: boolean; pfBelowFloor: boolean }
 interface DriftState { lastCheckedTotalTrades: number; alerted: Record<string, StrategyAlertFlags>; alertedBasis: Record<string, boolean> }
 
 export class DriftMonitor {
-  private cfg: DriftMonitorConfig;
-  private state: DriftState = { lastCheckedTotalTrades: 0, alerted: {}, alertedBasis: {} };
+  private readonly cfg: DriftMonitorConfig;
+  private readonly state: DriftState = { lastCheckedTotalTrades: 0, alerted: {}, alertedBasis: {} };
   private running = false;
 
   constructor(cfg: Partial<DriftMonitorConfig> = {}) {
@@ -74,12 +77,12 @@ export class DriftMonitor {
     if (existsSync(this.cfg.stateFile)) {
       try { this.state = JSON.parse(readFileSync(this.cfg.stateFile, "utf-8")); } catch { /* defaults */ }
     }
-    this.state.alertedBasis ??= {}; // back-compat: state files written before the basis-drift check lack this key
+    this.state.alertedBasis ??= {}; // Back-compat: state files written before the basis-drift check lack this key
   }
 
   // Independent of checkEveryNTrades — basis records accumulate on every
-  // fill (entry AND exit), faster than closed trades, so gating this behind
-  // the trade-count throttle would delay its own signal for no reason.
+  // Fill (entry AND exit), faster than closed trades, so gating this behind
+  // The trade-count throttle would delay its own signal for no reason.
   private async checkBasisDrift(alerts: string[]): Promise<void> {
     const records = readBasisRecords(this.cfg.basisLogFile);
     const bySymbol = new Map<string, number[]>();
@@ -88,7 +91,7 @@ export class DriftMonitor {
       if (arr) arr.push(r.basisBps); else bySymbol.set(r.symbol, [r.basisBps]);
     }
     for (const [symbol, all] of bySymbol) {
-      if (all.length < this.cfg.basisWindow) continue; // not enough fills yet to judge
+      if (all.length < this.cfg.basisWindow) continue; // Not enough fills yet to judge
       const window = all.slice(-this.cfg.basisWindow);
       const avgAbsBasis = window.reduce((s, b) => s + Math.abs(b), 0) / window.length;
       const drifting = avgAbsBasis > this.cfg.basisThresholdBps;
@@ -99,7 +102,7 @@ export class DriftMonitor {
         this.log({ type: "basis_drift", symbol, avgAbsBasisBps: avgAbsBasis, fills: window.length });
         if (this.cfg.notifyTelegram) await sendTelegram(text);
       }
-      this.state.alertedBasis[symbol] = drifting; // re-arms if it recovers then drifts again
+      this.state.alertedBasis[symbol] = drifting; // Re-arms if it recovers then drifts again
     }
   }
 
@@ -112,7 +115,7 @@ export class DriftMonitor {
   private log(entry: Record<string, unknown>) {
     const dir = dirname(this.cfg.logFile);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    appendFileSync(this.cfg.logFile, JSON.stringify({ ts: new Date().toISOString(), ...entry }) + "\n");
+    appendFileSync(this.cfg.logFile, `${JSON.stringify({ ts: new Date().toISOString(), ...entry })  }\n`);
   }
 
   // Runs at most one comparison per call; returns whether it actually ran
@@ -120,10 +123,10 @@ export class DriftMonitor {
   async check(): Promise<{ ran: boolean; alerts: string[] }> {
     const trades = reconstructClosedTrades(this.cfg.journalFile);
     const alerts: string[] = [];
-    await this.checkBasisDrift(alerts); // independent cadence, see comment above
+    await this.checkBasisDrift(alerts); // Independent cadence, see comment above
 
     if (trades.length - this.state.lastCheckedTotalTrades < this.cfg.checkEveryNTrades) {
-      this.saveState(); // persist any basis-flag changes even when the strategy pass below is skipped
+      this.saveState(); // Persist any basis-flag changes even when the strategy pass below is skipped
       return { ran: false, alerts };
     }
 
@@ -149,7 +152,7 @@ export class DriftMonitor {
         this.log({ type: "wr_divergence", strategyId, label: ref.label, liveWinRate: live.winRate, backtestWinRate: ref.winRate, trades: strategyTrades.length });
         if (this.cfg.notifyTelegram) await sendTelegram(text);
       }
-      flags.wrDivergence = wrDrifting; // re-arms if it recovers then drifts again
+      flags.wrDivergence = wrDrifting; // Re-arms if it recovers then drifts again
 
       const pfDropping = live.pf < this.cfg.pfDropThreshold;
       if (pfDropping && !flags.pfBelowFloor) {

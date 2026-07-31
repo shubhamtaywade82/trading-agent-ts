@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { Episode, ToolEvent } from "./types.js";
+
+import type { Episode, ToolEvent } from "./types.js";
 
 /**
  * Builds one Episode per runUserMessage call by observing the Agent's
@@ -69,8 +70,8 @@ export class EpisodeRecorder {
   }
 
   private errorLabel(result: Record<string, unknown>): string | undefined {
-    if (typeof result.error === "string") return result.error;
-    if (typeof result.exitCode === "number" && result.exitCode !== 0) return `exit ${result.exitCode}`;
+    if (typeof result["error"] === "string") return result["error"];
+    if (typeof result["exitCode"] === "number" && result["exitCode"] !== 0) return `exit ${result["exitCode"]}`;
     return undefined;
   }
 

@@ -18,8 +18,8 @@ describe("ghostSuffix", () => {
 
 describe("acceptWord", () => {
   it("accepts one word including leading whitespace", () => {
-    expect(acceptWord(" filesystem tool")).toEqual({ accepted: " filesystem", rest: " tool" });
-    expect(acceptWord("tool")).toEqual({ accepted: "tool", rest: "" });
+    expect(acceptWord(" filesystem tool")).toStrictEqual({ accepted: " filesystem", rest: " tool" });
+    expect(acceptWord("tool")).toStrictEqual({ accepted: "tool", rest: "" });
   });
 });
 
@@ -28,12 +28,12 @@ describe("completions", () => {
 
   it("offers slash commands for a / prefix", () => {
     const items = completions("/mo", registry);
-    expect(items.map((i) => i.label)).toEqual(expect.arrayContaining(["/model", "/models"]));
+    expect(items.map((i) => i.label)).toStrictEqual(expect.arrayContaining(["/model", "/models"]));
     expect(items[0].insert.startsWith("/")).toBe(true);
   });
 
   it("offers nothing for plain text or after a space", () => {
-    expect(completions("model", registry)).toEqual([]);
-    expect(completions("/model qwen", registry)).toEqual([]);
+    expect(completions("model", registry)).toStrictEqual([]);
+    expect(completions("/model qwen", registry)).toStrictEqual([]);
   });
 });

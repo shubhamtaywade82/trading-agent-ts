@@ -1,14 +1,14 @@
+import type { BinanceStreamManager } from "../../src/exchange/binance-stream.js";
 import {
   BinancePublicApiTool, BinanceTechnicalIndicatorsTool, BinanceOrderBookTool,
   BinanceFuturesStatsTool, BinanceScreenerTool, BinanceWatchPriceTool,
   BinanceUnwatchPriceTool, BinancePriceAlertTool, BinanceLiquidationsTool,
   fetchOrderBookImbalance, fetchSpotPrice, fetchFuturesStats, fetchRecentCloses,
 } from "../../src/tools/binance-tools.js";
-import { BinanceStreamManager } from "../../src/exchange/binance-stream.js";
 
 function fakeKline(close: number, i: number): unknown[] {
-  const t = 1700000000000 + i * 3600000;
-  return [t, close, close, close, close, "100", t + 3599999, "0", 0, "0", "0", "0"];
+  const t = 1_700_000_000_000 + i * 3_600_000;
+  return [t, close, close, close, close, "100", t + 3_599_999, "0", 0, "0", "0", "0"];
 }
 
 describe("BinancePublicApiTool", () => {
@@ -27,7 +27,7 @@ describe("BinancePublicApiTool", () => {
     const tool = new BinancePublicApiTool();
     const result = await tool.call({ path: "/api/v3/ticker/price", params: { symbol: "BTCUSDT" } });
 
-    expect(result).toEqual({ status: 200, body: { symbol: "BTCUSDT", price: "60000.00" } });
+    expect(result).toStrictEqual({ status: 200, body: { symbol: "BTCUSDT", price: "60000.00" } });
     const calledUrl = ((globalThis as any).fetch as jest.Mock).mock.calls[0][0] as URL;
     expect(calledUrl.toString()).toBe("https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT");
   });
@@ -107,7 +107,7 @@ describe("BinanceTechnicalIndicatorsTool", () => {
     expect(result.candles).toBe(40);
     const indicators = result.indicators as Record<string, unknown>;
     expect(indicators.sma20).toBeCloseTo(closes.slice(-20).reduce((a, b) => a + b, 0) / 20);
-    expect((indicators.rsi14 as number)).toBe(100); // monotonically rising closes
+    expect((indicators.rsi14 as number)).toBe(100); // Monotonically rising closes
     expect(indicators.macd).toBeDefined();
     expect(indicators.bollinger).toBeDefined();
   });
@@ -202,13 +202,13 @@ describe("fetchSpotPrice", () => {
       ok: true, status: 200, json: async () => ({ symbol: "BTCUSDT", price: "64123.45" }),
     });
     const result = await fetchSpotPrice("BTCUSDT");
-    expect(result).toEqual({ price: 64123.45 });
+    expect(result).toStrictEqual({ price: 64_123.45 });
   });
 
   it("propagates a fetch error", async () => {
     (globalThis as any).fetch = jest.fn().mockRejectedValue(new Error("network down"));
     const result = await fetchSpotPrice("BTCUSDT");
-    expect(result).toEqual({ error: "RequestError", message: "network down" });
+    expect(result).toStrictEqual({ error: "RequestError", message: "network down" });
   });
 });
 
@@ -219,8 +219,8 @@ describe("fetchRecentCloses", () => {
   it("fetches candles and returns the last N closes", async () => {
     // The mock simulates the real API's server-side `limit` truncation
     // (Binance returns at most `limit` most-recent klines) — a static
-    // mockResolvedValue would ignore the requested limit entirely and make
-    // this assertion pass or fail for the wrong reason.
+    // MockResolvedValue would ignore the requested limit entirely and make
+    // This assertion pass or fail for the wrong reason.
     const allCloses = Array.from({ length: 20 }, (_, i) => 100 + i);
     (globalThis as any).fetch = jest.fn().mockImplementation((url: URL) => {
       const limit = Number(url.searchParams.get("limit"));
@@ -231,14 +231,14 @@ describe("fetchRecentCloses", () => {
     expect("error" in result).toBe(false);
     if (!("error" in result)) {
       expect(result.closes).toHaveLength(5);
-      expect(result.closes[result.closes.length - 1]).toBe(119); // last close of the 20-point series
+      expect(result.closes.at(-1)).toBe(119); // Last close of the 20-point series
     }
   });
 
   it("propagates a fetch error", async () => {
     (globalThis as any).fetch = jest.fn().mockRejectedValue(new Error("network down"));
     const result = await fetchRecentCloses("BTCUSDT", "1h", 5);
-    expect(result).toEqual({ error: "RequestError", message: "network down" });
+    expect(result).toStrictEqual({ error: "RequestError", message: "network down" });
   });
 });
 
@@ -262,7 +262,7 @@ describe("fetchOrderBookImbalance", () => {
 
   it("rejects an invalid market before fetching", async () => {
     const result = await fetchOrderBookImbalance("BTCUSDT", "notamarket", 50);
-    expect(result).toEqual({ error: "InvalidMarket", message: expect.stringContaining("market must be one of") });
+    expect(result).toStrictEqual({ error: "InvalidMarket", message: expect.stringContaining("market must be one of") });
   });
 });
 
@@ -284,7 +284,7 @@ describe("BinanceFuturesStatsTool", () => {
     });
     const tool = new BinanceFuturesStatsTool();
     const result = await tool.call({ symbol: "BTCUSDT" });
-    expect(result.markPrice).toBe(60000.5);
+    expect(result.markPrice).toBe(60_000.5);
     expect(result.lastFundingRate).toBe(0.0001);
     expect(result.openInterest).toBe(1234.5);
   });
@@ -305,7 +305,7 @@ describe("fetchFuturesStats", () => {
       return Promise.resolve({ ok: true, status: 200, json: async () => ({ openInterest: "1234.5" }) });
     });
     const result = await fetchFuturesStats("BTCUSDT");
-    expect(result).toEqual({ markPrice: 60000.5, lastFundingRate: 0.0001, nextFundingTime: 123, openInterest: 1234.5 });
+    expect(result).toStrictEqual({ markPrice: 60_000.5, lastFundingRate: 0.0001, nextFundingTime: 123, openInterest: 1234.5 });
   });
 });
 
@@ -364,7 +364,7 @@ describe("BinanceLiquidationsTool", () => {
     const tool = new BinanceLiquidationsTool(stream);
     const result = await tool.call({ action: "subscribe" });
     expect(stream.subscribeLiquidations).toHaveBeenCalled();
-    expect(result).toEqual({ subscribed: true });
+    expect(result).toStrictEqual({ subscribed: true });
   });
 
   it("does not re-subscribe if already subscribed", async () => {
@@ -375,19 +375,19 @@ describe("BinanceLiquidationsTool", () => {
   });
 
   it("lists liquidations, optionally filtered by symbol", async () => {
-    const liqs = [{ symbol: "BTCUSDT", side: "SELL" as const, price: 60000, quantity: 1, time: 1 }];
+    const liqs = [{ symbol: "BTCUSDT", side: "SELL" as const, price: 60_000, quantity: 1, time: 1 }];
     const stream = fakeStream({ getLiquidations: jest.fn().mockReturnValue(liqs) });
     const tool = new BinanceLiquidationsTool(stream);
     const result = await tool.call({ action: "list", symbol: "BTCUSDT" });
     expect(stream.getLiquidations).toHaveBeenCalledWith("BTCUSDT");
-    expect(result.liquidations).toEqual(liqs);
+    expect(result.liquidations).toStrictEqual(liqs);
   });
 
   it("unsubscribes", async () => {
     const stream = fakeStream();
     const tool = new BinanceLiquidationsTool(stream);
     const result = await tool.call({ action: "unsubscribe" });
-    expect(result).toEqual({ unsubscribed: true });
+    expect(result).toStrictEqual({ unsubscribed: true });
   });
 
   it("returns a SubscribeError instead of throwing", async () => {
@@ -406,12 +406,12 @@ describe("BinanceLiquidationsTool", () => {
 
 describe("BinanceWatchPriceTool", () => {
   it("subscribes then returns the latest tick once available", async () => {
-    const tick = { symbol: "BTCUSDT", price: 60000, time: 1 };
+    const tick = { symbol: "BTCUSDT", price: 60_000, time: 1 };
     const stream = fakeStream({ isSubscribed: jest.fn().mockReturnValue(false), getLatest: jest.fn().mockReturnValue(tick) });
     const tool = new BinanceWatchPriceTool(stream);
     const result = await tool.call({ symbol: "btcusdt" });
     expect(stream.subscribe).toHaveBeenCalledWith("BTCUSDT");
-    expect(result).toEqual(tick);
+    expect(result).toStrictEqual(tick);
   });
 
   it("does not re-subscribe if already subscribed", async () => {
@@ -436,18 +436,18 @@ describe("BinanceUnwatchPriceTool", () => {
     const tool = new BinanceUnwatchPriceTool(stream);
     const result = await tool.call({ symbol: "BTCUSDT" });
     expect(stream.unsubscribe).toHaveBeenCalledWith("BTCUSDT");
-    expect(result).toEqual({ unsubscribed: true });
+    expect(result).toStrictEqual({ unsubscribed: true });
   });
 });
 
 describe("BinancePriceAlertTool", () => {
   it("creates an alert, subscribing first if needed", async () => {
-    const alert = { id: 1, symbol: "BTCUSDT", condition: "above", threshold: 70000, triggered: false, triggeredAt: null, triggeredPrice: null };
+    const alert = { id: 1, symbol: "BTCUSDT", condition: "above", threshold: 70_000, triggered: false, triggeredAt: null, triggeredPrice: null };
     const stream = fakeStream({ addAlert: jest.fn().mockReturnValue(alert) });
     const tool = new BinancePriceAlertTool(stream);
-    const result = await tool.call({ action: "create", symbol: "btcusdt", condition: "above", threshold: 70000 });
+    const result = await tool.call({ action: "create", symbol: "btcusdt", condition: "above", threshold: 70_000 });
     expect(stream.subscribe).toHaveBeenCalledWith("BTCUSDT");
-    expect(result).toEqual(alert);
+    expect(result).toStrictEqual(alert);
   });
 
   it("rejects an invalid create call", async () => {
@@ -460,7 +460,7 @@ describe("BinancePriceAlertTool", () => {
     const stream = fakeStream({ listAlerts: jest.fn().mockReturnValue([{ id: 1 }]) });
     const tool = new BinancePriceAlertTool(stream);
     const result = await tool.call({ action: "list" });
-    expect(result.alerts).toEqual([{ id: 1 }]);
+    expect(result.alerts).toStrictEqual([{ id: 1 }]);
   });
 
   it("removes an alert", async () => {
@@ -468,7 +468,7 @@ describe("BinancePriceAlertTool", () => {
     const tool = new BinancePriceAlertTool(stream);
     const result = await tool.call({ action: "remove", id: 1 });
     expect(stream.removeAlert).toHaveBeenCalledWith(1);
-    expect(result).toEqual({ removed: true });
+    expect(result).toStrictEqual({ removed: true });
   });
 
   it("rejects an unknown action", async () => {
@@ -483,14 +483,14 @@ describe("BinancePublicApiTool (real network)", () => {
     const tool = new BinancePublicApiTool();
     const result = await tool.call({ path: "/api/v3/ping" });
     expect(result.status).toBe(200);
-  }, 15000);
+  }, 15_000);
 
   it("fetches a real BTCUSDT spot price", async () => {
     const tool = new BinancePublicApiTool();
     const result = await tool.call({ path: "/api/v3/ticker/price", params: { symbol: "BTCUSDT" } });
     expect(result.status).toBe(200);
     expect((result.body as { symbol: string }).symbol).toBe("BTCUSDT");
-  }, 15000);
+  }, 15_000);
 });
 
 describe("BinanceTechnicalIndicatorsTool (real network)", () => {
@@ -502,7 +502,7 @@ describe("BinanceTechnicalIndicatorsTool (real network)", () => {
     expect(typeof indicators.rsi14).toBe("number");
     expect(indicators.rsi14 as number).toBeGreaterThanOrEqual(0);
     expect(indicators.rsi14 as number).toBeLessThanOrEqual(100);
-  }, 15000);
+  }, 15_000);
 });
 
 describe("BinanceOrderBookTool (real network)", () => {
@@ -510,7 +510,7 @@ describe("BinanceOrderBookTool (real network)", () => {
     const tool = new BinanceOrderBookTool();
     const result = await tool.call({ symbol: "BTCUSDT" });
     expect(typeof result.imbalance).toBe("number");
-  }, 15000);
+  }, 15_000);
 });
 
 describe("BinanceFuturesStatsTool (real network)", () => {
@@ -519,7 +519,7 @@ describe("BinanceFuturesStatsTool (real network)", () => {
     const result = await tool.call({ symbol: "BTCUSDT" });
     expect(typeof result.markPrice).toBe("number");
     expect(typeof result.openInterest).toBe("number");
-  }, 15000);
+  }, 15_000);
 });
 
 describe("BinanceScreenerTool (real network)", () => {
@@ -529,5 +529,5 @@ describe("BinanceScreenerTool (real network)", () => {
     const results = result.results as Array<{ symbol: string; signal: string }>;
     expect(results).toHaveLength(2);
     expect(["oversold", "overbought", "neutral"]).toContain(results[0].signal);
-  }, 15000);
+  }, 15_000);
 });

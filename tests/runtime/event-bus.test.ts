@@ -1,4 +1,5 @@
-import { EventBus, RuntimeEvent } from "../../src/runtime/events.js";
+import type { RuntimeEvent } from "../../src/runtime/events.js";
+import { EventBus } from "../../src/runtime/events.js";
 
 describe("EventBus", () => {
   it("delivers events to all subscribers", () => {
@@ -8,7 +9,7 @@ describe("EventBus", () => {
     bus.subscribe((e) => seen.push(e));
     bus.publish({ type: "status.changed", status: "hello" });
     expect(seen).toHaveLength(2);
-    expect(seen[0]).toEqual({ type: "status.changed", status: "hello" });
+    expect(seen[0]).toStrictEqual({ type: "status.changed", status: "hello" });
   });
 
   it("unsubscribe stops delivery", () => {
@@ -30,6 +31,6 @@ describe("EventBus", () => {
     });
     bus.subscribe(() => seen.push("second"));
     bus.publish({ type: "status.changed", status: "x" });
-    expect(seen).toEqual(["first", "second"]);
+    expect(seen).toStrictEqual(["first", "second"]);
   });
 });

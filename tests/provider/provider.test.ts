@@ -97,17 +97,17 @@ describe("Provider apiKeys pool (Ollama Cloud only)", () => {
   it("keeps rotation state across calls — a later call starts from the last successful key", async () => {
     const fakeFetch = jest
       .fn()
-      .mockResolvedValueOnce({ ok: false, status: 429, text: async () => "rate limited" }) // key_a fails
+      .mockResolvedValueOnce({ ok: false, status: 429, text: async () => "rate limited" }) // Key_a fails
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
         json: async () => ({ message: { role: "assistant", content: "first" }, done: true }),
-      }) // key_b succeeds
+      }) // Key_b succeeds
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
         json: async () => ({ message: { role: "assistant", content: "second" }, done: true }),
-      }); // second call should go straight to key_b
+      }); // Second call should go straight to key_b
     (globalThis as any).fetch = fakeFetch;
 
     const provider = new Provider({ tier: "cloud", model: "m", apiKeys: ["key_a", "key_b"], host: "https://x" });

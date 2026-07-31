@@ -1,5 +1,6 @@
-import { MemoryStore } from "./store.js";
-import { Provider, ChatMessage } from "../provider/provider.js";
+import type { Provider, ChatMessage } from "../provider/provider.js";
+
+import type { MemoryStore } from "./store.js";
 
 const SUMMARY_PROMPT =
   "Summarize the conversation so far in 3-5 short bullet points, focused on what was built or changed. Output only the bullet points, no preamble.";

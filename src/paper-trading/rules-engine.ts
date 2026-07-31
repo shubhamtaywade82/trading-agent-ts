@@ -1,4 +1,4 @@
-import { Candle } from "../backtest/types.js";
+import type { Candle } from "../backtest/types.js";
 
 export interface MarketContext {
   symbol: string;
@@ -31,7 +31,7 @@ export interface Strategy {
   id: string;
   name: string;
   rules: TradingRule[];
-  evaluate(ctx: MarketContext): RuleSignal | null;
+  evaluate: (ctx: MarketContext) => RuleSignal | null;
 }
 
 export class DecoupledRuleEngine implements Strategy {
@@ -53,10 +53,10 @@ export class DecoupledRuleEngine implements Strategy {
         return {
           symbol: ctx.symbol,
           direction: rule.direction,
-          stopLossPct: rule.stopLossPct,
-          takeProfitPct: rule.takeProfitPct,
           rationale: `Rule '${rule.name}' [${rule.id}] evaluated to true`,
           ruleId: rule.id,
+          ...(rule.stopLossPct !== undefined && { stopLossPct: rule.stopLossPct }),
+          ...(rule.takeProfitPct !== undefined && { takeProfitPct: rule.takeProfitPct }),
         };
       }
     }
@@ -73,17 +73,37 @@ export interface JsonRuleCondition {
 
 export function buildConditionFromJson(cond: JsonRuleCondition): RuleCondition {
   return (ctx: MarketContext) => {
-    if (!ctx.indicators || ctx.indicators[cond.indicator] === undefined) {
-      return false;
-    }
-    const val = ctx.indicators[cond.indicator];
+    const val = ctx.indicators?.[cond.indicator];
+    if (val === undefined) return false;
     switch (cond.operator) {
-      case ">": return val > cond.value;
-      case "<": return val < cond.value;
-      case ">=": return val >= cond.value;
-      case "<=": return val <= cond.value;
-      case "==": return val === cond.value;
-      default: return false;
+      case ">": { return val > cond.value;
+      }
+      case "<": { return val < cond.value;
+      }
+      case ">=": { return val >= cond.value;
+      }
+      case "<=": { return val <= cond.value;
+      }
+      case "==": { return val === cond.value;
+      }
+      default: { return false;
+      }
     }
   };
 }
+
+export interface CompositeJsonRuleCondition {
+  logicalOperator: "AND" | "OR";
+  conditions: JsonRuleCondition[];
+}
+
+export function buildCompositeConditionFromJson(composite: CompositeJsonRuleCondition): RuleCondition {
+  const fns = composite.conditions.map(buildConditionFromJson);
+  return (ctx: MarketContext) => {
+    if (composite.logicalOperator === "AND") {
+      return fns.every((fn) => fn(ctx));
+    }
+    return fns.some((fn) => fn(ctx));
+  };
+}
+

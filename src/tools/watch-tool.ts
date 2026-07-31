@@ -1,17 +1,18 @@
 import { watch as fsWatch } from "node:fs/promises";
-import { Tool } from "./tool.js";
+
 import { resolveWorkspacePath } from "./path-utils.js";
+import { Tool } from "./tool.js";
 
 export class WatchTool extends Tool {
-  private watchers = new Map<string, AbortController>();
+  private readonly watchers = new Map<string, AbortController>();
   constructor(private readonly root: string) { super(); }
   get name(): string { return "watch"; }
   get description(): string { return "Watch a file for changes and return on next modification."; }
-  get parameters(): Record<string, unknown> {
+  override get parameters(): Record<string, unknown> {
     return { type: "object", properties: { path: { type: "string" } }, required: ["path"] };
   }
   async call(args: Record<string, unknown>): Promise<Record<string, unknown>> {
-    const path = args.path as string;
+    const path = args["path"] as string;
     if (!path) return { error: "ArgumentError", message: "missing path" };
     const target = resolveWorkspacePath(this.root, path);
     const ac = new AbortController();

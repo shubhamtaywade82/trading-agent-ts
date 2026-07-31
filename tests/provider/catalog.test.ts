@@ -1,21 +1,21 @@
-import { Provider } from "../../src/provider/provider.js";
 import { ModelCatalog, inferCapabilities } from "../../src/provider/catalog.js";
+import { Provider } from "../../src/provider/provider.js";
 
 describe("inferCapabilities", () => {
   it("tags vision models", () => {
-    expect(inferCapabilities("qwen3-vl:4b")).toEqual(expect.arrayContaining(["vision", "tools"]));
+    expect(inferCapabilities("qwen3-vl:4b")).toStrictEqual(expect.arrayContaining(["vision", "tools"]));
   });
 
   it("tags reasoning models", () => {
-    expect(inferCapabilities("deepseek-r1:8b")).toEqual(expect.arrayContaining(["reasoning", "tools"]));
+    expect(inferCapabilities("deepseek-r1:8b")).toStrictEqual(expect.arrayContaining(["reasoning", "tools"]));
   });
 
   it("tags small models as quick", () => {
-    expect(inferCapabilities("nemotron-3-nano:4b")).toEqual(expect.arrayContaining(["quick", "tools"]));
+    expect(inferCapabilities("nemotron-3-nano:4b")).toStrictEqual(expect.arrayContaining(["quick", "tools"]));
   });
 
   it("defaults to coding for plain instruct models", () => {
-    expect(inferCapabilities("qwen3:8b")).toEqual(expect.arrayContaining(["coding", "tools"]));
+    expect(inferCapabilities("qwen3:8b")).toStrictEqual(expect.arrayContaining(["coding", "tools"]));
   });
 });
 
@@ -30,7 +30,7 @@ describe("ModelCatalog.refresh", () => {
     const catalog = new ModelCatalog(local, cloud);
     const models = await catalog.refresh();
 
-    expect(models).toEqual([
+    expect(models).toStrictEqual([
       { name: "qwen3:8b", tier: "local", capabilities: expect.arrayContaining(["coding"]) },
       { name: "qwen3-vl:4b", tier: "cloud", capabilities: expect.arrayContaining(["vision"]) },
     ]);
@@ -66,7 +66,7 @@ describe("ModelCatalog.refresh", () => {
 
   it("uses local Ollama's real capabilities array instead of guessing from the name", async () => {
     // Real /api/tags shape — a model named without any vision/reasoning hints
-    // in its name, but genuinely capable per the server's own metadata.
+    // In its name, but genuinely capable per the server's own metadata.
     const local = new Provider({ tier: "local", model: "x" });
     jest.spyOn(local, "availableModels").mockResolvedValue({
       models: [
@@ -84,9 +84,9 @@ describe("ModelCatalog.refresh", () => {
 
     // Name-heuristic alone would never guess vision/reasoning for this name.
     // 4.7B is above the 4B "quick" threshold, so it's correctly excluded.
-    expect(models[0].capabilities).toEqual(expect.arrayContaining(["tools", "vision", "reasoning"]));
+    expect(models[0].capabilities).toStrictEqual(expect.arrayContaining(["tools", "vision", "reasoning"]));
     expect(models[0].capabilities).not.toContain("quick");
-    expect(models[0].capabilities).not.toContain("coding"); // has vision/reasoning, so no coding fallback
+    expect(models[0].capabilities).not.toContain("coding"); // Has vision/reasoning, so no coding fallback
   });
 
   it("does not tag quick for a real capabilities model over the size threshold", async () => {
@@ -105,7 +105,7 @@ describe("ModelCatalog.refresh", () => {
     const models = await catalog.refresh();
 
     expect(models[0].capabilities).not.toContain("quick");
-    expect(models[0].capabilities).toEqual(expect.arrayContaining(["tools", "coding"]));
+    expect(models[0].capabilities).toStrictEqual(expect.arrayContaining(["tools", "coding"]));
   });
 
   it("parses M-suffixed parameter sizes as quick too", async () => {
@@ -123,13 +123,13 @@ describe("ModelCatalog.refresh", () => {
   it("falls back to the name heuristic for local models with no capabilities field (older Ollama)", async () => {
     const local = new Provider({ tier: "local", model: "x" });
     jest.spyOn(local, "availableModels").mockResolvedValue({
-      models: [{ name: "deepseek-r1:8b" }], // no `capabilities` key at all
+      models: [{ name: "deepseek-r1:8b" }], // No `capabilities` key at all
     });
 
     const catalog = new ModelCatalog(local);
     const models = await catalog.refresh();
 
-    expect(models[0].capabilities).toEqual(expect.arrayContaining(["reasoning"]));
+    expect(models[0].capabilities).toStrictEqual(expect.arrayContaining(["reasoning"]));
   });
 
   it("does not tag an embedding-only model as coding — it can't generate text at all", async () => {
@@ -143,7 +143,7 @@ describe("ModelCatalog.refresh", () => {
 
     expect(models[0].capabilities).not.toContain("coding");
     expect(models[0].capabilities).not.toContain("tools");
-    expect(models[0].capabilities).toContain("quick"); // size-based tagging still applies
+    expect(models[0].capabilities).toContain("quick"); // Size-based tagging still applies
   });
 
   it("cloud models (no capabilities field in /v1/models) still use the name heuristic", async () => {
@@ -153,6 +153,6 @@ describe("ModelCatalog.refresh", () => {
     const catalog = new ModelCatalog(undefined, cloud);
     const models = await catalog.refresh();
 
-    expect(models[0].capabilities).toEqual(expect.arrayContaining(["vision"]));
+    expect(models[0].capabilities).toStrictEqual(expect.arrayContaining(["vision"]));
   });
 });

@@ -1,32 +1,34 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from "fs";
-import { dirname } from "path";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from "node:fs";
+import { dirname } from "node:path";
+
+import type { Candle } from "../backtest/types.js";
 import { fetchCandlesRange, runFuturesBacktest } from "../tools/backtest-tools.js";
-import { Candle } from "../backtest/types.js";
-import { LivePaperRunner } from "./live-runner.js";
+
+import type { LivePaperRunner } from "./live-runner.js";
 import { sendTelegram } from "./notifier.js";
 
 // Self-learning re-research/promotion loop. Refactors the exact methodology
-// already used to build strategies.json (scripts/day-trader-sweep.ts's
-// split-sample survival screen + scripts/train-forward-test.ts's realistic-
-// sizing reverify — both one-off scripts, confirmed via direct read to have
-// no exported functions) into a reusable, schedulable pipeline.
+// Already used to build strategies.json (scripts/day-trader-sweep.ts's
+// Split-sample survival screen + scripts/train-forward-test.ts's realistic-
+// Sizing reverify — both one-off scripts, confirmed via direct read to have
+// No exported functions) into a reusable, schedulable pipeline.
 //
 // This is the ONE place the system writes to strategies.json autonomously,
-// and it's bounded by reusing the identical validation gate every human-
-// curated entry already passed: minTrades, 3-way split-sample all-positive,
-// same realistic sizing (5x leverage / 5% margin) as everything else in this
-// repo. No signal logic is invented here — only existing condition types
+// And it's bounded by reusing the identical validation gate every human-
+// Curated entry already passed: minTrades, 3-way split-sample all-positive,
+// Same realistic sizing (5x leverage / 5% margin) as everything else in this
+// Repo. No signal logic is invented here — only existing condition types
 // (already wired into buildSignalEvaluator) get re-swept across params/
-// timeframes. buildSignalEvaluator itself is never touched.
+// Timeframes. buildSignalEvaluator itself is never touched.
 
 export interface SignalDef {
   id: string;
   direction: "long" | "short";
-  entry: { type: string; period?: number; value?: number }[];
+  entry: Array<{ type: string; period?: number; value?: number }>;
 }
 
 // Same signal set validated in day-trader-sweep.ts — kept here as data, not
-// new logic, so the pipeline can re-sweep them on a schedule.
+// New logic, so the pipeline can re-sweep them on a schedule.
 export const DEFAULT_SIGNAL_POOL: SignalDef[] = [
   { id: "bearish_liq_ob", direction: "short", entry: [{ type: "bearish_liq_ob" }] },
   { id: "bearish_liq_fvg", direction: "short", entry: [{ type: "bearish_liq_fvg" }] },
@@ -70,7 +72,7 @@ export const DEFAULT_RESEARCH_CYCLE_CONFIG: ResearchCycleConfig = {
   marginPerTradePct: 0.05,
   feeBps: 5,
   slippageBps: 3,
-  initialCapital: 10000,
+  initialCapital: 10_000,
 };
 
 export interface ResearchCandidate {
@@ -90,11 +92,11 @@ function splitIntoFolds(candles: Candle[], n: number): Candle[][] {
 }
 
 // Pure sweep — no file writes, no side effects. Reruns the same
-// runFuturesBacktest engine used everywhere else in this repo across a
-// stop/target grid per (symbol, timeframe, signal), and only returns a
-// candidate for combos where a 3-way contiguous split of the window is
-// independently profitable in every fold (stricter than the 2-half check
-// day-trader-sweep used, per the "3-fold OOS" bar this module commits to).
+// RunFuturesBacktest engine used everywhere else in this repo across a
+// Stop/target grid per (symbol, timeframe, signal), and only returns a
+// Candidate for combos where a 3-way contiguous split of the window is
+// Independently profitable in every fold (stricter than the 2-half check
+// Day-trader-sweep used, per the "3-fold OOS" bar this module commits to).
 export async function runResearchCycle(cfg: Partial<ResearchCycleConfig> = {}): Promise<{ tested: number; candidates: ResearchCandidate[] }> {
   const c = { ...DEFAULT_RESEARCH_CYCLE_CONFIG, ...cfg };
   let tested = 0;
@@ -157,8 +159,8 @@ export const DEFAULT_RESEARCH_PIPELINE_CONFIG: ResearchPipelineConfig = {
 };
 
 export class ResearchPipeline {
-  private cfg: ResearchPipelineConfig;
-  private runner: LivePaperRunner | null;
+  private readonly cfg: ResearchPipelineConfig;
+  private readonly runner: LivePaperRunner | null;
 
   constructor(cfg: Partial<ResearchPipelineConfig> = {}, runner: LivePaperRunner | null = null) {
     this.cfg = { ...DEFAULT_RESEARCH_PIPELINE_CONFIG, ...cfg, cycle: { ...DEFAULT_RESEARCH_CYCLE_CONFIG, ...cfg.cycle } };
@@ -168,20 +170,20 @@ export class ResearchPipeline {
   private log(entry: Record<string, unknown>) {
     const dir = dirname(this.cfg.cyclesLogFile);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    appendFileSync(this.cfg.cyclesLogFile, JSON.stringify({ ts: new Date().toISOString(), ...entry }) + "\n");
+    appendFileSync(this.cfg.cyclesLogFile, `${JSON.stringify({ ts: new Date().toISOString(), ...entry })  }\n`);
   }
 
   // Runs one full cycle: sweep -> log everything -> promote up to
-  // maxPromotionsPerCycle survivors not already in the pool, capped at
-  // maxPoolSize total strategies. Returns what was promoted.
+  // MaxPromotionsPerCycle survivors not already in the pool, capped at
+  // MaxPoolSize total strategies. Returns what was promoted.
   async runCycle(): Promise<{ tested: number; candidateCount: number; promoted: string[] }> {
     const { tested, candidates } = await runResearchCycle(this.cfg.cycle);
     const pool = JSON.parse(readFileSync(this.cfg.poolPath, "utf-8"));
 
     const existingKeys = new Set<string>();
     let poolSize = 0;
-    for (const [symbol, strats] of Object.entries(pool.symbols) as [string, any[]][]) {
-      for (const s of strats) {
+    for (const [symbol, strats] of Object.entries(pool.symbols)) {
+      for (const s of strats as Array<{ tf: string; entry: unknown; direction: string }>) {
         existingKeys.add(`${symbol}:${s.tf}:${JSON.stringify(s.entry)}:${s.direction}`);
         poolSize++;
       }

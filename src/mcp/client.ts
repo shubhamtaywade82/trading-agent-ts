@@ -1,6 +1,8 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { Tool } from "../tools/tool.js";
+
+import type { Tool } from "../tools/tool.js";
+
 import { McpToolAdapter } from "./mcp-tool-adapter.js";
 
 export async function connectMcpServer(command: string, args: string[] = []): Promise<Tool[]> {
@@ -14,7 +16,7 @@ export async function connectMcpServer(command: string, args: string[] = []): Pr
       new McpToolAdapter(client, {
         name: t.name,
         description: t.description ?? "",
-        inputSchema: t.inputSchema as Record<string, unknown>,
+        inputSchema: t.inputSchema,
       }),
   );
 }

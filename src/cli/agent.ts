@@ -1,24 +1,30 @@
-import { join } from "node:path";
 import { mkdirSync } from "node:fs";
-import { CliConfig, loadConfig } from "./config.js";
-import { Provider, ChatMessage } from "../provider/provider.js";
-import { Router } from "../provider/router.js";
-import { Capability, ModelCatalog } from "../provider/catalog.js";
-import { CheckpointStore, sanitizeResumedSteps } from "../runtime/checkpoint.js";
-import { SessionStore } from "../runtime/session.js";
-import { LoopDetector } from "../orchestrator/loop-detector.js";
-import { Orchestrator } from "../orchestrator/orchestrator.js";
-import { AgentStepRunner } from "../orchestrator/agent-planner.js";
-import { PlanStep, Planner } from "../orchestrator/types.js";
-import { SkillMeta } from "../skills/types.js";
-import { MemoryStore } from "../memory/store.js";
-import { generateSummary } from "../memory/summarizer.js";
-import { AgentConversation } from "./agent-conversation.js";
-import { AgentToolManager } from "./agent-tools.js";
-import { AgentLearning } from "./agent-learning.js";
-import { DynamicToolSelector } from "../tools/discovery.js";
+import { join } from "node:path";
+
+
 import { BrowserManager } from "../browser/manager.js";
 import { BinanceStreamManager } from "../exchange/binance-stream.js";
+import { MemoryStore } from "../memory/store.js";
+import { generateSummary } from "../memory/summarizer.js";
+import { AgentStepRunner } from "../orchestrator/agent-planner.js";
+import { LoopDetector } from "../orchestrator/loop-detector.js";
+import { Orchestrator } from "../orchestrator/orchestrator.js";
+import type { PlanStep, Planner } from "../orchestrator/types.js";
+import type { Capability} from "../provider/catalog.js";
+import { ModelCatalog } from "../provider/catalog.js";
+import { Provider } from "../provider/provider.js";
+import type { ChatMessage, ChatResponse } from "../provider/provider.js";
+import { Router } from "../provider/router.js";
+import { CheckpointStore, sanitizeResumedSteps } from "../runtime/checkpoint.js";
+import { SessionStore } from "../runtime/session.js";
+import type { SkillMeta } from "../skills/types.js";
+import { DynamicToolSelector } from "../tools/discovery.js";
+
+import { AgentConversation } from "./agent-conversation.js";
+import { AgentLearning } from "./agent-learning.js";
+import { AgentToolManager } from "./agent-tools.js";
+import { loadConfig } from "./config.js";
+import type { CliConfig} from "./config.js";
 
 export interface AgentEvents {
   onAssistantText?: (text: string) => void;
@@ -62,34 +68,34 @@ export class Agent {
   private readonly listeners = new Map<string, Set<(...args: unknown[]) => void>>();
 
   constructor(opts: AgentOptions = {}) {
-    const cfg = { ...loadConfig(), ...(opts.config ?? {}) };
+    const cfg = { ...loadConfig(), ...opts.config };
 
     this.provider = new Provider({
       tier: cfg.tier,
       model: cfg.model,
-      host: cfg.host,
-      apiKey: cfg.apiKey,
-      apiKeys: cfg.apiKeys,
+      ...(cfg.host !== undefined ? { host: cfg.host } : {}),
+      ...(cfg.apiKey !== undefined ? { apiKey: cfg.apiKey } : {}),
+      ...(cfg.apiKeys !== undefined ? { apiKeys: cfg.apiKeys } : {}),
       ...(cfg.timeoutMs ? { timeoutMs: cfg.timeoutMs } : {}),
     });
 
     // Separate provider pool for capability-routed delegation (see classifyCapability),
-    // kept independent of `this.provider` so the primary conversation's model/tier is
-    // never mutated. Cloud provider is omitted entirely when no API key is configured.
+    // Kept independent of `this.provider` so the primary conversation's model/tier is
+    // Never mutated. Cloud provider is omitted entirely when no API key is configured.
     const localProvider = new Provider({
       tier: "local",
       model: cfg.model,
-      host: cfg.tier === "local" ? cfg.host : undefined,
-      apiKeys: cfg.apiKeys,
+      ...(cfg.tier === "local" && cfg.host !== undefined ? { host: cfg.host } : {}),
+      ...(cfg.apiKeys !== undefined ? { apiKeys: cfg.apiKeys } : {}),
       ...(cfg.timeoutMs ? { timeoutMs: cfg.timeoutMs } : {}),
     });
     const cloudProvider = cfg.apiKey
       ? new Provider({
           tier: "cloud",
           model: cfg.model,
-          host: cfg.tier === "cloud" ? cfg.host : undefined,
+          ...(cfg.tier === "cloud" && cfg.host !== undefined ? { host: cfg.host } : {}),
           apiKey: cfg.apiKey,
-          apiKeys: cfg.apiKeys,
+          ...(cfg.apiKeys !== undefined ? { apiKeys: cfg.apiKeys } : {}),
           ...(cfg.timeoutMs ? { timeoutMs: cfg.timeoutMs } : {}),
         })
       : undefined;
@@ -97,9 +103,9 @@ export class Agent {
     this.catalog = new ModelCatalog(localProvider, cloudProvider);
     this.router = new Router({
       local: localProvider,
-      cloud: cloudProvider,
+      ...(cloudProvider !== undefined ? { cloud: cloudProvider } : {}),
       catalog: this.catalog,
-      logger: { warn: (msg: string) => this.emit("onStatus", msg) },
+      logger: { warn: (msg: string) => { this.emit("onStatus", msg); } },
     });
 
     this.events = opts.events ?? {};
@@ -108,7 +114,7 @@ export class Agent {
 
     this.tools = new AgentToolManager();
     this.tools.registerBaseTools(cfg.workspaceRoot, (stream, chunk) =>
-      this.emit("onShellOutput", stream, chunk),
+      { this.emit("onShellOutput", stream, chunk); },
     );
 
     this.browser = new BrowserManager();
@@ -127,12 +133,12 @@ export class Agent {
       workspaceRoot: cfg.workspaceRoot,
       provider: this.provider,
       memory: this.memory,
-      skillsHomeDir: opts.skillsHomeDir,
+      ...(opts.skillsHomeDir !== undefined ? { skillsHomeDir: opts.skillsHomeDir } : {}),
     });
 
     this.toolSelector = new DynamicToolSelector({
-      mode: cfg.toolSelectionMode,
-      maxActiveTools: cfg.maxActiveTools,
+      ...(cfg.toolSelectionMode !== undefined ? { mode: cfg.toolSelectionMode } : {}),
+      ...(cfg.maxActiveTools !== undefined ? { maxActiveTools: cfg.maxActiveTools } : {}),
       provider: this.provider,
     });
   }
@@ -145,16 +151,27 @@ export class Agent {
   }
 
   private emit<E extends AgentEventName>(event: E, ...args: Parameters<AgentEventHandler<E>>): void {
-    if (event === "onToolCall") {
+    switch (event) {
+    case "onToolCall": {
       this.learning.learning.recorder.onToolCall(args[0] as string, args[1] as Record<string, unknown>);
-    } else if (event === "onToolResult") {
+    
+    break;
+    }
+    case "onToolResult": {
       this.learning.learning.recorder.onToolResult(args[0] as string, args[1] as Record<string, unknown>);
-    } else if (event === "onError") {
+    
+    break;
+    }
+    case "onError": {
       this.learning.learning.recorder.onError(args[0] as Error);
+    
+    break;
+    }
+    // No default
     }
 
     (this.events[event] as ((...a: typeof args) => void) | undefined)?.(...args);
-    this.listeners.get(event)?.forEach((h) => h(...args));
+    this.listeners.get(event)?.forEach((h) => { h(...args); });
   }
 
   async runUserMessage(userMessage: string, priority?: PlanStep["priority"]): Promise<string> {
@@ -196,8 +213,8 @@ export class Agent {
         episodeEnded = true;
       }
       // Persist the transcript after every turn (not just success) so a
-      // killed/restarted process can resume with the model still remembering
-      // this turn — mirrors the plan checkpoint's "save progress as you go".
+      // Killed/restarted process can resume with the model still remembering
+      // This turn — mirrors the plan checkpoint's "save progress as you go".
       this.sessionStore.save(this.conversation.getMessages());
       return text;
     };
@@ -205,8 +222,9 @@ export class Agent {
     const capability = this.classifyCapability(priority, userMessage);
     if (capability) await this.ensureCatalog();
     const delegateCandidates = capability ? this.catalog.modelsFor(capability) : [];
-    if (delegateCandidates.length) {
-      this.emit("onStatus", `delegating task to ${delegateCandidates[0].tier}/${delegateCandidates[0].name}`);
+    const firstDelegate = delegateCandidates[0];
+    if (firstDelegate !== undefined) {
+      this.emit("onStatus", `delegating task to ${firstDelegate.tier}/${firstDelegate.name}`);
     }
 
     try {
@@ -222,22 +240,25 @@ export class Agent {
 
         const chatOpts = {
           stream: true,
-          tools: activeTools.length > 0 ? activeTools.map((t) => t.schema) : undefined,
-          onChunk: (chunk: any) => {
+          ...(activeTools.length > 0 ? { tools: activeTools.map((t) => t.schema) } : {}),
+          onChunk: (chunk: ChatResponse) => {
             const delta = chunk.message?.content;
             if (typeof delta === "string" && delta) {
               lastAssistantText += delta;
               this.emit("onAssistantText", delta);
             }
-            const thinking = (chunk.message as any)?.thinking;
+            const thinking = (chunk.message as { thinking?: unknown }).thinking;
             if (typeof thinking === "string" && thinking) {
               this.emit("onThinking", thinking);
             }
           },
         };
-        const chatResponse = delegateCandidates.length
-          ? await this.router.route(capability!, this.conversation.getMessages(), chatOpts)
-          : await this.provider.chat(this.conversation.getMessages(), chatOpts);
+        let chatResponse: ChatResponse;
+        if (delegateCandidates.length && capability) {
+          chatResponse = await this.router.route(capability, this.conversation.getMessages(), chatOpts);
+        } else {
+          chatResponse = await this.provider.chat(this.conversation.getMessages(), chatOpts);
+        }
 
         const assistantMessage = chatResponse.message as {
           content?: string;
@@ -274,7 +295,7 @@ export class Agent {
             try {
               args = JSON.parse(rawArguments);
             } catch {
-              // leave args empty on malformed JSON
+              // Leave args empty on malformed JSON
             }
           }
 
@@ -283,19 +304,19 @@ export class Agent {
           try {
             const result = await this.tools.registry.invoke(name, args);
 
-            if (result.error === "PathEscapeError") {
+            if (result["error"] === "PathEscapeError") {
               this.conversation.pushToolResult(
-                JSON.stringify({ error: "PathEscapeError", message: result.message }, null, 2),
+                JSON.stringify({ error: "PathEscapeError", message: result["message"] }, null, 2),
               );
               this.emit("onToolResult", name, result);
               this.conversation.pushSystemMessage(
                 "[system] The previous tool call escaped the workspace root. Retry with a path under the current workspace root.",
               );
 
-              if (typeof result.error === "string" && this.loopDetector.record(name, args, result.error)) {
+              if (typeof result["error"] === "string" && this.loopDetector.record(name, args, result["error"])) {
                 return finish(
                   "loop_abort",
-                  lastAssistantText + "\n[aborted] tool loop detected after repeated escapes.",
+                  `${lastAssistantText  }\n[aborted] tool loop detected after repeated escapes.`,
                 );
               }
               continue;
@@ -306,8 +327,8 @@ export class Agent {
               typeof result === "string" ? result : JSON.stringify(result, null, 2),
             );
 
-            if (typeof result.error === "string" && this.loopDetector.record(name, args, result.error)) {
-              return finish("loop_abort", lastAssistantText + "\n[aborted] tool loop detected after repeated: " + name);
+            if (typeof result["error"] === "string" && this.loopDetector.record(name, args, result["error"])) {
+              return finish("loop_abort", `${lastAssistantText  }\n[aborted] tool loop detected after repeated: ${  name}`);
             }
             if (toolTurn === this.maxToolTurns - 1) {
               return finish("turn_budget", lastAssistantText || "(no response)");
@@ -391,10 +412,10 @@ export class Agent {
     this.provider.setModel(model);
   }
 
-  // ponytail: keyword classification, not an LLM intent classifier — cheap and
-  // deterministic. Falls back to the primary model whenever the catalog has no
-  // candidate for the detected capability (e.g. no vision model installed), so
-  // a wrong or missed classification never breaks the turn, only skips routing.
+  // Ponytail: keyword classification, not an LLM intent classifier — cheap and
+  // Deterministic. Falls back to the primary model whenever the catalog has no
+  // Candidate for the detected capability (e.g. no vision model installed), so
+  // A wrong or missed classification never breaks the turn, only skips routing.
   private static readonly VISION_PATTERN = /\b(screenshot|diagram|image|photo|picture)\b|\.(png|jpe?g|gif|webp)\b/;
   private static readonly REASONING_PATTERN =
     /\b(architecture|trade-?offs?|root cause|design decision|why does|why is|think through|deep dive)\b/;
@@ -421,7 +442,7 @@ export class Agent {
   // Refreshed once, on first delegation attempt, and cached for the Agent's lifetime.
   private ensureCatalog(): Promise<void> {
     if (!this.catalogRefreshed) {
-      this.catalogRefreshed = this.catalog.refresh().then(() => undefined);
+      this.catalogRefreshed = this.catalog.refresh().then(() => {});
     }
     return this.catalogRefreshed;
   }
@@ -494,8 +515,8 @@ export class Agent {
     if (this.isSummarizing) return;
     this.isSummarizing = true;
     generateSummary(this.memory, this.provider)
-      .then((summary) => this.emit("onMemorySummary", summary))
-      .catch((e) => this.emit("onError", e instanceof Error ? e : new Error(String(e))))
+      .then((summary) => { this.emit("onMemorySummary", summary); })
+      .catch((e) => { this.emit("onError", e instanceof Error ? e : new Error(String(e))); })
       .finally(() => {
         this.isSummarizing = false;
       });

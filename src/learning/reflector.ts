@@ -1,5 +1,6 @@
-import { Provider, ChatMessage } from "../provider/provider.js";
-import { Episode, ReflectionResult } from "./types.js";
+import type { Provider, ChatMessage } from "../provider/provider.js";
+
+import type { Episode, ReflectionResult } from "./types.js";
 
 /**
  * Distills a graded episode into 0–3 candidate lessons. Malformed provider
@@ -61,19 +62,19 @@ export function parseReflection(raw: string): ReflectionResult {
   for (const item of lessons.slice(0, MAX_LESSONS)) {
     if (typeof item !== "object" || item === null) continue;
     const lesson = item as Record<string, unknown>;
-    if (typeof lesson.text !== "string" || lesson.text.trim().length < 10 || lesson.text.length > 300) continue;
-    if (typeof lesson.kind !== "string" || !VALID_KINDS.has(lesson.kind)) continue;
-    const tags = Array.isArray(lesson.tags)
-      ? lesson.tags.filter((tag): tag is string => typeof tag === "string" && tag.length <= 40).slice(0, 5)
+    if (typeof lesson["text"] !== "string" || lesson["text"].trim().length < 10 || lesson["text"].length > 300) continue;
+    if (typeof lesson["kind"] !== "string" || !VALID_KINDS.has(lesson["kind"])) continue;
+    const tags = Array.isArray(lesson["tags"])
+      ? lesson["tags"].filter((tag): tag is string => typeof tag === "string" && tag.length <= 40).slice(0, 5)
       : [];
     if (!tags.length) continue;
 
     const candidate: ReflectionResult["lessons"][number] = {
-      text: lesson.text.trim(),
+      text: lesson["text"].trim(),
       tags: tags.map((tag) => tag.toLowerCase()),
-      kind: lesson.kind as "pitfall" | "procedure" | "preference" | "project_fact",
+      kind: lesson["kind"] as "pitfall" | "procedure" | "preference" | "project_fact",
     };
-    if (typeof lesson.language === "string" && lesson.language) candidate.language = lesson.language.toLowerCase();
+    if (typeof lesson["language"] === "string" && lesson["language"]) candidate.language = lesson["language"].toLowerCase();
     valid.push(candidate);
   }
   return { lessons: valid };

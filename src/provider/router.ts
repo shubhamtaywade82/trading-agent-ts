@@ -1,5 +1,6 @@
-import { Provider, ChatMessage, ChatResponse, ChatOptions, ProviderError, RateLimitError, TimeoutError } from "./provider.js";
-import { Capability, ModelCatalog } from "./catalog.js";
+import type { Capability, ModelCatalog } from "./catalog.js";
+import type { Provider, ChatMessage, ChatResponse, ChatOptions} from "./provider.js";
+import { ProviderError, RateLimitError, TimeoutError } from "./provider.js";
 
 export interface RouterOptions {
   local: Provider;
@@ -16,7 +17,7 @@ export class Router {
 
   constructor(opts: RouterOptions) {
     this.local = opts.local;
-    this.cloud = opts.cloud;
+    if (opts.cloud !== undefined) this.cloud = opts.cloud;
     this.catalog = opts.catalog;
     this.logger = opts.logger ?? console;
   }
@@ -25,15 +26,15 @@ export class Router {
     let candidates = this.catalog.modelsFor(capability);
     // A candidate tagged for the routed capability (e.g. "quick" by size, or
     // "reasoning" by name) is not necessarily tool-capable — routing solely
-    // on the content-classified capability while ignoring whether this turn
-    // actually sends tool schemas sends real requests to models that reject
-    // them outright (e.g. Ollama 400 "does not support tools"), with no
-    // fallback to a model that does. Require "tools" too whenever this turn needs it.
+    // On the content-classified capability while ignoring whether this turn
+    // Actually sends tool schemas sends real requests to models that reject
+    // Them outright (e.g. Ollama 400 "does not support tools"), with no
+    // Fallback to a model that does. Require "tools" too whenever this turn needs it.
     if (opts?.tools && opts.tools.length > 0) {
       const toolCapable = candidates.filter((c) => c.capabilities.includes("tools"));
       // If nothing tagged for the routed capability also supports tools,
-      // widen to any tool-capable model in the catalog rather than handing
-      // the request to a model guaranteed to reject it.
+      // Widen to any tool-capable model in the catalog rather than handing
+      // The request to a model guaranteed to reject it.
       candidates = toolCapable.length > 0 ? toolCapable : this.catalog.modelsFor("tools");
     }
     if (candidates.length === 0) {
@@ -65,8 +66,8 @@ export class Router {
     if (e instanceof TimeoutError) return true;
     if (e instanceof TypeError) return true;
     // The catalog's capability filter should already exclude these, but if a
-    // model still gets picked that rejects tool schemas outright, that's a
-    // wrong-candidate problem, not a fatal one — try the next candidate.
+    // Model still gets picked that rejects tool schemas outright, that's a
+    // Wrong-candidate problem, not a fatal one — try the next candidate.
     if (e instanceof ProviderError && /does not support tools/i.test(e.message)) return true;
     return false;
   }

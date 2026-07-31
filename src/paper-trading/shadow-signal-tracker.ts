@@ -1,11 +1,13 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from "fs";
-import { dirname } from "path";
-import { BinanceStreamManager, getLiveTick } from "../exchange/binance-stream.js";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from "node:fs";
+import { dirname } from "node:path";
+
+import type { BinanceStreamManager} from "../exchange/binance-stream.js";
+import { getLiveTick } from "../exchange/binance-stream.js";
 
 export interface CandidateSignal {
   id: string;
   symbol: string;
-  shadow: boolean; // true = paper-only, not yet counted as validated
+  shadow: boolean; // True = paper-only, not yet counted as validated
   checkFire: () => Promise<"long" | "short" | null>;
   stopPct: number;
   targetPct: number;
@@ -33,11 +35,11 @@ export const DEFAULT_SHADOW_TRACKER_CONFIG: ShadowTrackerConfig = {
 };
 
 export class ShadowSignalTracker {
-  private cfg: ShadowTrackerConfig;
+  private readonly cfg: ShadowTrackerConfig;
   private state: Record<string, ShadowPosition | null> = {};
   private running = false;
 
-  constructor(private candidates: CandidateSignal[], private stream: BinanceStreamManager, cfg: Partial<ShadowTrackerConfig> = {}) {
+  constructor(private readonly candidates: CandidateSignal[], private readonly stream: BinanceStreamManager, cfg: Partial<ShadowTrackerConfig> = {}) {
     this.cfg = { ...DEFAULT_SHADOW_TRACKER_CONFIG, ...cfg };
     this.loadState();
   }
@@ -60,12 +62,12 @@ export class ShadowSignalTracker {
   private journal(event: Record<string, unknown>) {
     const dir = dirname(this.cfg.journalFile);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    appendFileSync(this.cfg.journalFile, JSON.stringify({ ts: new Date().toISOString(), ...event }) + "\n");
+    appendFileSync(this.cfg.journalFile, `${JSON.stringify({ ts: new Date().toISOString(), ...event })  }\n`);
   }
 
-  async tick(): Promise<{ opened: string[]; closed: { id: string; reason: string }[] }> {
+  async tick(): Promise<{ opened: string[]; closed: Array<{ id: string; reason: string }> }> {
     const opened: string[] = [];
-    const closed: { id: string; reason: string }[] = [];
+    const closed: Array<{ id: string; reason: string }> = [];
 
     for (const c of this.candidates) {
       const pos = this.state[c.id];
@@ -76,7 +78,7 @@ export class ShadowSignalTracker {
         const hitTarget = pos.direction === "long" ? tick.price >= pos.targetPrice : tick.price <= pos.targetPrice;
         const timedOut = Date.now() - pos.openedAt >= pos.maxHoldMs;
         if (hitStop || hitTarget || timedOut) {
-          const reason = hitStop ? "stop" : hitTarget ? "target" : "timeout";
+          const reason = hitStop ? "stop" : (hitTarget ? "target" : "timeout");
           const pnlPct = pos.direction === "long" ? (tick.price - pos.entryPrice) / pos.entryPrice : (pos.entryPrice - tick.price) / pos.entryPrice;
           this.journal({ type: "shadow_close", id: c.id, symbol: c.symbol, reason, closePrice: tick.price, pnlPct });
           this.state[c.id] = null;
@@ -100,7 +102,7 @@ export class ShadowSignalTracker {
     return { opened, closed };
   }
 
-  async start(intervalMs: number, onResult?: (r: { opened: string[]; closed: { id: string; reason: string }[] }) => void) {
+  async start(intervalMs: number, onResult?: (r: { opened: string[]; closed: Array<{ id: string; reason: string }> }) => void) {
     this.running = true;
     while (this.running) {
       try {
@@ -118,7 +120,7 @@ export class ShadowSignalTracker {
 }
 
 export function summarizeShadowJournal(
-  entries: { type: string; id: string; reason?: string; pnlPct?: number }[],
+  entries: Array<{ type: string; id: string; reason?: string; pnlPct?: number }>,
 ): Record<string, { fires: number; wins: number; losses: number; winRate: number; pf: number; totalPnlPct: number; verdict: "SURVIVES" | "NOT_YET" }> {
   const byId = new Map<string, { pnls: number[] }>();
   for (const e of entries) {

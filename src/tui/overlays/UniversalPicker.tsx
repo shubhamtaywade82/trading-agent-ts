@@ -1,6 +1,9 @@
-import React, { useState } from "react";
 import { Box, Text, useInput } from "ink";
-import { filterPickerItems, PickerItem, visibleWindow } from "../../interaction/picker.js";
+import React, { useState } from "react";
+
+import type { PickerItem} from "../../interaction/picker.js";
+import { filterPickerItems, visibleWindow } from "../../interaction/picker.js";
+
 import { OverlayFrame } from "./OverlayFrame.js";
 
 export interface UniversalPickerProps {
@@ -15,7 +18,7 @@ export interface UniversalPickerProps {
   emptyText?: string;
   /** Item ids checked initially (multi) or the current value (single). */
   initialSelected?: string[];
-  onSubmit(ids: string[]): void;
+  onSubmit: (ids: string[]) => void;
 }
 
 /**
@@ -89,15 +92,15 @@ export function UniversalPicker({
         const absolute = start + i;
         const highlighted = absolute === clampedIndex;
         const glyph = multi
-          ? checked.has(item.id)
+          ? (checked.has(item.id)
             ? "[x] "
-            : "[ ] "
-          : initialSelected.includes(item.id)
+            : "[ ] ")
+          : (initialSelected.includes(item.id)
             ? "(•) "
-            : "";
+            : "");
         return (
           <Box key={item.id}>
-            <Text color={highlighted ? "blue" : undefined} inverse={highlighted} wrap="truncate">
+            <Text inverse={highlighted} wrap="truncate" {...(highlighted ? { color: "blue" } : {})}>
               {glyph}
               {item.label}
             </Text>

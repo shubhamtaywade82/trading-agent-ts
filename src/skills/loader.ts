@@ -7,8 +7,10 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+
 import matter from "gray-matter";
-import { SkillContent, SkillMeta, SkillScope } from "./types.js";
+
+import type { SkillContent, SkillMeta, SkillScope } from "./types.js";
 
 export interface DiscoverOptions {
   workspaceRoot: string;
@@ -54,15 +56,16 @@ export function loadSkillMeta(skillDir: string, scope: SkillScope): SkillMeta | 
   try {
     const raw = readFileSync(path, "utf8");
     const { data } = matter(raw);
-    const id = skillDir.split(/[/\\]/).filter(Boolean).pop() ?? "";
+    const id = skillDir.split(/[/\\]/).findLast(Boolean) ?? "";
     if (!id) return null;
+    const language = typeof data["language"] === "string" && data["language"] ? data["language"] : undefined;
     return {
       id,
-      name: typeof data.name === "string" && data.name ? data.name : id,
-      description: typeof data.description === "string" ? data.description : "",
-      tags: Array.isArray(data.tags) ? data.tags.filter((t): t is string => typeof t === "string") : [],
-      version: typeof data.version === "string" && data.version ? data.version : "0.0.0",
-      language: typeof data.language === "string" && data.language ? data.language : undefined,
+      name: typeof data["name"] === "string" && data["name"] ? data["name"] : id,
+      description: typeof data["description"] === "string" ? data["description"] : "",
+      tags: Array.isArray(data["tags"]) ? data["tags"].filter((t): t is string => typeof t === "string") : [],
+      version: typeof data["version"] === "string" && data["version"] ? data["version"] : "0.0.0",
+      ...(language !== undefined && { language }),
       scope,
       dir: skillDir,
       path,
@@ -87,7 +90,7 @@ export function discoverSkills(opts: DiscoverOptions): SkillMeta[] {
 
   const byId = new Map<string, SkillMeta>();
   for (const skill of global) byId.set(skill.id, skill);
-  for (const skill of workspace) byId.set(skill.id, skill); // workspace wins
+  for (const skill of workspace) byId.set(skill.id, skill); // Workspace wins
   return [...byId.values()];
 }
 

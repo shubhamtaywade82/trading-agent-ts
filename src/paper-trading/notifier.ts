@@ -1,26 +1,26 @@
 // Minimal, purpose-built notification senders — deliberately NOT a copy of
 // Janus's telegram.ts (rate limiter, circuit breaker, retry_after handling):
-// those exist there because Janus sends frequent alert-engine traffic. This
-// module fires at most once per strategy/portfolio readiness transition —
-// a handful of messages over a paper-trading run's lifetime, not a stream.
+// Those exist there because Janus sends frequent alert-engine traffic. This
+// Module fires at most once per strategy/portfolio readiness transition —
+// A handful of messages over a paper-trading run's lifetime, not a stream.
 // Reuses the SAME env var names as Janus (TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
-// so one .env value works across both repos.
+// So one .env value works across both repos.
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
-import { dirname } from "path";
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 
 export function terminalBell(): void {
   if (process.stdout.isTTY) process.stdout.write("\x07");
 }
 
 // Watches the paper-trading journal and sends a Telegram alert for every new
-// position_fill (open/add/reduce/close/flip) — a live trade blotter in your
-// pocket. Purely an observer: reads the journal file, tracks how many lines
-// it has already notified via a persisted line count (so a restart doesn't
-// re-blast every historical fill), never touches trading state.
+// Position_fill (open/add/reduce/close/flip) — a live trade blotter in your
+// Pocket. Purely an observer: reads the journal file, tracks how many lines
+// It has already notified via a persisted line count (so a restart doesn't
+// Re-blast every historical fill), never touches trading state.
 export class FillNotifier {
-  private stateFile: string;
-  private journalFile: string;
+  private readonly stateFile: string;
+  private readonly journalFile: string;
   private lastLineCount = 0;
 
   constructor(opts: { journalFile: string; stateFile?: string }) {
@@ -53,11 +53,11 @@ export class FillNotifier {
       if (e.type === "position_fill") {
         const posAfter = e.positionAfter ? ` | position now: ${e.positionAfter.direction ?? "flat"} ${e.positionAfter.qty ?? 0}` : "";
         if (e.action === "open" || e.action === "add" || e.action === "flip_open") {
-          const verb = e.action === "add" ? "ADD" : e.action === "flip_open" ? "FLIP→OPEN" : "OPEN";
+          const verb = e.action === "add" ? "ADD" : (e.action === "flip_open" ? "FLIP→OPEN" : "OPEN");
           text = `${e.direction === "short" ? "🔻" : "🔺"} ${verb} ${e.symbol} ${e.tf} (${e.strategyId})\n@ ${e.price?.toFixed(6)}  qty ${e.qty?.toFixed(4)}${posAfter}`;
         } else if (e.action === "reduce" || e.action === "close" || e.action === "flip_close") {
           const emoji = (e.realizedPnl ?? 0) > 0 ? "✅" : "🛑";
-          const verb = e.action === "reduce" ? "REDUCE" : e.action === "flip_close" ? "FLIP→CLOSE" : "CLOSE";
+          const verb = e.action === "reduce" ? "REDUCE" : (e.action === "flip_close" ? "FLIP→CLOSE" : "CLOSE");
           text = `${emoji} ${verb} ${e.symbol} (${e.strategyId}, ${e.reason})\n@ ${e.price?.toFixed(6)}  realizedPnl $${e.realizedPnl?.toFixed(2)}${posAfter}`;
         }
       }
@@ -68,10 +68,10 @@ export class FillNotifier {
 }
 
 export async function sendTelegram(text: string): Promise<boolean> {
-  const botToken = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
-  if (!botToken || !chatId) return false; // silently skip — not configured is a valid state
-  const apiBase = (process.env.TELEGRAM_API_BASE ?? "https://api.telegram.org").replace(/\/$/, "");
+  const botToken = process.env["TELEGRAM_BOT_TOKEN"];
+  const chatId = process.env["TELEGRAM_CHAT_ID"];
+  if (!botToken || !chatId) return false; // Silently skip — not configured is a valid state
+  const apiBase = (process.env["TELEGRAM_API_BASE"] ?? "https://api.telegram.org").replace(/\/$/, "");
   try {
     const res = await fetch(`${apiBase}/bot${botToken}/sendMessage`, {
       method: "POST",
@@ -81,6 +81,6 @@ export async function sendTelegram(text: string): Promise<boolean> {
     });
     return res.ok;
   } catch {
-    return false; // never let a notification failure affect trading
+    return false; // Never let a notification failure affect trading
   }
 }

@@ -1,9 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Box, Text, useInput } from "ink";
-import { ChatEntry, RuntimeState } from "../../runtime/types.js";
-import { DetailLevel } from "../../layout/density.js";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+
+import type { DetailLevel } from "../../layout/density.js";
 import { truncate } from "../../layout/truncate.js";
-import { parseInline, Span } from "../markdown.js";
+import type { ChatEntry, RuntimeState } from "../../runtime/types.js";
+import type { Span } from "../markdown.js";
+import { parseInline } from "../markdown.js";
 
 export interface ViewProps {
   state: RuntimeState;
@@ -24,7 +26,7 @@ function SpanText({ spans }: { spans: Span[] }): JSX.Element {
       {spans.map((s, j) => {
         if (s.code) return <Text key={j} inverse>{` ${s.text} `}</Text>;
         return (
-          <Text key={j} bold={s.bold} italic={s.italic}>
+          <Text key={j} {...(s.bold !== undefined && { bold: s.bold })} {...(s.italic !== undefined && { italic: s.italic })}>
             {s.text}
           </Text>
         );
@@ -44,9 +46,9 @@ function wrapText(text: string, width: number): string[] {
   return lines;
 }
 
-function renderSimpleMarkdown(text: string, bodyWidth: number): { spans: Span[]; indent?: number }[] {
+function renderSimpleMarkdown(text: string, bodyWidth: number): Array<{ spans: Span[]; indent?: number }> {
   const rawLines = text.split("\n");
-  const result: { spans: Span[]; indent?: number }[] = [];
+  const result: Array<{ spans: Span[]; indent?: number }> = [];
   let inCode = false;
   let codeLines: string[] = [];
 
@@ -80,7 +82,7 @@ function renderSimpleMarkdown(text: string, bodyWidth: number): { spans: Span[];
       }
       continue;
     }
-    if (raw.match(/^[-*]\s/)) {
+    if (/^[-*]\s/.test(raw)) {
       const content = raw.replace(/^[-*]\s/, "");
       for (const line of wrapText(content, bodyWidth - 2)) {
         result.push({ spans: [{ text: "• " }, ...parseInline(line)], indent: 2 });
@@ -129,8 +131,8 @@ function ToolCallBlock({
   const args = formatArgs(entry.args);
   const isRunning = entry.status === "running";
   const isFailed = entry.status === "failed";
-  const statusColor = isRunning ? "yellow" : isFailed ? "red" : "green";
-  const statusLabel = isRunning ? "running" : isFailed ? "failed" : "done";
+  const statusColor = isRunning ? "yellow" : (isFailed ? "red" : "green");
+  const statusLabel = isRunning ? "running" : (isFailed ? "failed" : "done");
   const connector = "  ├─ ";
 
   return (
@@ -150,14 +152,14 @@ function ToolCallBlock({
           {entry.error && (
             <Box height={1}>
               <Text color="red" wrap="truncate">
-                Error: {truncate(entry.error.replace(/\n/g, " "), width - 10)}
+                Error: {truncate(entry.error.replaceAll('\n', " "), width - 10)}
               </Text>
             </Box>
           )}
           {entry.result && (
             <Box height={1}>
               <Text color="gray" wrap="truncate">
-                Result: {truncate(entry.result.replace(/\n/g, " "), width - 10)}
+                Result: {truncate(entry.result.replaceAll('\n', " "), width - 10)}
               </Text>
             </Box>
           )}
@@ -201,7 +203,8 @@ export function ConversationView({ state, width, rows, detail: _detail }: ViewPr
       }
       isFirst = false;
 
-      if (entry.kind === "text") {
+      switch (entry.kind) {
+      case "text": {
         if (entry.role === "thinking") {
           const preview = entry.text.slice(0, bodyWidth - 6).replace(/\n.*$/s, "") || "Thinking...";
           b.push({
@@ -238,7 +241,7 @@ export function ConversationView({ state, width, rows, detail: _detail }: ViewPr
             },
           });
         } else {
-          // assistant
+          // Assistant
           const lines = renderSimpleMarkdown(entry.text, bodyWidth - 2);
           b.push({
             key: `asst-${entry.at}`,
@@ -259,7 +262,10 @@ export function ConversationView({ state, width, rows, detail: _detail }: ViewPr
             },
           });
         }
-      } else if (entry.kind === "tool_call") {
+      
+      break;
+      }
+      case "tool_call": {
         const isCollapsed = collapsed.has(entry.at);
         const extraHeight = isCollapsed ? 0 : (entry.result ? 1 : 0) + (entry.error ? 1 : 0);
         b.push({
@@ -267,7 +273,10 @@ export function ConversationView({ state, width, rows, detail: _detail }: ViewPr
           height: 1 + extraHeight,
           render: () => <ToolCallBlock entry={entry} collapsed={isCollapsed} width={bodyWidth} />,
         });
-      } else if (entry.kind === "plan") {
+      
+      break;
+      }
+      case "plan": {
         const headerText = `📋 Plan (${entry.steps.length} steps) [${entry.status}]`;
         const stepGlyphs = {
           completed: { char: "✓", color: "green" },
@@ -299,7 +308,10 @@ export function ConversationView({ state, width, rows, detail: _detail }: ViewPr
             </Box>
           ),
         });
-      } else if (entry.kind === "decision") {
+      
+      break;
+      }
+      case "decision": {
         const optionList = entry.options.join(", ");
         b.push({
           key: `decision-${entry.at}`,
@@ -325,7 +337,10 @@ export function ConversationView({ state, width, rows, detail: _detail }: ViewPr
             </Box>
           ),
         });
-      } else if (entry.kind === "diff_preview") {
+      
+      break;
+      }
+      case "diff_preview": {
         const diffLines = entry.diff.split("\n");
         const changes: Array<{ text: string; color: string }> = [];
         let additions = 0;
@@ -369,7 +384,10 @@ export function ConversationView({ state, width, rows, detail: _detail }: ViewPr
             </Box>
           ),
         });
-      } else if (entry.kind === "test_result") {
+      
+      break;
+      }
+      case "test_result": {
         const isSuccess = entry.failed === 0;
         const statusColor = isSuccess ? "green" : "red";
         const durationSec = (entry.durationMs / 1000).toFixed(1);
@@ -379,7 +397,7 @@ export function ConversationView({ state, width, rows, detail: _detail }: ViewPr
         if (!isSuccess && entry.failures) {
           for (const f of entry.failures.slice(0, 2)) {
             failureLines.push(`  ✗ ${f.file}:${f.line}`);
-            failureLines.push(`    ${f.message.replace(/\s+/g, " ").slice(0, width - 6)}`);
+            failureLines.push(`    ${f.message.replaceAll(/\s+/g, " ").slice(0, width - 6)}`);
           }
           if (entry.failures.length > 2) {
             failureLines.push(`  ... and ${entry.failures.length - 2} more failures`);
@@ -410,8 +428,11 @@ export function ConversationView({ state, width, rows, detail: _detail }: ViewPr
             </Box>
           ),
         });
-      } else if (entry.kind === "card") {
-        const statusColor = entry.status === "completed" ? "green" : entry.status === "failed" ? "red" : "yellow";
+      
+      break;
+      }
+      case "card": {
+        const statusColor = entry.status === "completed" ? "green" : (entry.status === "failed" ? "red" : "yellow");
         const glyphs = {
           completed: { char: "✓", color: "green" },
           failed: { char: "✗", color: "red" },
@@ -442,6 +463,10 @@ export function ConversationView({ state, width, rows, detail: _detail }: ViewPr
             </Box>
           ),
         });
+      
+      break;
+      }
+      // No default
       }
     }
     return b;
@@ -459,7 +484,9 @@ export function ConversationView({ state, width, rows, detail: _detail }: ViewPr
   let blockStart = 0;
   let firstVisibleIdx = 0;
   for (let i = 0; i < blocks.length; i++) {
-    const blockEnd = blockStart + blocks[i].height;
+    const blk = blocks[i];
+    if (blk === undefined) continue;
+    const blockEnd = blockStart + blk.height;
     if (blockEnd > visibleStart) {
       firstVisibleIdx = i;
       break;
@@ -472,6 +499,7 @@ export function ConversationView({ state, width, rows, detail: _detail }: ViewPr
   let currentRow = blockStart;
   for (let i = firstVisibleIdx; i < blocks.length && currentRow < visibleEnd; i++) {
     const b = blocks[i];
+    if (b === undefined) continue;
     if (currentRow + b.height > visibleStart) {
       const startRow = Math.max(0, visibleStart - currentRow);
       const endRow = Math.min(b.height, visibleEnd - currentRow);
@@ -492,9 +520,11 @@ export function ConversationView({ state, width, rows, detail: _detail }: ViewPr
     if (!process.stdin.isTTY) return;
     const handler = (data: Buffer) => {
       // eslint-disable-next-line no-control-regex
-      const m = data.toString().match(/^\x1b\[<(\d+);(\d+);(\d+)([Mm])$/);
+      const m = /^\x1B\[<(\d+);(\d+);(\d+)([Mm])$/.exec(data.toString());
       if (!m) return;
-      const btn = parseInt(m[1], 10);
+      const btnGroup = m[1];
+      if (btnGroup === undefined) return;
+      const btn = parseInt(btnGroup, 10);
       if (btn === 64) setScrollOffset((prev) => Math.min(maxOffsetRef.current, prev + 3));
       else if (btn === 65) setScrollOffset((prev) => Math.max(0, prev - 3));
     };

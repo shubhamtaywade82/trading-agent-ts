@@ -1,7 +1,10 @@
-import React from "react";
 import { Box, Text } from "ink";
-import { ACTOR_IDS, RuntimeState } from "../../runtime/types.js";
+import React from "react";
+
 import { semanticColor } from "../../layout/theme-map.js";
+import type { RuntimeState } from "../../runtime/types.js";
+import { ACTOR_IDS } from "../../runtime/types.js";
+
 import { OverlayFrame } from "./OverlayFrame.js";
 
 export interface ActorsOverlayProps {

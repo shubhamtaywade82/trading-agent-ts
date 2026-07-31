@@ -1,7 +1,8 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from "fs";
-import { dirname } from "path";
-import { fetchRecentCloses } from "../tools/binance-tools.js";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from "node:fs";
+import { dirname } from "node:path";
+
 import { computeZScoreSeries } from "../backtest/pairs-engine.js";
+import { fetchRecentCloses } from "../tools/binance-tools.js";
 
 export interface PairsArbCandidate {
   id: string; symbolA: string; symbolB: string; tf: string;
@@ -12,7 +13,7 @@ interface PairsArbPosition {
   direction: "short_a_long_b" | "long_a_short_b";
   entryPriceA: number; entryPriceB: number;
   qtyA: number; qtyB: number;
-  entryBarCount: number; // bars held tracker — incremented once per tick while open
+  entryBarCount: number; // Bars held tracker — incremented once per tick while open
 }
 
 export interface PairsArbConfig {
@@ -34,12 +35,12 @@ export interface PairsArbDeps {
 const REAL_DEPS: PairsArbDeps = { fetchRecentCloses };
 
 export class PairsArbTracker {
-  private cfg: PairsArbConfig;
-  private deps: PairsArbDeps;
+  private readonly cfg: PairsArbConfig;
+  private readonly deps: PairsArbDeps;
   private state: Record<string, PairsArbPosition | null> = {};
   private running = false;
 
-  constructor(private candidates: PairsArbCandidate[], cfg: Partial<PairsArbConfig> = {}, deps: Partial<PairsArbDeps> = {}) {
+  constructor(private readonly candidates: PairsArbCandidate[], cfg: Partial<PairsArbConfig> = {}, deps: Partial<PairsArbDeps> = {}) {
     this.cfg = { ...DEFAULT_PAIRS_ARB_CONFIG, ...cfg };
     this.deps = { ...REAL_DEPS, ...deps };
     this.loadState();
@@ -63,7 +64,7 @@ export class PairsArbTracker {
   private journal(event: Record<string, unknown>) {
     const dir = dirname(this.cfg.journalFile);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    appendFileSync(this.cfg.journalFile, JSON.stringify({ ts: new Date().toISOString(), ...event }) + "\n");
+    appendFileSync(this.cfg.journalFile, `${JSON.stringify({ ts: new Date().toISOString(), ...event })  }\n`);
   }
 
   async tick(): Promise<{ opened: string[]; closed: string[] }> {
@@ -77,10 +78,11 @@ export class PairsArbTracker {
       ]);
       if ("error" in closesAResult || "error" in closesBResult) continue;
       const z = computeZScoreSeries(closesAResult.closes, closesBResult.closes, c.lookback);
-      const zi = z[z.length - 1];
-      if (Number.isNaN(zi)) continue;
-      const priceA = closesAResult.closes[closesAResult.closes.length - 1];
-      const priceB = closesBResult.closes[closesBResult.closes.length - 1];
+      const zi = z.at(-1);
+      if (zi === undefined || Number.isNaN(zi)) continue;
+      const priceA = closesAResult.closes.at(-1);
+      const priceB = closesBResult.closes.at(-1);
+      if (priceA === undefined || priceB === undefined) continue;
 
       const pos = this.state[c.id];
       if (pos) {
@@ -94,7 +96,7 @@ export class PairsArbTracker {
           const legBPnl = short ? pos.qtyB * (priceB - pos.entryPriceB) : pos.qtyB * (pos.entryPriceB - priceB);
           const pnlUsd = legAPnl + legBPnl;
           this.journal({
-            type: "pairs_arb_close", id: c.id, reason: hitStop ? "stop" : hitExit ? "target" : "timeout", pnlUsd,
+            type: "pairs_arb_close", id: c.id, reason: hitStop ? "stop" : (hitExit ? "target" : "timeout"), pnlUsd,
           });
           this.state[c.id] = null;
           closed.push(c.id);
@@ -136,7 +138,7 @@ export class PairsArbTracker {
 }
 
 export function summarizePairsArbJournal(
-  entries: { type: string; id: string; reason?: string; pnlUsd?: number }[],
+  entries: Array<{ type: string; id: string; reason?: string; pnlUsd?: number }>,
 ): Record<string, { closedCount: number; totalPnlUsd: number; winRate: number }> {
   const byId = new Map<string, number[]>();
   for (const e of entries) {

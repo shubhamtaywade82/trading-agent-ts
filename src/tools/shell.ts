@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
-import { resolve } from "node:path";
 import { randomBytes } from "node:crypto";
+import { resolve } from "node:path";
+
 import { Tool } from "./tool.js";
 
 export interface ShellToolOptions {
@@ -38,7 +39,7 @@ export class ShellTool extends Tool {
     this.memory = opts.memory ?? "512m";
     this.cpus = opts.cpus ?? "1";
     this.logger = opts.logger ?? console;
-    this.onOutput = opts.onOutput;
+    if (opts.onOutput !== undefined) this.onOutput = opts.onOutput;
   }
 
   get name(): string { return "run_shell"; }
@@ -53,7 +54,7 @@ export class ShellTool extends Tool {
     return ["execute", "run", "bash", "sh", "cmd", "command", "shell", "terminal"];
   }
 
-  get parameters(): Record<string, unknown> {
+  override get parameters(): Record<string, unknown> {
     return {
       type: "object",
       properties: {
@@ -69,8 +70,8 @@ export class ShellTool extends Tool {
     this.dockerChecked = true;
     this.dockerAvailable = await new Promise((resolveCheck) => {
       const probe = spawn("docker", ["info"]);
-      probe.on("close", (code) => resolveCheck(code === 0));
-      probe.on("error", () => resolveCheck(false));
+      probe.on("close", (code) => { resolveCheck(code === 0); });
+      probe.on("error", () => { resolveCheck(false); });
     });
     if (!this.dockerAvailable) {
       this.logger.warn("[ShellTool] docker is not available — run_shell will fail until it is");
@@ -79,8 +80,8 @@ export class ShellTool extends Tool {
   }
 
   async call(args: Record<string, unknown>): Promise<Record<string, unknown>> {
-    const command = args.command as string;
-    const timeoutSec = (args.timeoutSec as number | undefined) ?? this.timeoutSec;
+    const command = args["command"] as string;
+    const timeoutSec = (args["timeoutSec"] as number | undefined) ?? this.timeoutSec;
 
     if ((command ?? "").trim().length === 0) {
       return { exitCode: -1, stdout: "", stderr: "empty command", truncated: false, error: "EmptyCommandError" };
@@ -188,8 +189,8 @@ export class ShellTool extends Tool {
   private runDocker(args: string[]): Promise<void> {
     return new Promise((resolveRun) => {
       const proc = spawn("docker", args);
-      proc.on("close", () => resolveRun());
-      proc.on("error", () => resolveRun());
+      proc.on("close", () => { resolveRun(); });
+      proc.on("error", () => { resolveRun(); });
     });
   }
 
@@ -198,8 +199,8 @@ export class ShellTool extends Tool {
       const check = spawn("docker", ["inspect", "-f", "{{.State.Running}}", container]);
       let out = "";
       check.stdout.on("data", (c: Buffer) => (out += c.toString()));
-      check.on("close", (code) => resolveCheck(code === 0 && out.trim() === "true"));
-      check.on("error", () => resolveCheck(false));
+      check.on("close", (code) => { resolveCheck(code === 0 && out.trim() === "true"); });
+      check.on("error", () => { resolveCheck(false); });
     });
   }
 

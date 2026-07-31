@@ -1,8 +1,9 @@
-import React from "react";
 import { Box, Text } from "ink";
+import React from "react";
+
 import { OverlayFrame } from "./OverlayFrame.js";
 
-const KEYS: [string, string][] = [
+const KEYS: Array<[string, string]> = [
   ["1-8", "Focus a view (Conversation, Execution, Tasks, Git, Logs, Memory, Models, MCP)"],
   ["Tab / Shift+Tab", "Next / previous view"],
   ["Ctrl+P", "Command palette"],

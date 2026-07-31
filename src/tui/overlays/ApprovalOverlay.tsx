@@ -1,7 +1,9 @@
-import React from "react";
 import { Box, Text } from "ink";
-import { ApprovalRequest } from "../../runtime/types.js";
+import React from "react";
+
 import { wrapText, tail } from "../../layout/truncate.js";
+import type { ApprovalRequest } from "../../runtime/types.js";
+
 import { OverlayFrame } from "./OverlayFrame.js";
 
 export interface ApprovalOverlayProps {
@@ -30,7 +32,7 @@ export function ApprovalOverlay({ request, width, rows, showDiff }: ApprovalOver
             <Text
               key={i}
               wrap="truncate"
-              color={line.startsWith("+") ? "green" : line.startsWith("-") ? "red" : "gray"}
+              color={line.startsWith("+") ? "green" : (line.startsWith("-") ? "red" : "gray")}
             >
               {line}
             </Text>

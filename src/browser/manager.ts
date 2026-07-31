@@ -1,4 +1,5 @@
-import { chromium, Browser, Page } from "playwright";
+import type { Browser, Page } from "playwright";
+import { chromium } from "playwright";
 
 /** Owns a single lazily-launched headless Chromium instance + one page,
  * reused across tool calls — mirrors LspManager's one-process-per-workspace
@@ -11,7 +12,7 @@ export class BrowserManager {
 
   private async ensurePage(): Promise<Page> {
     if (this.page && !this.page.isClosed()) return this.page;
-    if (!this.browser || !this.browser.isConnected()) {
+    if (!this.browser?.isConnected()) {
       this.browser = await chromium.launch({ headless: true });
     }
     this.page = await this.browser.newPage();
@@ -47,7 +48,7 @@ export class BrowserManager {
 
   async evaluate(script: string): Promise<unknown> {
     const page = await this.ensurePage();
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+     
     return page.evaluate(script);
   }
 

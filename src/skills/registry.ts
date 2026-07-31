@@ -5,9 +5,11 @@
  * schemas/invoke.
  */
 
-import { DiscoverOptions, discoverSkills, loadSkillContent } from "./loader.js";
-import { resolveSkills, ResolveOptions } from "./resolver.js";
-import { SkillContent, SkillMeta } from "./types.js";
+import type { DiscoverOptions} from "./loader.js";
+import { discoverSkills, loadSkillContent } from "./loader.js";
+import type { ResolveOptions } from "./resolver.js";
+import { resolveSkills } from "./resolver.js";
+import type { SkillContent, SkillMeta } from "./types.js";
 
 export class SkillsRegistry {
   private constructor(

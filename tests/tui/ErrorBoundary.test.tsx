@@ -1,6 +1,7 @@
-import React from "react";
 import { Text } from "ink";
 import { render } from "ink-testing-library";
+import React from "react";
+
 import { ErrorBoundary } from "../../src/tui/ErrorBoundary.js";
 
 function Bomb(): JSX.Element {

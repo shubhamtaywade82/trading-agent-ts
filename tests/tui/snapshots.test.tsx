@@ -1,8 +1,9 @@
-import React from "react";
 import { render } from "ink-testing-library";
-import { App } from "../../src/tui/App.js";
+import React from "react";
+
 import { EventBus } from "../../src/runtime/events.js";
 import { initialRuntimeState, Store } from "../../src/runtime/store.js";
+import { App } from "../../src/tui/App.js";
 
 const NOW = new Date(2026, 0, 1, 10, 42, 11).getTime();
 
@@ -29,7 +30,7 @@ function seededWorld() {
     task: { id: "t3", title: "Write tests", status: "queued", dependencies: ["t2"] },
   });
   bus.publish({ type: "tool.started", id: "tc1", name: "edit_file", args: { path: "src/tools/fs.ts" } });
-  bus.publish({ type: "context.changed", used: 48000, limit: 71000 });
+  bus.publish({ type: "context.changed", used: 48_000, limit: 71_000 });
   bus.publish({
     type: "git.changed",
     git: {
@@ -46,7 +47,7 @@ function seededWorld() {
 }
 
 describe("layout snapshots", () => {
-  const sizes: [number, number][] = [
+  const sizes: Array<[number, number]> = [
     [80, 24],
     [100, 30],
     [120, 30],

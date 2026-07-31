@@ -1,6 +1,7 @@
 import { mkdtemp, writeFile, readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { SnapshotBackupTool } from "../../src/tools/backup-tools.js";
 
 describe("SnapshotBackupTool", () => {
@@ -12,8 +13,8 @@ describe("SnapshotBackupTool", () => {
     const result = await tool.call({ path: "a.txt" });
 
     const backupFiles = await readdir(join(dir, ".trading-agent/backups"));
-    expect(backupFiles.length).toBe(1);
-    expect(await readFile(join(dir, result.backupPath as string), "utf-8")).toBe("content-v1");
+    expect(backupFiles).toHaveLength(1);
+    await expect(readFile(join(dir, result.backupPath as string), "utf-8")).resolves.toBe("content-v1");
   });
 
   it("returns an ArgumentError when path is missing", async () => {

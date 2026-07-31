@@ -1,12 +1,17 @@
-import { ConceptsEngine, PerBarSignals } from "./adapter.js";
-import { Candle } from "../backtest/types.js";
-import { OrderBlock } from "trading-concepts-ts";
+import type { OrderBlock } from "trading-concepts-ts";
+
+import type { Candle } from "../backtest/types.js";
+
+import type { PerBarSignals } from "./adapter.js";
+import { ConceptsEngine } from "./adapter.js";
+
+
 
 // One ConceptsEngine per candle array for the lifetime of that array — every
-// wrapper below is called once per bar in a loop by both buildSignalEvaluator
-// and BinanceSignalFusionTool's precompute block; without this cache each
-// call would re-run TradingConcepts.analyze() (an O(n) whole-series pass)
-// once per bar, turning an O(n) backtest into O(n^2).
+// Wrapper below is called once per bar in a loop by both buildSignalEvaluator
+// And BinanceSignalFusionTool's precompute block; without this cache each
+// Call would re-run TradingConcepts.analyze() (an O(n) whole-series pass)
+// Once per bar, turning an O(n) backtest into O(n^2).
 const engineCache = new WeakMap<Candle[], ConceptsEngine>();
 
 function engineFor(candles: Candle[]): ConceptsEngine {
@@ -39,8 +44,8 @@ export function legacyBearishFvg(candles: Candle[], i: number): boolean {
 }
 
 // Bullish liquidity sweep: price sweeps below a prior swing low then closes
-// back above it — the same event ConceptsEngine calls a sellside sweep (the
-// resting liquidity below swing lows). Bearish is the mirror (buyside sweep).
+// Back above it — the same event ConceptsEngine calls a sellside sweep (the
+// Resting liquidity below swing lows). Bearish is the mirror (buyside sweep).
 export function legacyBullishLiqSweep(candles: Candle[], i: number): boolean {
   return signalsFor(candles).sellsideSweep[i] ?? false;
 }
@@ -50,9 +55,9 @@ export function legacyBearishLiqSweep(candles: Candle[], i: number): boolean {
 }
 
 // Displacement: an impulsive candle that closes beyond the prior bar's
-// high/low — the same concept ConceptsEngine's Break-of-Structure signals
-// already capture. Only `.dir` is ever read downstream, never a strength
-// value, so this doesn't compute one.
+// High/low — the same concept ConceptsEngine's Break-of-Structure signals
+// Already capture. Only `.dir` is ever read downstream, never a strength
+// Value, so this doesn't compute one.
 export function legacyDisplacement(candles: Candle[], i: number): { dir: "up" | "down" } | null {
   const sig = signalsFor(candles);
   if (sig.bullishBOS[i]) return { dir: "up" };
@@ -64,11 +69,11 @@ interface RetestArrays { long: boolean[]; short: boolean[] }
 const retestCache = new WeakMap<Candle[], RetestArrays>();
 
 // Retest scan ported from the retired src/tools/orderblocks.ts's
-// buildObRetestSignals: for a bullish OB, price is expected to pull back
-// down into the zone from above — the near/proximal edge on that approach is
-// the zone's top, the far/invalidation edge is bottom. Bearish is the mirror.
+// BuildObRetestSignals: for a bullish OB, price is expected to pull back
+// Down into the zone from above — the near/proximal edge on that approach is
+// The zone's top, the far/invalidation edge is bottom. Bearish is the mirror.
 // First touch of the proximal edge, provided the distal edge hasn't already
-// been closed through, fires exactly one signal per zone.
+// Been closed through, fires exactly one signal per zone.
 function buildRetestArrays(candles: Candle[], orderBlocks: OrderBlock[]): RetestArrays {
   const n = candles.length;
   const long = new Array<boolean>(n).fill(false);
@@ -79,6 +84,7 @@ function buildRetestArrays(candles: Candle[], orderBlocks: OrderBlock[]): Retest
     const distal = ob.type === "bullish" ? ob.bottom : ob.top;
     for (let i = ob.index + 1; i < n; i++) {
       const c = candles[i];
+      if (c === undefined) continue;
       if (ob.type === "bullish") {
         if (c.close < distal) break;
         if (c.low <= proximal) { long[i] = true; break; }

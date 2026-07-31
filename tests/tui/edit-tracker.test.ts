@@ -25,7 +25,7 @@ describe("EditTracker", () => {
 
     const result = tracker.diff("new.ts", "brand new\n");
 
-    expect(result).toEqual([{ type: "add", text: "brand new\n" }]);
+    expect(result).toStrictEqual([{ type: "add", text: "brand new\n" }]);
   });
 
   it("reports whether a path has been snapshotted", () => {

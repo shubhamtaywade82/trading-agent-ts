@@ -2,7 +2,7 @@ import { initialUiState, uiReduce } from "../../src/interaction/ui-state.js";
 
 describe("uiReduce", () => {
   it("starts on the conversation view with no overlay", () => {
-    expect(initialUiState()).toEqual({ activeView: "conversation", overlay: null, zoom: false });
+    expect(initialUiState()).toStrictEqual({ activeView: "conversation", overlay: null, zoom: false });
   });
 
   it("cycles views forward and backward with wrap-around", () => {

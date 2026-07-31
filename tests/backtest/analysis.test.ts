@@ -1,5 +1,5 @@
 import { walkForward, monteCarlo, paramSweep } from "../../src/backtest/analysis.js";
-import { Candle, StrategyConfig } from "../../src/backtest/types.js";
+import type { Candle, StrategyConfig } from "../../src/backtest/types.js";
 
 function makeCandles(closes: number[]): Candle[] {
   return closes.map((c, i) => ({ openTime: i, open: c, high: c * 1.001, low: c * 0.999, close: c, volume: 100 }));
@@ -21,7 +21,7 @@ describe("walkForward", () => {
   });
 
   it("flags consistent direction when every window's edge points the same way", () => {
-    const closes = Array.from({ length: 200 }, (_, i) => 100 + i * 0.1); // steadily rising throughout
+    const closes = Array.from({ length: 200 }, (_, i) => 100 + i * 0.1); // Steadily rising throughout
     const candles = makeCandles(closes);
     const strategy: StrategyConfig = {
       direction: "long",
@@ -59,7 +59,7 @@ describe("monteCarlo", () => {
     const seed = [0.1, 0.5, 0.9, 0.2, 0.7];
     const a = monteCarlo(trades, 10, seed);
     const b = monteCarlo(trades, 10, seed);
-    expect(a).toEqual(b);
+    expect(a).toStrictEqual(b);
   });
 });
 
@@ -75,7 +75,7 @@ describe("paramSweep", () => {
     };
     const results = paramSweep(candles, strategy, [{ conditionIndex: 0, field: "value", values: [20, 30, 40] }]);
     expect(results).toHaveLength(3);
-    // sorted descending by expectancy
+    // Sorted descending by expectancy
     for (let i = 1; i < results.length; i++) {
       expect(results[i - 1].metrics.expectancyPct).toBeGreaterThanOrEqual(results[i].metrics.expectancyPct);
     }

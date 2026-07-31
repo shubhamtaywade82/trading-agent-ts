@@ -1,8 +1,10 @@
-import React from "react";
 import { Box, Text } from "ink";
-import { RuntimeState, ViewId } from "../../runtime/types.js";
+import React from "react";
+
+import type { CompletionItem } from "../../interaction/completion.js";
 import { contextStripTokens } from "../../layout/strips.js";
-import { CompletionItem } from "../../interaction/completion.js";
+import type { RuntimeState, ViewId } from "../../runtime/types.js";
+
 import { TokenLine } from "./TokenLine.js";
 
 export interface ContextStripProps {

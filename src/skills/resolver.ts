@@ -4,15 +4,15 @@
  * skill id so resolution is reproducible.
  */
 
-import { SkillMeta, SkillScore } from "./types.js";
+import type { SkillMeta, SkillScore } from "./types.js";
 
 const TAG_WEIGHT = 3;
 const DESCRIPTION_WEIGHT = 1;
 const LANGUAGE_MISMATCH_PENALTY = -10;
 
 // Common English function words. Without this filter, a skill with a long,
-// prose-heavy description (many stopword hits) scores nonzero against almost
-// any prompt regardless of topic and crowds out more relevant skills.
+// Prose-heavy description (many stopword hits) scores nonzero against almost
+// Any prompt regardless of topic and crowds out more relevant skills.
 const STOPWORDS = new Set([
   "a", "an", "the", "and", "or", "but", "if", "then", "else", "when", "at", "by", "for",
   "with", "about", "against", "between", "into", "through", "during", "before", "after",

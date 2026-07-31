@@ -1,5 +1,6 @@
 import Database from "better-sqlite3";
-import { SkillUsageStats } from "../skills/types.js";
+
+import type { SkillUsageStats } from "../skills/types.js";
 
 export interface StoredMessage {
   role: string;

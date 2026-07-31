@@ -19,7 +19,7 @@ export default {
         // ambient-type overlap (see tests/jest.setup.js) shouldn't block test
         // execution — `tsc --noEmit` on the real tsconfig is the actual type
         // gate (see package.json build/lint scripts), this is just runtime.
-        isolatedModules: true,
+        // isolatedModules semantics now come from tsconfig.json (verbatimModuleSyntax).
         diagnostics: {
           ignoreCodes: [151002],
         },

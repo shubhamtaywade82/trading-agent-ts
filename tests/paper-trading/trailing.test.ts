@@ -1,7 +1,8 @@
+import type { Candle } from "../../src/backtest/types.js";
+import type { TrailingConfig} from "../../src/paper-trading/trailing.js";
 import {
-  initTrailingState, atrPct, updateTrailingStop, DEFAULT_TRAILING_CONFIG, TrailingConfig,
+  initTrailingState, atrPct, updateTrailingStop, DEFAULT_TRAILING_CONFIG
 } from "../../src/paper-trading/trailing.js";
-import { Candle } from "../../src/backtest/types.js";
 
 function candle(openTime: number, open: number, high: number, low: number, close: number, volume = 100): Candle {
   return { openTime, open, high, low, close, volume };
@@ -10,16 +11,16 @@ function candle(openTime: number, open: number, high: number, low: number, close
 // Config with tight, easy-to-reason-about thresholds for tests.
 const CFG: TrailingConfig = {
   enabled: true,
-  breakevenAtrMult: 1.0,
+  breakevenAtrMult: 1,
   breakevenOffsetBps: 5,
-  activationAtrMult: 2.0,
-  trailAtrMult: 1.0,
+  activationAtrMult: 2,
+  trailAtrMult: 1,
   minTrailPct: 0.001,
-  maxTrailPct: 0.10,
+  maxTrailPct: 0.1,
 };
 
 // Flat-ish warmup series so atrPct settles to a small, known-ish value,
-// then the test appends whatever bars it needs to exercise a phase.
+// Then the test appends whatever bars it needs to exercise a phase.
 function warmup(n: number, px = 100): Candle[] {
   const out: Candle[] = [];
   for (let i = 0; i < n; i++) out.push(candle(i * 3_600_000, px, px + 0.5, px - 0.5, px));
@@ -42,7 +43,7 @@ describe("atrPct", () => {
   it("computes a positive percentage for a normal series", () => {
     const v = atrPct(warmup(20));
     expect(v).toBeGreaterThan(0);
-    expect(v).toBeLessThan(0.1); // sane upper bound for a 1%-range series
+    expect(v).toBeLessThan(0.1); // Sane upper bound for a 1%-range series
   });
 });
 
@@ -59,7 +60,7 @@ describe("updateTrailingStop", () => {
   it("locks the stop to breakeven once profit crosses breakevenAtrMult x ATR (long)", () => {
     const candles = warmup(20, 100);
     const atr = atrPct(candles); // ~0.01 for a 1-wide range on px=100
-    let s = initTrailingState(100);
+    const s = initTrailingState(100);
 
     // Bar that pushes price up well past the breakeven threshold but not yet activation.
     const bigMove = 100 * (1 + atr * 1.5);
@@ -67,17 +68,17 @@ describe("updateTrailingStop", () => {
     const result = updateTrailingStop(s, bar, "long", 100, 99, CFG, [...candles, bar]);
 
     expect(result.state.phase).toBe("breakeven");
-    expect(result.stopPrice).toBeGreaterThan(99); // moved up from the original stop
-    expect(result.stopPrice).toBeGreaterThan(100); // above entry -- a real breakeven lock, not just "less bad"
+    expect(result.stopPrice).toBeGreaterThan(99); // Moved up from the original stop
+    expect(result.stopPrice).toBeGreaterThan(100); // Above entry -- a real breakeven lock, not just "less bad"
     expect(result.phaseChanged).toBe(true);
   });
 
   it("activates trailing once profit crosses activationAtrMult x ATR, and disables the fixed target", () => {
     const candles = warmup(20, 100);
     const atr = atrPct(candles);
-    let s = initTrailingState(100);
+    const s = initTrailingState(100);
 
-    const bigMove = 100 * (1 + atr * 2.5); // past activationAtrMult=2.0
+    const bigMove = 100 * (1 + atr * 2.5); // Past activationAtrMult=2.0
     const bar = candle(20 * 3_600_000, 100, bigMove, 100, bigMove);
     const result = updateTrailingStop(s, bar, "long", 100, 99, CFG, [...candles, bar]);
 
@@ -110,7 +111,7 @@ describe("updateTrailingStop", () => {
   it("tracks the extreme correctly for shorts (lower is better) and trails above it", () => {
     const candles = warmup(20, 100);
     const atr = atrPct(candles);
-    let s = initTrailingState(100);
+    const s = initTrailingState(100);
 
     const downMove = 100 * (1 - atr * 3);
     const bar = candle(20 * 3_600_000, 100, 100, downMove, downMove);
@@ -118,18 +119,18 @@ describe("updateTrailingStop", () => {
 
     expect(result.state.phase).toBe("trailing");
     expect(result.state.extremePrice).toBeCloseTo(downMove, 6);
-    expect(result.stopPrice).toBeGreaterThan(downMove); // trail sits above the low, in favor of a short
-    expect(result.stopPrice).toBeLessThan(101); // still moved down from the original stop
+    expect(result.stopPrice).toBeGreaterThan(downMove); // Trail sits above the low, in favor of a short
+    expect(result.stopPrice).toBeLessThan(101); // Still moved down from the original stop
   });
 
   it("respects minTrailPct as a floor when ATR collapses", () => {
-    const flat = warmup(30, 100); // near-zero ATR
-    let s = initTrailingState(100);
-    const bigMove = candle(30 * 3_600_000, 100, 110, 100, 110); // force activation regardless of tiny ATR
+    const flat = warmup(30, 100); // Near-zero ATR
+    const s = initTrailingState(100);
+    const bigMove = candle(30 * 3_600_000, 100, 110, 100, 110); // Force activation regardless of tiny ATR
     const result = updateTrailingStop(s, bigMove, "long", 100, 99, { ...CFG, minTrailPct: 0.02 }, [...flat, bigMove]);
 
     expect(result.state.phase).toBe("trailing");
-    // trail distance floored at 2% of the extreme (110), so stop <= 110 * 0.98
+    // Trail distance floored at 2% of the extreme (110), so stop <= 110 * 0.98
     expect(result.stopPrice).toBeLessThanOrEqual(110 * 0.98 + 1e-6);
   });
 
@@ -138,11 +139,11 @@ describe("updateTrailingStop", () => {
     // Inject one huge-range bar to spike ATR, then the move bar.
     const spike = candle(20 * 3_600_000, 100, 140, 100, 130);
     const move = candle(21 * 3_600_000, 130, 160, 130, 160);
-    let s = initTrailingState(100);
+    const s = initTrailingState(100);
     const result = updateTrailingStop(s, move, "long", 100, 99, { ...CFG, maxTrailPct: 0.05 }, [...candles, spike, move]);
 
     expect(result.state.phase).toBe("trailing");
-    // trail distance ceiled at 5% of the extreme (160), so stop >= 160 * 0.95
+    // Trail distance ceiled at 5% of the extreme (160), so stop >= 160 * 0.95
     expect(result.stopPrice).toBeGreaterThanOrEqual(160 * 0.95 - 1e-6);
   });
 

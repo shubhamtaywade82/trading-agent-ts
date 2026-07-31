@@ -1,6 +1,8 @@
-import Database from "better-sqlite3";
 import { createHash } from "node:crypto";
-import { Lesson, ReflectionResult } from "./types.js";
+
+import Database from "better-sqlite3";
+
+import type { Lesson, ReflectionResult } from "./types.js";
 
 /**
  * Persistent lesson ledger. Dedupe uses a normalized token hash so repeated
@@ -168,7 +170,7 @@ export class LessonStore {
 
   markPromoted(ids: string[], skillId: string): void {
     const stmt = this.db.prepare("UPDATE lessons SET promoted_skill_id = ? WHERE id = ?");
-    const tx = this.db.transaction(() => ids.forEach((id) => stmt.run(skillId, id)));
+    const tx = this.db.transaction(() => { ids.forEach((id) => stmt.run(skillId, id)); });
     tx();
   }
 

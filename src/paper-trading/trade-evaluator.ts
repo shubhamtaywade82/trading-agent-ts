@@ -1,20 +1,22 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from "fs";
-import { dirname } from "path";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from "node:fs";
+import { dirname } from "node:path";
+
 import { Provider } from "../provider/provider.js";
 import { fetchCandlesRange } from "../tools/backtest-tools.js";
+
 import { resolveOllamaCloudKeys } from "./ollama-cloud.js";
 
 // Per-EVENT (not periodic-batch, see trade-analyst.ts) LLM evaluation — every
-// entry and every exit gets its own reasoned write-up, building a labeled
-// trail for later research: which setups the model rated highly that lost
-// anyway, whether stops were too tight for the instrument's volatility,
-// whether exits look well-timed relative to what happened right after. This
-// is the raw material for tightening entries/exits later — not a live
-// decision input. Same boundary as every other LLM component here: read the
-// journal, write to its own log, zero write access to trading state.
+// Entry and every exit gets its own reasoned write-up, building a labeled
+// Trail for later research: which setups the model rated highly that lost
+// Anyway, whether stops were too tight for the instrument's volatility,
+// Whether exits look well-timed relative to what happened right after. This
+// Is the raw material for tightening entries/exits later — not a live
+// Decision input. Same boundary as every other LLM component here: read the
+// Journal, write to its own log, zero write access to trading state.
 //
 // Runs as an async queue, one call at a time (single local Ollama instance —
-// no point racing itself), fully decoupled from the trading tick's timing.
+// No point racing itself), fully decoupled from the trading tick's timing.
 // If evaluation falls behind fills, it just queues; nothing blocks on it.
 
 interface JournalEvent {
@@ -38,10 +40,10 @@ export interface EvaluatorConfig {
 }
 
 // Same tier/model resolution as trade-analyst.ts: cloud by default, local
-// only via TRADINGAGENT_ANALYST_TIER=local, which then defaults to
-// minicpm5-1b (must be pulled locally first).
-const EVALUATOR_TIER: "local" | "cloud" = process.env.TRADINGAGENT_ANALYST_TIER === "local" ? "local" : "cloud";
-const EVALUATOR_MODEL = process.env.TRADINGAGENT_ANALYST_MODEL || (EVALUATOR_TIER === "local" ? "minicpm5-1b" : "gpt-oss:20b");
+// Only via TRADINGAGENT_ANALYST_TIER=local, which then defaults to
+// Minicpm5-1b (must be pulled locally first).
+const EVALUATOR_TIER: "local" | "cloud" = process.env["TRADINGAGENT_ANALYST_TIER"] === "local" ? "local" : "cloud";
+const EVALUATOR_MODEL = process.env["TRADINGAGENT_ANALYST_MODEL"] || (EVALUATOR_TIER === "local" ? "minicpm5-1b" : "gpt-oss:20b");
 
 export const DEFAULT_EVALUATOR_CONFIG: EvaluatorConfig = {
   journalFile: ".trading-agent/paper-trades.jsonl",
@@ -53,7 +55,7 @@ export const DEFAULT_EVALUATOR_CONFIG: EvaluatorConfig = {
 };
 
 function extractQualityScore(text: string): number | null {
-  const m = text.match(/"?(?:qualityScore|exitQuality)"?\s*[:=]\s*([1-5])/i);
+  const m = /"?(?:qualityScore|exitQuality)"?\s*[:=]\s*([1-5])/i.exec(text);
   return m ? Number(m[1]) : null;
 }
 
@@ -61,7 +63,7 @@ async function buildEntryPrompt(e: JournalEvent, cfg: EvaluatorConfig): Promise<
   let candleContext = "(candle context unavailable)";
   try {
     const end = Date.now();
-    const start = end - cfg.candleContextBars * 3 * 3_600_000; // generous lookback window regardless of tf
+    const start = end - cfg.candleContextBars * 3 * 3_600_000; // Generous lookback window regardless of tf
     const fetched = await fetchCandlesRange(e.symbol!, e.tf!, start, end);
     if (!("error" in fetched)) {
       const bars = fetched.candles.slice(-cfg.candleContextBars);
@@ -95,21 +97,21 @@ function buildExitPrompt(e: JournalEvent, entryEval: TradeEvaluation | null): { 
       "appropriate for this instrument, or whether it's worth testing a wider/tighter level. Keep it to 2-3 " +
       'sentences, then end with exactly one line: "exitQuality: N" where N is 1-5 (1=poorly sized, 5=clean).',
     user:
-      `Strategy: ${e.strategyId}\nSymbol: ${e.symbol}\nExit reason: ${e.reason}\nExit price: ${e.exitPrice}\nPnL: $${e.pnl}\n` +
-      (entryEval ? `Entry evaluation was: ${entryEval.evaluation}` : "(no entry evaluation on record)"),
+      `Strategy: ${e.strategyId}\nSymbol: ${e.symbol}\nExit reason: ${e.reason}\nExit price: ${e.exitPrice}\nPnL: $${e.pnl}\n${ 
+      entryEval ? `Entry evaluation was: ${entryEval.evaluation}` : "(no entry evaluation on record)"}`,
   };
 }
 
 interface EvaluatorState { lastLineCount: number }
 
 export class TradeEvaluator {
-  private cfg: EvaluatorConfig;
-  private provider: Provider;
-  private state: EvaluatorState = { lastLineCount: 0 };
-  private queue: JournalEvent[] = [];
+  private readonly cfg: EvaluatorConfig;
+  private readonly provider: Provider;
+  private readonly state: EvaluatorState = { lastLineCount: 0 };
+  private readonly queue: JournalEvent[] = [];
   private running = false;
   private processing = false;
-  private recentByStrategy = new Map<string, TradeEvaluation>(); // last entry-eval per strategy, for exit context
+  private readonly recentByStrategy = new Map<string, TradeEvaluation>(); // Last entry-eval per strategy, for exit context
 
   constructor(cfg: Partial<EvaluatorConfig> = {}) {
     this.cfg = { ...DEFAULT_EVALUATOR_CONFIG, ...cfg };
@@ -129,7 +131,7 @@ export class TradeEvaluator {
   private appendLog(entry: TradeEvaluation) {
     const dir = dirname(this.cfg.logFile);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    appendFileSync(this.cfg.logFile, JSON.stringify(entry) + "\n");
+    appendFileSync(this.cfg.logFile, `${JSON.stringify(entry)  }\n`);
   }
 
   queueLength(): number {
@@ -147,8 +149,8 @@ export class TradeEvaluator {
   }
 
   // Scans for new journal lines and enqueues them for evaluation — cheap,
-  // call this every trading tick. The actual LLM work happens in the
-  // background worker loop (start()), fully decoupled from tick timing.
+  // Call this every trading tick. The actual LLM work happens in the
+  // Background worker loop (start()), fully decoupled from tick timing.
   scanForNewEvents(): number {
     if (!existsSync(this.cfg.journalFile)) return 0;
     const lines = readFileSync(this.cfg.journalFile, "utf-8").trim().split("\n").filter(Boolean);

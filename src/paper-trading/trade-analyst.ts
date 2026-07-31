@@ -1,21 +1,23 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from "fs";
-import { dirname } from "path";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from "node:fs";
+import { dirname } from "node:path";
+
 import { Provider } from "../provider/provider.js";
+
 import { resolveOllamaCloudKeys } from "./ollama-cloud.js";
 
 // Read-only LLM analyst over the paper-trading journal. It NEVER touches
 // LivePaperRunner, never sees strategies.json as anything but reference
-// data, and has no tool-calling surface — it can only produce text. Entry/
-// exit decisions come from buildSignalEvaluator or ConceptsEngine (rules),
-// optionally gated by AiEntryGate — never from this module. This module's
-// only effect on the world is appending to a log file.
+// Data, and has no tool-calling surface — it can only produce text. Entry/
+// Exit decisions come from buildSignalEvaluator or ConceptsEngine (rules),
+// Optionally gated by AiEntryGate — never from this module. This module's
+// Only effect on the world is appending to a log file.
 //
 // "Learning" here means: periodically look at accumulated real trade
-// history, compare it against what the backtest predicted, and write down
-// what's observed — not silently rewriting strategy parameters. A human
-// reads the log and decides whether to act on it (see strategies.json's
-// existing pattern of every past finding being written down with its
-// evidence, never applied automatically).
+// History, compare it against what the backtest predicted, and write down
+// What's observed — not silently rewriting strategy parameters. A human
+// Reads the log and decides whether to act on it (see strategies.json's
+// Existing pattern of every past finding being written down with its
+// Evidence, never applied automatically).
 
 interface PositionFillEvent {
   ts: string; type: string; strategyId?: string; symbol?: string; tf?: string;
@@ -52,11 +54,12 @@ export function reconstructClosedTrades(journalFile: string): ClosedTrade[] {
 }
 
 interface BacktestRef { winRate: number; pf: number }
+interface PoolStrategyRef { id: string; metrics: BacktestRef }
 function loadBacktestRefs(poolPath: string): Record<string, BacktestRef> {
   const cfg = JSON.parse(readFileSync(poolPath, "utf-8"));
   const out: Record<string, BacktestRef> = {};
-  for (const strats of Object.values(cfg.symbols) as any[][]) {
-    for (const s of strats) out[s.id] = { winRate: s.metrics.winRate, pf: s.metrics.pf };
+  for (const strats of Object.values(cfg.symbols)) {
+    for (const s of strats as PoolStrategyRef[]) out[s.id] = { winRate: s.metrics.winRate, pf: s.metrics.pf };
   }
   return out;
 }
@@ -74,7 +77,7 @@ function buildPrompt(trades: ClosedTrade[], backtestRefs: Record<string, Backtes
     const wr = wins / ts.length;
     const grossProfit = ts.filter(t => t.pnl > 0).reduce((s, t) => s + t.pnl, 0);
     const grossLoss = Math.abs(ts.filter(t => t.pnl <= 0).reduce((s, t) => s + t.pnl, 0));
-    const pf = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? Infinity : 0;
+    const pf = grossLoss > 0 ? grossProfit / grossLoss : (grossProfit > 0 ? Infinity : 0);
     const totalPnl = ts.reduce((s, t) => s + t.pnl, 0);
     const ref = backtestRefs[id];
     lines.push(
@@ -98,16 +101,16 @@ function buildPrompt(trades: ClosedTrade[], backtestRefs: Record<string, Backtes
       "clusters of stop-outs or liquidations, (3) any strategy that has gone unusually long without firing. " +
       "Do not repeat the raw numbers back verbatim — interpret them. Keep the response under 250 words, plain text.",
     user:
-      `Per-strategy live performance so far:\n${lines.join("\n")}\n\n` +
-      `${recent ? `Most recent closed trades:\n${recent}\n\n` : ""}` +
-      `Write a short analyst note on what stands out.`,
+      `Per-strategy live performance so far:\n${lines.join("\n")}\n\n${ 
+      recent ? `Most recent closed trades:\n${recent}\n\n` : "" 
+      }Write a short analyst note on what stands out.`,
   };
 }
 
 export interface AnalystConfig {
   journalFile: string;
-  learningsFile: string;   // append-only JSONL of every analysis run
-  summaryFile: string;     // human-readable rolling markdown digest
+  learningsFile: string;   // Append-only JSONL of every analysis run
+  summaryFile: string;     // Human-readable rolling markdown digest
   stateFile: string;
   poolPath: string;
   model: string;
@@ -118,10 +121,10 @@ export interface AnalystConfig {
 }
 
 // Default to Ollama Cloud (not local) — set TRADINGAGENT_ANALYST_TIER=local
-// to opt back into local inference, in which case the model defaults to
-// minicpm5-1b (must be pulled locally first: `ollama pull minicpm5-1b`).
-const ANALYST_TIER: "local" | "cloud" = process.env.TRADINGAGENT_ANALYST_TIER === "local" ? "local" : "cloud";
-const ANALYST_MODEL = process.env.TRADINGAGENT_ANALYST_MODEL || (ANALYST_TIER === "local" ? "minicpm5-1b" : "gpt-oss:20b");
+// To opt back into local inference, in which case the model defaults to
+// Minicpm5-1b (must be pulled locally first: `ollama pull minicpm5-1b`).
+const ANALYST_TIER: "local" | "cloud" = process.env["TRADINGAGENT_ANALYST_TIER"] === "local" ? "local" : "cloud";
+const ANALYST_MODEL = process.env["TRADINGAGENT_ANALYST_MODEL"] || (ANALYST_TIER === "local" ? "minicpm5-1b" : "gpt-oss:20b");
 
 export const DEFAULT_ANALYST_CONFIG: AnalystConfig = {
   journalFile: ".trading-agent/paper-trades.jsonl",
@@ -139,8 +142,8 @@ export const DEFAULT_ANALYST_CONFIG: AnalystConfig = {
 interface AnalystState { lastAnalyzedTradeCount: number; lastAnalysisTime: number }
 
 export class TradeAnalyst {
-  private cfg: AnalystConfig;
-  private provider: Provider;
+  private readonly cfg: AnalystConfig;
+  private readonly provider: Provider;
   private state: AnalystState = { lastAnalyzedTradeCount: 0, lastAnalysisTime: 0 };
   private running = false;
 
@@ -166,13 +169,13 @@ export class TradeAnalyst {
   private appendLearning(entry: Record<string, unknown>) {
     const dir = dirname(this.cfg.learningsFile);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    appendFileSync(this.cfg.learningsFile, JSON.stringify({ ts: new Date().toISOString(), ...entry }) + "\n");
+    appendFileSync(this.cfg.learningsFile, `${JSON.stringify({ ts: new Date().toISOString(), ...entry })  }\n`);
   }
 
   private updateSummaryMarkdown(newEntry: { ts: string; tradesAnalyzed: number; summary: string; error?: string }) {
     const dir = dirname(this.cfg.summaryFile);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    let existing: { ts: string; tradesAnalyzed: number; summary: string; error?: string }[] = [];
+    let existing: Array<{ ts: string; tradesAnalyzed: number; summary: string; error?: string }> = [];
     if (existsSync(this.cfg.summaryFile)) {
       try {
         const raw = readFileSync(this.cfg.summaryFile, "utf-8");
@@ -206,7 +209,9 @@ export class TradeAnalyst {
     try {
       const lines = readFileSync(this.cfg.learningsFile, "utf-8").trim().split("\n").filter(Boolean);
       for (let i = lines.length - 1; i >= 0; i--) {
-        const e = JSON.parse(lines[i]);
+        const line = lines[i];
+        if (line === undefined) continue;
+        const e = JSON.parse(line);
         if (e.summary) return e;
       }
     } catch { /* fall through */ }
@@ -239,7 +244,12 @@ export class TradeAnalyst {
     this.state = { lastAnalyzedTradeCount: trades.length, lastAnalysisTime: Date.now() };
     this.saveState();
     this.appendLearning({ tradesAnalyzed: trades.length, newTradesSinceLastRun: newTrades, summary, error, model: this.cfg.model });
-    this.updateSummaryMarkdown({ ts: new Date().toISOString(), tradesAnalyzed: trades.length, summary, error });
+    this.updateSummaryMarkdown({
+      ts: new Date().toISOString(),
+      tradesAnalyzed: trades.length,
+      summary,
+      ...(error !== undefined && { error }),
+    });
     return true;
   }
 

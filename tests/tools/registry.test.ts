@@ -1,8 +1,9 @@
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Registry } from "../../src/tools/registry.js";
+
 import { ReadFileTool } from "../../src/tools/filesystem.js";
+import { Registry } from "../../src/tools/registry.js";
 
 describe("Registry", () => {
   it("returns a tool's result on successful invoke", async () => {

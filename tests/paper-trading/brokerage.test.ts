@@ -1,4 +1,5 @@
-import { PaperTradingBrokerageService, OrderRequest } from "../../src/paper-trading/brokerage.js";
+import type { OrderRequest } from "../../src/paper-trading/brokerage.js";
+import { PaperTradingBrokerageService } from "../../src/paper-trading/brokerage.js";
 import { DEFAULT_TRADING_CONFIG } from "../../src/paper-trading/trading-config.js";
 
 describe("PaperTradingBrokerageService", () => {
@@ -10,8 +11,8 @@ describe("PaperTradingBrokerageService", () => {
 
   test("initializes balance from config", async () => {
     const bal = await brokerage.getAccountBalance();
-    expect(bal.initialCapital).toBe(10000);
-    expect(bal.cashBalance).toBe(10000);
+    expect(bal.initialCapital).toBe(10_000);
+    expect(bal.cashBalance).toBe(10_000);
   });
 
   test("executes valid order and updates open positions", async () => {
@@ -20,9 +21,9 @@ describe("PaperTradingBrokerageService", () => {
       symbol: "BTCUSDT",
       direction: "long",
       quantity: 0.1,
-      entryPrice: 50000,
-      stopPrice: 49000,
-      targetPrice: 52000,
+      entryPrice: 50_000,
+      stopPrice: 49_000,
+      targetPrice: 52_000,
     };
 
     const res = await brokerage.placeOrder(req);
@@ -30,8 +31,8 @@ describe("PaperTradingBrokerageService", () => {
     expect(res.commission).toBeGreaterThan(0);
 
     const positions = await brokerage.getOpenPositions("BTCUSDT");
-    expect(positions.length).toBe(1);
-    expect(positions[0].entryPrice).toBe(50000);
+    expect(positions).toHaveLength(1);
+    expect(positions[0].entryPrice).toBe(50_000);
   });
 
   test("handles duplicate idempotency keys cleanly", async () => {
@@ -40,7 +41,7 @@ describe("PaperTradingBrokerageService", () => {
       symbol: "BTCUSDT",
       direction: "long",
       quantity: 0.1,
-      entryPrice: 50000,
+      entryPrice: 50_000,
     };
 
     const first = await brokerage.placeOrder(req);
@@ -50,7 +51,7 @@ describe("PaperTradingBrokerageService", () => {
     expect(second.status).toBe("duplicate");
 
     const positions = await brokerage.getOpenPositions();
-    expect(positions.length).toBe(1);
+    expect(positions).toHaveLength(1);
   });
 
   test("marks to market and auto-closes positions hitting stop loss", async () => {
@@ -59,14 +60,14 @@ describe("PaperTradingBrokerageService", () => {
       symbol: "BTCUSDT",
       direction: "long",
       quantity: 0.1,
-      entryPrice: 50000,
-      stopPrice: 49000,
+      entryPrice: 50_000,
+      stopPrice: 49_000,
     });
 
-    brokerage.markToMarket({ BTCUSDT: 48500 });
+    brokerage.markToMarket({ BTCUSDT: 48_500 });
 
     const open = await brokerage.getOpenPositions();
-    expect(open.length).toBe(0);
+    expect(open).toHaveLength(0);
 
     const bal = await brokerage.getAccountBalance();
     expect(bal.realizedPnl).toBeLessThan(0);

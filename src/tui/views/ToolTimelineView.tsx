@@ -1,8 +1,9 @@
-import React from "react";
 import { Box, Text } from "ink";
-import { ViewProps } from "./ConversationView.js";
+import React from "react";
 
-export function ToolTimelineView({ state, width, rows }: ViewProps): JSX.Element {
+import type { ViewProps } from "./ConversationView.js";
+
+export function ToolTimelineView({ state, rows }: ViewProps): JSX.Element {
   const { toolCalls } = state;
   const maxRows = Math.max(1, rows - 2);
   const visible = toolCalls.slice(-maxRows);
@@ -44,7 +45,7 @@ export function ToolTimelineView({ state, width, rows }: ViewProps): JSX.Element
             <Text>
               <Text color="gray">[{timeStr}] </Text>
               <Text color="cyan">{connector} </Text>
-              <Text bold color={call.status === "failed" ? "red" : call.status === "running" ? "yellow" : "green"}>
+              <Text bold color={call.status === "failed" ? "red" : (call.status === "running" ? "yellow" : "green")}>
                 {call.name}
               </Text>
               <Text color={statusColor}>{statusText}</Text>

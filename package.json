@@ -23,6 +23,9 @@
     "format:check": "prettier --check src tests"
   },
   "devDependencies": {
+    "@commitlint/cli": "^21.2.1",
+    "@commitlint/config-conventional": "^21.2.0",
+    "@eslint/js": "^10.0.1",
     "@types/better-sqlite3": "^7.6.13",
     "@types/diff": "^7.0.2",
     "@types/jest": "^30.0.0",
@@ -31,18 +34,30 @@
     "@types/node": "^20.14.0",
     "@types/react": "^19.2.0",
     "@types/ws": "^8.18.1",
-    "@typescript-eslint/eslint-plugin": "^7.18.0",
-    "@typescript-eslint/parser": "^7.18.0",
-    "eslint": "^8.57.1",
+    "dependency-cruiser": "^18.1.0",
+    "eslint": "^10.8.0",
+    "eslint-plugin-import-x": "^4.17.1",
+    "eslint-plugin-jest": "^29.16.0",
+    "eslint-plugin-jsdoc": "^63.3.2",
+    "eslint-plugin-n": "^18.2.2",
+    "eslint-plugin-no-unsanitized": "^4.1.5",
+    "eslint-plugin-promise": "^7.3.0",
+    "eslint-plugin-security": "^4.0.1",
+    "eslint-plugin-sonarjs": "^4.2.0",
+    "eslint-plugin-unicorn": "^72.0.0",
+    "husky": "^9.1.7",
     "ink-testing-library": "^4.0.0",
     "jest": "^30.4.2",
+    "knip": "^6.29.0",
+    "lint-staged": "^16.4.0",
+    "madge": "^8.0.0",
     "prettier": "^3.9.4",
     "ts-jest": "^29.2.0",
     "tsx": "^4.22.5",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "typescript-eslint": "^8.65.0"
   },
   "dependencies": {
-    "trading-concepts-ts": "file:../../trading-workspace/libraries/trading-concepts-ts",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "better-sqlite3": "^12.11.1",
     "boxen": "^5.1.2",
@@ -56,9 +71,11 @@
     "ora": "^5.4.1",
     "playwright": "^1.61.1",
     "react": "^19.2.0",
+    "trading-concepts-ts": "file:../../trading-workspace/libraries/trading-concepts-ts",
     "vscode-languageserver-protocol": "^3.18.2",
     "vscode-languageserver-types": "^3.18.0",
     "vscode-uri": "^3.1.0",
-    "ws": "^8.21.1"
+    "ws": "^8.21.1",
+    "zod": "^4.4.3"
   }
 }

@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
 import { relative } from "node:path";
-import { Tool } from "./tool.js";
+
 import { resolveWorkspacePath } from "./path-utils.js";
+import { Tool } from "./tool.js";
 
 export interface SearchMatch {
   path: string;
@@ -24,7 +25,7 @@ export class SearchCodeTool extends Tool {
     return "Search the workspace for a literal string or ripgrep-compatible regex, returning file:line matches.";
   }
 
-  get parameters(): Record<string, unknown> {
+  override get parameters(): Record<string, unknown> {
     return {
       type: "object",
       properties: {
@@ -38,10 +39,10 @@ export class SearchCodeTool extends Tool {
   }
 
   async call(args: Record<string, unknown>): Promise<Record<string, unknown>> {
-    const query = args.query as string;
-    const scopedPath = (args.path as string | undefined) ?? ".";
-    const glob = args.glob as string | undefined;
-    const maxResults = (args.maxResults as number | undefined) ?? DEFAULT_MAX_RESULTS;
+    const query = args["query"] as string;
+    const scopedPath = (args["path"] as string | undefined) ?? ".";
+    const glob = args["glob"] as string | undefined;
+    const maxResults = (args["maxResults"] as number | undefined) ?? DEFAULT_MAX_RESULTS;
 
     const searchRoot = resolveWorkspacePath(this.root, scopedPath);
 
@@ -77,7 +78,7 @@ export class SearchCodeTool extends Tool {
         if (code === 0 || code === 1) resolvePromise(stdout);
         else resolvePromise("");
       });
-      child.on("error", () => resolvePromise(""));
+      child.on("error", () => { resolvePromise(""); });
     });
   }
 }

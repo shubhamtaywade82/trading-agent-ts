@@ -47,19 +47,19 @@ function loadGlobalConfig(): ConfigFile {
     const parsed = JSON.parse(raw) as ConfigFile;
     if (parsed && typeof parsed === "object") return parsed;
   } catch {
-    // skip malformed config file
+    // Skip malformed config file
   }
   return {};
 }
 
 // Matches how Claude Code/Cursor/most editor tooling resolve a project root:
-// walk up from cwd to the nearest `.git` (a real repo needs no prior tradingagent
-// session to be "found" — no chicken-and-egg where the first run in a new
-// project, or a run from a subdirectory that hasn't had `.trading-agent` created
-// yet, silently falls back to cwd and starts a disconnected history/config).
+// Walk up from cwd to the nearest `.git` (a real repo needs no prior tradingagent
+// Session to be "found" — no chicken-and-egg where the first run in a new
+// Project, or a run from a subdirectory that hasn't had `.trading-agent` created
+// Yet, silently falls back to cwd and starts a disconnected history/config).
 // `.trading-agent` presence is kept as a fallback signal for non-git workspaces.
 function findWorkspaceRoot(cwd: string): string {
-  if (process.env.TRADINGAGENT_WORKSPACE) return process.env.TRADINGAGENT_WORKSPACE;
+  if (process.env["TRADINGAGENT_WORKSPACE"]) return process.env["TRADINGAGENT_WORKSPACE"];
   const home = homedir();
   const root = resolve("/");
 
@@ -83,7 +83,7 @@ function loadWorkspaceConfig(root: string): ConfigFile {
     const parsed = JSON.parse(raw) as ConfigFile;
     if (parsed && typeof parsed === "object") return parsed;
   } catch {
-    // skip malformed config file
+    // Skip malformed config file
   }
   return {};
 }
@@ -95,7 +95,7 @@ function loadAgentsFile(root: string): string {
     try {
       return readFileSync(p, "utf8").trim();
     } catch {
-      // skip unreadable file
+      // Skip unreadable file
     }
   }
   return "";
@@ -123,23 +123,25 @@ export function loadConfig(): CliConfig {
   const toolSelectionMode = (fromEnv("TRADINGAGENT_TOOL_SELECTION_MODE") || file.toolSelectionMode) as "heuristic" | "llm" | "hybrid" | undefined;
 
   // Pool of Ollama Cloud keys: primary single key, comma-separated OLLAMA_API_KEYS,
-  // and any keys listed in the config file, deduped in that priority order.
+  // And any keys listed in the config file, deduped in that priority order.
   const primaryApiKey = fromEnv("OLLAMA_API_KEY") || file.apiKey;
   const envKeys = (fromEnv("OLLAMA_API_KEYS") ?? "").split(",").map((k) => k.trim()).filter(Boolean);
   const apiKeys = [...new Set([...(primaryApiKey ? [primaryApiKey] : []), ...envKeys, ...(file.apiKeys ?? [])])];
+  const host = fromEnv("OLLAMA_HOST") || file.host;
+  const shellImage = fromEnv("TRADINGAGENT_SHELL_IMAGE") || file.shellImage;
 
   return {
     model: fromEnv("TRADINGAGENT_MODEL") || file.model || "qwen3.5:4b",
     workspaceRoot,
     tier: (fromEnv("TRADINGAGENT_TIER") || file.tier) === "cloud" ? "cloud" : "local",
-    host: fromEnv("OLLAMA_HOST") || file.host,
-    apiKey: primaryApiKey,
-    timeoutMs,
+    ...(host !== undefined ? { host } : {}),
+    ...(primaryApiKey !== undefined ? { apiKey: primaryApiKey } : {}),
+    ...(timeoutMs !== undefined ? { timeoutMs } : {}),
     systemPrompt,
-    shellImage: fromEnv("TRADINGAGENT_SHELL_IMAGE") || file.shellImage,
-    shellTimeoutSec,
-    toolSelectionMode,
-    maxActiveTools,
-    apiKeys: apiKeys.length ? apiKeys : undefined,
+    ...(shellImage !== undefined ? { shellImage } : {}),
+    ...(shellTimeoutSec !== undefined ? { shellTimeoutSec } : {}),
+    ...(toolSelectionMode !== undefined ? { toolSelectionMode } : {}),
+    ...(maxActiveTools !== undefined ? { maxActiveTools } : {}),
+    ...(apiKeys.length > 0 ? { apiKeys } : {}),
   };
 }

@@ -93,7 +93,7 @@ export function renderMarkdown(text: string, role: RichLine["role"], bodyWidth: 
       continue;
     }
 
-    if (raw.match(/^[-*]\s/)) {
+    if (/^[-*]\s/.test(raw)) {
       const content = raw.replace(/^[-*]\s/, "");
       const wrapped = wrapText(content, bodyWidth - 2);
       wrapped.forEach((line, i) => {

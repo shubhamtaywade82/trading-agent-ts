@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { discoverSkills, loadSkillContent, loadSkillMeta } from "../../src/skills/loader.js";
 
 function writeSkill(root: string, id: string, frontmatter: string, body = "# Body\n\ncontent"): string {
@@ -70,11 +71,11 @@ describe("loadSkillMeta / discoverSkills", () => {
     mkdirSync(join(workspaceRoot, ".trading-agent", "skills", "empty-dir"), { recursive: true });
     writeSkill(workspaceRoot, "valid", "name: Valid");
     expect(() => discoverSkills({ workspaceRoot, homeDir })).not.toThrow();
-    expect(discoverSkills({ workspaceRoot, homeDir }).map((s) => s.id)).toEqual(["valid"]);
+    expect(discoverSkills({ workspaceRoot, homeDir }).map((s) => s.id)).toStrictEqual(["valid"]);
   });
 
   it("returns an empty list when no skills directories exist", () => {
-    expect(discoverSkills({ workspaceRoot, homeDir })).toEqual([]);
+    expect(discoverSkills({ workspaceRoot, homeDir })).toStrictEqual([]);
   });
 });
 
@@ -100,8 +101,8 @@ describe("loadSkillContent", () => {
     const content = loadSkillContent(meta);
 
     expect(content.body).toBe("# Heading\n\nSome body text.");
-    expect(content.references).toEqual(["notes.md"]);
-    expect(content.scripts).toEqual(["run.sh"]);
-    expect(content.templates).toEqual([]);
+    expect(content.references).toStrictEqual(["notes.md"]);
+    expect(content.scripts).toStrictEqual(["run.sh"]);
+    expect(content.templates).toStrictEqual([]);
   });
 });

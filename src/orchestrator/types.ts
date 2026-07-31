@@ -13,7 +13,7 @@ export type StepStatus =
   | "cancelled"
   | "rejected"
   | "rolledback"
-  | "running"; // running kept for compatibility if needed
+  | "running"; // Running kept for compatibility if needed
 
 export interface PlanStep {
   id: string;
@@ -31,7 +31,7 @@ export type StepOutcome =
   | { kind: "blocking"; error: string };
 
 export interface StepRunner {
-  run(step: PlanStep): Promise<StepOutcome>;
+  run: (step: PlanStep) => Promise<StepOutcome>;
 }
 
 export interface HistoryEntry {
@@ -41,5 +41,5 @@ export interface HistoryEntry {
 }
 
 export interface Planner {
-  replan(remaining: PlanStep[], history: HistoryEntry[]): Promise<PlanStep[]>;
+  replan: (remaining: PlanStep[], history: HistoryEntry[]) => Promise<PlanStep[]>;
 }

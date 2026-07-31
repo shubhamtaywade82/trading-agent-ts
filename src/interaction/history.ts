@@ -8,11 +8,11 @@
  */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname } from "node:path";
 
 export class HistoryManager {
   private entries: string[] = [];
-  /** null = not browsing; otherwise index into entries (from the end). */
+  /** Null = not browsing; otherwise index into entries (from the end). */
   private cursor: number | null = null;
   private draft = "";
 
@@ -77,7 +77,7 @@ export class HistoryManager {
     } else if (this.cursor > 0) {
       this.cursor -= 1;
     }
-    return this.entries[this.cursor];
+    return this.entries[this.cursor] ?? current;
   }
 
   /** Move forward in history; past the newest entry restores the draft. */
@@ -85,7 +85,7 @@ export class HistoryManager {
     if (this.cursor === null) return current;
     if (this.cursor < this.entries.length - 1) {
       this.cursor += 1;
-      return this.entries[this.cursor];
+      return this.entries[this.cursor] ?? current;
     }
     this.cursor = null;
     return this.draft;
@@ -101,8 +101,10 @@ export class HistoryManager {
     const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
     if (terms.length === 0) return null;
     for (let i = this.entries.length - 1; i >= 0; i--) {
-      const entry = this.entries[i].toLowerCase();
-      if (terms.every((t) => entry.includes(t))) return this.entries[i];
+      const raw = this.entries[i];
+      if (raw === undefined) continue;
+      const entry = raw.toLowerCase();
+      if (terms.every((t) => entry.includes(t))) return raw;
     }
     return null;
   }

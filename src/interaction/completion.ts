@@ -5,8 +5,9 @@
  * all of it, Right Arrow accepts one word, Esc dismisses.
  */
 
-import { SlashCommandRegistry } from "./slash-commands.js";
-import { BUILTIN_TEMPLATES, PromptTemplate, templateCompletions } from "./templates.js";
+import type { SlashCommandRegistry } from "./slash-commands.js";
+import type { PromptTemplate} from "./templates.js";
+import { BUILTIN_TEMPLATES, templateCompletions } from "./templates.js";
 
 /**
  * Ghost suffix for the current input, from the newest history entry that
@@ -16,6 +17,7 @@ export function ghostSuffix(input: string, history: string[]): string {
   if (!input) return "";
   for (let i = history.length - 1; i >= 0; i--) {
     const entry = history[i];
+    if (entry === undefined) continue;
     if (entry.length > input.length && entry.startsWith(input)) {
       return entry.slice(input.length);
     }
@@ -25,7 +27,7 @@ export function ghostSuffix(input: string, history: string[]): string {
 
 /** Accept a single word (plus leading space) from a ghost suffix. */
 export function acceptWord(suffix: string): { accepted: string; rest: string } {
-  const match = suffix.match(/^\s*\S+/);
+  const match = /^\s*\S+/.exec(suffix);
   if (!match) return { accepted: suffix, rest: "" };
   return { accepted: match[0], rest: suffix.slice(match[0].length) };
 }

@@ -1,4 +1,4 @@
-import { ChatMessage, ChatResponse, OllamaToolSchema, Tier } from "../provider/provider.js";
+import type { ChatMessage, ChatResponse, OllamaToolSchema, Tier } from "../provider/provider.js";
 
 export interface BenchmarkCase {
   id: string;

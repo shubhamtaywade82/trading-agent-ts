@@ -1,5 +1,5 @@
+import type { PaperTradingManager } from "../../src/exchange/paper-trading.js";
 import { BinancePaperTradeTool } from "../../src/tools/paper-trading-tools.js";
-import { PaperTradingManager } from "../../src/exchange/paper-trading.js";
 
 function fakeManager(overrides: Partial<PaperTradingManager> = {}): PaperTradingManager {
   return {
@@ -12,12 +12,12 @@ function fakeManager(overrides: Partial<PaperTradingManager> = {}): PaperTrading
 
 describe("BinancePaperTradeTool", () => {
   it("opens a position", async () => {
-    const position = { id: 1, symbol: "BTCUSDT", direction: "long", entryPrice: 60000, quantity: 1 };
+    const position = { id: 1, symbol: "BTCUSDT", direction: "long", entryPrice: 60_000, quantity: 1 };
     const manager = fakeManager({ open: jest.fn().mockResolvedValue(position) });
     const tool = new BinancePaperTradeTool(manager);
     const result = await tool.call({ action: "open", symbol: "BTCUSDT", direction: "long", quantity: 1 });
     expect(manager.open).toHaveBeenCalledWith("BTCUSDT", "long", 1, undefined, undefined);
-    expect(result).toEqual(position);
+    expect(result).toStrictEqual(position);
   });
 
   it("rejects an invalid open call", async () => {
@@ -38,7 +38,7 @@ describe("BinancePaperTradeTool", () => {
     const manager = fakeManager({ list: jest.fn().mockReturnValue(positions) });
     const tool = new BinancePaperTradeTool(manager);
     const result = await tool.call({ action: "list" });
-    expect(result.positions).toEqual(positions);
+    expect(result.positions).toStrictEqual(positions);
   });
 
   it("closes a position", async () => {
@@ -46,7 +46,7 @@ describe("BinancePaperTradeTool", () => {
     const manager = fakeManager({ close: jest.fn().mockReturnValue(closed) });
     const tool = new BinancePaperTradeTool(manager);
     const result = await tool.call({ action: "close", id: 1 });
-    expect(result).toEqual(closed);
+    expect(result).toStrictEqual(closed);
   });
 
   it("returns NotFound when closing a nonexistent position", async () => {

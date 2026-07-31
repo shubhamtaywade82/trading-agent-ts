@@ -1,8 +1,8 @@
+import type { BrowserManager } from "../../src/browser/manager.js";
 import {
   BrowserNavigateTool, BrowserClickTool, BrowserFillTool,
   BrowserGetTextTool, BrowserScreenshotTool, BrowserEvaluateTool, BrowserCloseTool,
 } from "../../src/tools/browser-tools.js";
-import { BrowserManager } from "../../src/browser/manager.js";
 
 function fakeManager(overrides: Partial<BrowserManager> = {}): BrowserManager {
   return {
@@ -24,7 +24,7 @@ describe("BrowserNavigateTool", () => {
     const tool = new BrowserNavigateTool(manager);
     const result = await tool.call({ url: "https://example.com" });
     expect(manager.navigate).toHaveBeenCalledWith("https://example.com");
-    expect(result).toEqual({ title: "T", url: "https://x" });
+    expect(result).toStrictEqual({ title: "T", url: "https://x" });
   });
 
   it("returns a NavigationError instead of throwing", async () => {
@@ -42,7 +42,7 @@ describe("BrowserClickTool", () => {
     const tool = new BrowserClickTool(manager);
     const result = await tool.call({ selector: "#btn" });
     expect(manager.click).toHaveBeenCalledWith("#btn");
-    expect(result).toEqual({ clicked: true, url: "https://x" });
+    expect(result).toStrictEqual({ clicked: true, url: "https://x" });
   });
 
   it("returns a ClickError instead of throwing when the selector isn't found", async () => {
@@ -59,7 +59,7 @@ describe("BrowserFillTool", () => {
     const tool = new BrowserFillTool(manager);
     const result = await tool.call({ selector: "#email", text: "a@b.com" });
     expect(manager.fill).toHaveBeenCalledWith("#email", "a@b.com");
-    expect(result).toEqual({ filled: true });
+    expect(result).toStrictEqual({ filled: true });
   });
 });
 
@@ -95,7 +95,7 @@ describe("BrowserEvaluateTool", () => {
     const tool = new BrowserEvaluateTool(manager);
     const result = await tool.call({ script: "1+1" });
     expect(manager.evaluate).toHaveBeenCalledWith("1+1");
-    expect(result).toEqual({ result: 42 });
+    expect(result).toStrictEqual({ result: 42 });
   });
 });
 
@@ -105,6 +105,6 @@ describe("BrowserCloseTool", () => {
     const tool = new BrowserCloseTool(manager);
     const result = await tool.call({});
     expect(manager.close).toHaveBeenCalled();
-    expect(result).toEqual({ closed: true });
+    expect(result).toStrictEqual({ closed: true });
   });
 });

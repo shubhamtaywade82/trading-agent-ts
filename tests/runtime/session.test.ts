@@ -1,9 +1,10 @@
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+
+import type { ChatMessage } from "../../src/provider/provider.js";
 import { SessionStore } from "../../src/runtime/session.js";
-import { ChatMessage } from "../../src/provider/provider.js";
 
 describe("SessionStore", () => {
   let dir: string;
@@ -28,7 +29,7 @@ describe("SessionStore", () => {
     ];
     store.save(messages);
 
-    expect(store.load()).toEqual(messages);
+    expect(store.load()).toStrictEqual(messages);
   });
 
   it("creates the parent directory if missing", () => {
@@ -48,7 +49,7 @@ describe("SessionStore", () => {
     const store = new SessionStore(path);
     store.save([{ role: "user", content: "first" }]);
     store.save([{ role: "user", content: "second" }]);
-    expect(store.load()).toEqual([{ role: "user", content: "second" }]);
+    expect(store.load()).toStrictEqual([{ role: "user", content: "second" }]);
   });
 
   it("clear removes the session file", () => {
@@ -60,7 +61,7 @@ describe("SessionStore", () => {
 
   it("clear is a no-op when no session exists", () => {
     const store = new SessionStore(path);
-    expect(() => store.clear()).not.toThrow();
+    expect(() => { store.clear(); }).not.toThrow();
   });
 
   it("returns null instead of throwing on corrupt JSON", () => {
@@ -79,6 +80,6 @@ describe("SessionStore", () => {
   it("survives a crash mid-write — old transcript intact", () => {
     const store = new SessionStore(path);
     store.save([{ role: "user", content: "first" }]);
-    expect(JSON.parse(readFileSync(path, "utf8"))).toEqual([{ role: "user", content: "first" }]);
+    expect(JSON.parse(readFileSync(path, "utf8"))).toStrictEqual([{ role: "user", content: "first" }]);
   });
 });
