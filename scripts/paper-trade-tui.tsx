@@ -22,14 +22,21 @@ const notifyEnabled = !process.argv.includes("--no-notify");
 const evaluatorEnabled = !process.argv.includes("--no-eval");
 const telegramConfigured = !!process.env.TELEGRAM_BOT_TOKEN && !!process.env.TELEGRAM_CHAT_ID;
 
+const ALT_SCREEN_ENTER = "\x1b[?1049h\x1b[H";
+const ALT_SCREEN_EXIT = "\x1b[?1049l";
 const CURSOR_HIDE = "\x1b[?25l";
 const CURSOR_SHOW = "\x1b[?25h";
 
-function hideCursor() {
-  if (process.stdout.isTTY) process.stdout.write(CURSOR_HIDE);
+function enterFullScreen() {
+  if (process.stdout.isTTY) {
+    process.stdout.write(ALT_SCREEN_ENTER + CURSOR_HIDE);
+  }
 }
-function showCursor() {
-  if (process.stdout.isTTY) process.stdout.write(CURSOR_SHOW);
+
+function exitFullScreen() {
+  if (process.stdout.isTTY) {
+    process.stdout.write(ALT_SCREEN_EXIT + CURSOR_SHOW);
+  }
 }
 
 const runner = new LivePaperRunner();
@@ -38,7 +45,7 @@ const readiness = new ReadinessMonitor({ notifyTelegram: notifyEnabled && telegr
 const fillNotifier = notifyEnabled && telegramConfigured ? new FillNotifier({ journalFile: DEFAULT_RUNNER_CONFIG.journalFile }) : null;
 const evaluator = evaluatorEnabled ? new TradeEvaluator() : null;
 
-hideCursor();
+enterFullScreen();
 
 let exited = false;
 function cleanExit(code = 0) {
@@ -47,12 +54,12 @@ function cleanExit(code = 0) {
   runner.stop();
   analyst?.stop();
   evaluator?.stop();
-  showCursor();
+  exitFullScreen();
   process.exit(code);
 }
 process.on("SIGINT", () => cleanExit(0));
 process.on("SIGTERM", () => cleanExit(0));
-process.on("uncaughtException", (e) => { showCursor(); console.error(e); process.exit(1); });
+process.on("uncaughtException", (e) => { exitFullScreen(); console.error(e); process.exit(1); });
 
 const { waitUntilExit } = render(
   React.createElement(PaperTradingDashboard, {

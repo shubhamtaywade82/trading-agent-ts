@@ -16,7 +16,7 @@ import type { BridgeableAgent } from "./agent-bridge.js";
 import { wireAgentBridge } from "./agent-bridge.js";
 function enableTerminalFeatures(): () => void {
   if (!process.stdin.isTTY) return () => {};
-  process.stdout.write("\x1B[?1000h\x1B[?1002h\x1B[?1006h\x1B[?2004h");
+  process.stdout.write("\x1b[2J\x1b[H\x1B[?1000h\x1B[?1002h\x1B[?1006h\x1B[?2004h");
   return () => {
     process.stdout.write("\x1B[?2004l\x1B[?1006l\x1B[?1002l\x1B[?1000l");
   };

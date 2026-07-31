@@ -1,6 +1,6 @@
 import { readFileSync, existsSync } from "node:fs";
 
-import { Box, Text, useApp, useInput } from "ink";
+import { Box, Text, useApp, useInput, useStdout } from "ink";
 import React, { useEffect, useState, useRef } from "react";
 
 import { BinanceStreamManager } from "../exchange/binance-stream.js";
@@ -45,6 +45,24 @@ function readLastJournalEvents(journalFile: string, n: number): FeedEvent[] {
   }
 }
 
+function formatCompactSummary(summary: string, maxLines: number, maxChars = 1000): string {
+  const rawLines = summary.trim().split("\n");
+  const nonEmptyLines = rawLines.filter(l => l.trim().length > 0);
+  if (nonEmptyLines.length === 0) return "";
+
+  const sliced = nonEmptyLines.slice(0, maxLines);
+  let text = sliced.join("\n");
+
+  if (text.length > maxChars) {
+    text = text.slice(0, maxChars - 3) + "...";
+  }
+
+  if (nonEmptyLines.length > maxLines || summary.length > maxChars) {
+    return `${text}\n... (see .trading-agent/paper-trading-insights.md)`;
+  }
+  return text;
+}
+
 function Panel({ title, borderColor, children }: { title: string; borderColor: string; children: React.ReactNode }): JSX.Element {
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={borderColor} paddingX={1} marginBottom={1}>
@@ -77,6 +95,19 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
   onExit?: () => void;
 }): JSX.Element {
   const { exit } = useApp();
+  const { stdout } = useStdout();
+  const [termHeight, setTermHeight] = useState<number>(stdout?.rows || 30);
+
+  useEffect(() => {
+    if (!stdout) return;
+    const onResize = (): void => {
+      if (stdout.rows) setTermHeight(stdout.rows);
+    };
+    stdout.on("resize", onResize);
+    return () => {
+      stdout.off("resize", onResize);
+    };
+  }, [stdout]);
   const [analystSummary, setAnalystSummary] = useState(analyst?.getLatestSummary() ?? null);
   const [readinessResult, setReadinessResult] = useState<{ strategies: StrategyReadiness[]; portfolio: PortfolioReadiness } | null>(null);
   const [evaluations, setEvaluations] = useState<TradeEvaluation[]>(evaluator?.getRecentEvaluations(5) ?? []);
@@ -254,8 +285,6 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
   const totalRealized = rows.reduce((s, r) => s + r.attributedPnl, 0);
   const totalUnrealized = symbolPositions.reduce((s, p) => s + (unrealizedForSymbol(p.symbol) ?? 0), 0);
   const totalTrades = rows.reduce((s, r) => s + r.trades, 0);
-  const totalWins = rows.reduce((s, r) => s + r.wins, 0);
-  const firedThisTick = lastEval.filter(e => e.fired);
   const anyStale = Object.values(wsStatus).some(s => s !== "live");
 
   const bySymbol = new Map<string, RowStatus[]>();
@@ -264,10 +293,19 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
     if (arr) arr.push(r); else bySymbol.set(r.symbol, [r]);
   }
   const idW = Math.max(...rows.map(r => r.id.length), 24) + 1;
-  const capitalPerSymbol = portfolio.symbolCount > 0 ? portfolio.totalInitialCapital / portfolio.symbolCount : 0;
+
+  const isSmall = termHeight <= 32;
+  const isMedium = termHeight > 32 && termHeight <= 45;
+  const isLarge = termHeight > 45 && termHeight <= 60;
+
+  const maxFeedCount = isSmall ? 2 : (isMedium ? 4 : (isLarge ? 6 : 10));
+  const maxEvalCount = isSmall ? 1 : (isMedium ? 2 : (isLarge ? 3 : 5));
+  const maxAnalystLines = isSmall ? 3 : (isMedium ? 6 : (isLarge ? 12 : 20));
+  const maxAnalystChars = isSmall ? 250 : (isMedium ? 600 : (isLarge ? 1200 : 2500));
+  const maxEvalTextLines = isSmall ? 2 : (isMedium ? 3 : (isLarge ? 5 : 8));
 
   return (
-    <Box flexDirection="column" padding={1}>
+    <Box flexDirection="column" height={termHeight} justifyContent="space-between" paddingX={1}>
       {/* Header bar */}
       <Box justifyContent="space-between" marginBottom={1}>
         <Text>
@@ -284,7 +322,7 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
           const st = wsStatus[sym] ?? "connecting";
           const chg = p?.changePct24h;
           return (
-            <Box key={sym} borderStyle="single" borderColor={st === "live" ? "green" : (st === "error" ? "red" : "yellow")} paddingX={1} marginRight={1}>
+            <Box key={sym} paddingX={1} marginRight={1}>
               <Text>
                 <Text color={st === "live" ? "green" : (st === "error" ? "red" : "yellow")}>{BULLET[st]}</Text>
                 {" "}<Text bold>{sym.replace("USDT", "")}</Text>
@@ -312,44 +350,44 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
         </Box>
       )}
 
-      {/* Portfolio — broker-style account balance rollup across all strategy buckets */}
-      <Panel title="PORTFOLIO" borderColor="blueBright">
-        <Box>
-          <Text>
-            Total Equity <Text bold color={pnlColor(totalRealized + totalUnrealized)}>${(portfolio.totalInitialCapital + totalRealized + totalUnrealized).toFixed(2)}</Text>
-            {"   "}Available <Text bold>${portfolio.availableBalance.toFixed(2)}</Text>
-            {"   "}Used Margin <Text bold color={portfolio.usedMargin > 0 ? "yellow" : "gray"}>${portfolio.usedMargin.toFixed(2)}</Text>
-            {"   "}Margin Util <Text bold>{((portfolio.usedMargin / portfolio.totalInitialCapital) * 100).toFixed(1)}%</Text>
-          </Text>
+      {/* Portfolio & Account side-by-side */}
+      <Box flexDirection="row" marginBottom={1}>
+        <Box flexGrow={1} marginRight={1}>
+          <Panel title="PORTFOLIO" borderColor="blueBright">
+            <Box>
+              <Text>
+                Total Equity <Text bold color={pnlColor(totalRealized + totalUnrealized)}>${(portfolio.totalInitialCapital + totalRealized + totalUnrealized).toFixed(2)}</Text>
+                {"  "}Available <Text bold>${portfolio.availableBalance.toFixed(2)}</Text>
+              </Text>
+            </Box>
+            <Box>
+              <Text color="gray">
+                Margin <Text bold color={portfolio.usedMargin > 0 ? "yellow" : "gray"}>${portfolio.usedMargin.toFixed(2)}</Text> ({((portfolio.usedMargin / portfolio.totalInitialCapital) * 100).toFixed(1)}%)
+                {"  "}Lev {portfolio.leverage}x{"  "}Open {portfolio.openPositions}/{portfolio.symbolCount}
+              </Text>
+            </Box>
+          </Panel>
         </Box>
-        <Box>
-          <Text color="gray">
-            Starting Capital ${portfolio.totalInitialCapital.toLocaleString()} ({portfolio.symbolCount} × ${capitalPerSymbol.toLocaleString()} per-symbol pools, {portfolio.strategyCount} strategies)
-            {"   "}Leverage {portfolio.leverage}x{"  "}Margin/Trade {(portfolio.marginPerTradePct * 100).toFixed(0)}%
-            {"   "}Open {portfolio.openPositions}/{portfolio.symbolCount}
-          </Text>
-        </Box>
-      </Panel>
 
-      {/* Account P&L summary */}
-      <Panel title="ACCOUNT" borderColor="blueBright">
-        <Box>
-          <Text>
-            Realized <Text bold color={pnlColor(totalRealized)}>{fmtMoney(totalRealized)}</Text>
-            {"   "}Unrealized <Text bold color={pnlColor(totalUnrealized)}>{fmtMoney(totalUnrealized)}</Text>
-            {"   "}Equity Δ <Text bold color={pnlColor(totalRealized + totalUnrealized)}>{fmtMoney(totalRealized + totalUnrealized)}</Text>
-            {"   "}Trades <Text bold>{totalTrades}</Text>
-            {totalTrades > 0 && <Text color="gray"> ({((totalWins / totalTrades) * 100).toFixed(0)}%WR)</Text>}
-          </Text>
+        <Box flexGrow={1}>
+          <Panel title="ACCOUNT" borderColor="blueBright">
+            <Box>
+              <Text>
+                Realized <Text bold color={pnlColor(totalRealized)}>{fmtMoney(totalRealized)}</Text>
+                {"  "}Unrealized <Text bold color={pnlColor(totalUnrealized)}>{fmtMoney(totalUnrealized)}</Text>
+                {"  "}Trades <Text bold>{totalTrades}</Text>
+              </Text>
+            </Box>
+            <Box>
+              <Text color="gray">
+                {ticking ? "⟳ checking..." : (lastTick ? `⟳ ${lastTick.toLocaleTimeString()} · ${lastEval.length} eval · next in ${nextTickIn}s` : "starting...")}
+                {anyStale && <Text color="yellow"> ⚠ stale</Text>}
+              </Text>
+            </Box>
+            {error && <Text color="red">⚠ tick error: {error}</Text>}
+          </Panel>
         </Box>
-        <Box>
-          <Text color="gray">
-            {ticking ? "⟳ checking strategies..." : (lastTick ? `⟳ last check ${lastTick.toLocaleTimeString()} · ${lastEval.length} evaluated${firedThisTick.length > 0 ? `, ${firedThisTick.length} fired` : ""} · next in ${nextTickIn}s` : "starting...")}
-            {anyStale && <Text color="yellow">  ⚠ price feed degraded</Text>}
-          </Text>
-        </Box>
-        {error && <Text color="red">⚠ tick error: {error}</Text>}
-      </Panel>
+      </Box>
 
       {/* Open positions blotter — one row per SYMBOL (shared net position
           across every contributing strategy), not per strategy. */}
@@ -390,23 +428,27 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
         </Panel>
       )}
 
-      {/* Strategy performance — one merged table (not one panel per symbol,
-          which burns 2 border lines + a title line per symbol for no
-          information gain). Idle strategies (no position, never traded)
-          collapse to a single summary line per symbol so the panel height
-          tracks actual activity instead of always rendering all 17 rows —
-          on a real terminal height, 17 mostly-empty rows push the header
-          off the top of the visible viewport (this is a real report from
-          testing: content taller than the terminal scrolls the top out of
-          view, same as any TUI without pagination). */}
+      {/* Strategy performance — compact representation */}
       <Panel title={`STRATEGIES (${rows.length}) — Attributed PnL`} borderColor="magenta">
         {[...bySymbol.entries()].map(([symbol, symRows]) => {
           const contributors = new Set(symbolPositions.find(p => p.symbol === symbol)?.contributingStrategyIds ?? []);
           const symPnl = symRows.reduce((s, r) => s + r.attributedPnl, 0) + (unrealizedForSymbol(symbol) ?? 0);
           const active = symRows.filter(r => contributors.has(r.id) || r.trades > 0);
           const idle = symRows.filter(r => !contributors.has(r.id) && r.trades === 0);
+
+          if (active.length === 0) {
+            return (
+              <Box key={symbol}>
+                <Text color="gray" wrap="truncate-end">
+                  <Text bold color="cyan">{symbol}</Text>  <Text color={pnlColor(symPnl)}>{fmtMoney(symPnl)}</Text>
+                  {" — "}{idle.length} idle: {idle.map(r => r.id).join(", ")}
+                </Text>
+              </Box>
+            );
+          }
+
           return (
-            <Box key={symbol} flexDirection="column" marginBottom={1}>
+            <Box key={symbol} flexDirection="column">
               <Text bold color="cyan">{symbol}  <Text color={pnlColor(symPnl)}>{fmtMoney(symPnl)}</Text></Text>
               {active.map(r => (
                 <Box key={r.id}>
@@ -421,7 +463,7 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
               ))}
               {idle.length > 0 && (
                 <Text color="gray" dimColor wrap="truncate-end">
-                  {"  "}{idle.length} idle (no signal yet): {idle.map(r => r.id).join(", ")}
+                  {"  "}{idle.length} idle: {idle.map(r => r.id).join(", ")}
                 </Text>
               )}
             </Box>
@@ -432,7 +474,7 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
       {/* Activity feed */}
       {feed.length > 0 && (
         <Panel title="RECENT FILLS" borderColor="cyan">
-          {feed.map((e, i) => {
+          {feed.slice(0, maxFeedCount).map((e, i) => {
             const isOpenLike = e.action === "open" || e.action === "add" || e.action === "flip_open";
             const isCloseLike = e.action === "reduce" || e.action === "close" || e.action === "flip_close";
             const verb = e.action === "add" ? "ADD" : e.action === "flip_open" ? "FLIP→OPEN"
@@ -466,15 +508,15 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
           the trading tick — queue depth shown so you can see if it's behind. */}
       {evaluator && (
         <Panel title={`TRADE EVALUATIONS (read-only)${evalQueueLen > 0 ? ` — ${evalQueueLen} queued` : ""}`} borderColor="cyan">
-          {evaluations.length > 0 ? evaluations.map((e, i) => (
-            <Box key={i} flexDirection="column" marginBottom={i < evaluations.length - 1 ? 1 : 0}>
+          {evaluations.length > 0 ? evaluations.slice(0, maxEvalCount).map((e, i) => (
+            <Box key={i} flexDirection="column" marginBottom={i < Math.min(evaluations.length, maxEvalCount) - 1 ? 1 : 0}>
               <Text color="gray">
                 {new Date(e.ts).toLocaleTimeString()}{"  "}
                 <Text color={e.eventType === "entry" ? "yellow" : "cyan"} bold>{e.eventType.toUpperCase()}</Text>
                 {" "}{e.strategyId}
                 {e.qualityScore !== null && <Text color={e.qualityScore >= 4 ? "green" : (e.qualityScore <= 2 ? "red" : "yellow")}> [{e.qualityScore}/5]</Text>}
               </Text>
-              {e.error ? <Text color="red">  error: {e.error}</Text> : <Text wrap="wrap">  {e.evaluation}</Text>}
+              {e.error ? <Text color="red">  error: {e.error}</Text> : <Text wrap="wrap">  {formatCompactSummary(e.evaluation, maxEvalTextLines)}</Text>}
             </Box>
           )) : (
             <Text color="gray">No fills yet to evaluate — .trading-agent/trade-evaluations.jsonl</Text>
@@ -489,7 +531,7 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
           {analystSummary ? (
             <>
               <Text color="gray">Last analysis: {new Date(analystSummary.ts).toLocaleString()} · {analystSummary.tradesAnalyzed} trades reviewed</Text>
-              <Text wrap="wrap">{analystSummary.summary}</Text>
+              <Text wrap="wrap">{formatCompactSummary(analystSummary.summary, maxAnalystLines, maxAnalystChars)}</Text>
             </>
           ) : (
             <Text color="gray">Waiting for enough closed trades to run first analysis (see .trading-agent/paper-trading-insights.md for full history)</Text>
