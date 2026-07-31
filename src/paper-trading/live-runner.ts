@@ -79,7 +79,7 @@ export interface RunnerConfig {
 }
 
 export const DEFAULT_RUNNER_CONFIG: RunnerConfig = {
-  initialCapitalPerSymbol: 10_000,
+  initialCapitalPerSymbol: 20, // $20 per symbol = $100 total initial capital across 5 symbols
   leverage: 10,
   marginPerTradePct: 0.25,
   riskPerTradePct: 0.015,
