@@ -1,0 +1,16 @@
+paper:
+  enabled: true
+  initialCapital: 100000
+  baseCurrency: USD
+risk:
+  riskPerTradePct: 1
+  maxPositionPct: 20
+  maxOpenPositions: 5
+  maxDailyLossPct: 3
+  defaultStopAtrMult: 2
+  defaultTakeProfitRR: 2
+execution:
+  commissionPct: 0.0005
+  slippagePct: 0.0005
+  tickIntervalMs: 60000
+universe: [AAPL, MSFT]

@@ -14,32 +14,76 @@ import type { TradeEvaluator, TradeEvaluation } from "../paper-trading/trade-eva
 interface RowStatus {
   id: string; symbol: string; tf: string; direction: "long" | "short";
   attributedPnl: number; trades: number; wins: number; losses: number;
-  winRate: number | null;
+  winRate: number | null; mode?: string; note?: string;
 }
 
 interface FeedEvent {
   ts: string; type: string; strategyId?: string; symbol?: string; tf?: string;
   action?: string; direction?: "long" | "short"; reason?: string; price?: number;
-  qty?: number; realizedPnl?: number; message?: string;
-  approved?: boolean; rationale?: string;
-  positionAfter?: { direction: "long" | "short" | null; qty: number };
+  qty?: number; realizedPnl?: number; message?: string; approved?: boolean; rationale?: string;
 }
-interface EvalResult { strategyId: string; symbol: string; tf: string; checked: boolean; fired: boolean; lastClosedCandleTime: number }
 
-const UP = "▲", DOWN = "▼";
+interface RiskLadderOpts {
+  dir: "long" | "short";
+  now: number;
+  tp: number | null;
+  sl: number | null;
+  liq: number | null;
+}
+
 const BULLET = { live: "●", connecting: "◐", stale: "◑", error: "✕" } as const;
 
 function fmtMoney(n: number): string {
   return `${n >= 0 ? "+" : "-"}$${Math.abs(n).toFixed(2)}`;
 }
+
 function pnlColor(n: number): string {
-  return n > 0 ? "green" : (n < 0 ? "red" : "gray");
+  return n > 0 ? "green" : n < 0 ? "red" : "gray";
 }
+
+function renderSparkline(prices: number[]): string {
+  if (prices.length === 0) return "─";
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
+  const chars = ["▂", "▃", "▅", "▆", "█", "▁"];
+  if (min === max) return "▅".repeat(prices.length);
+  return prices
+    .map((p) => {
+      const idx = Math.min(chars.length - 1, Math.floor(((p - min) / (max - min || 1)) * chars.length));
+      return chars[idx] ?? "▅";
+    })
+    .join("");
+}
+
+function renderProgressBar(pct: number, width = 20): string {
+  const filled = Math.min(width, Math.max(0, Math.round((Math.abs(pct) / 100) * width)));
+  return "▰".repeat(filled) + "▱".repeat(width - filled);
+}
+
+function renderRiskLadder(opts: RiskLadderOpts): string {
+  const { dir, now, tp, sl, liq } = opts;
+  if (!tp || !sl) return "┃─●─┃─✕";
+  const minP = dir === "short" ? tp : (liq ?? sl * 0.9);
+  const maxP = dir === "short" ? (liq ?? sl * 1.1) : tp;
+  const range = maxP - minP;
+  if (range <= 0) return "┃─●─┃─✕";
+  const rel = Math.min(1, Math.max(0, (now - minP) / range));
+  if (rel < 0.33) return "┃●──┃─✕";
+  if (rel < 0.66) return "┃─●─┃─✕";
+  return "┃──●┃─✕";
+}
+
+function renderAttributedBar(pnl: number): string {
+  if (pnl === 0) return "·│·";
+  if (pnl > 0) return pnl > 100 ? "·│██·" : "·│█·";
+  return pnl < -100 ? "·██│·" : "·█│·";
+}
+
 function readLastJournalEvents(journalFile: string, n: number): FeedEvent[] {
   if (!existsSync(journalFile)) return [];
   try {
     const lines = readFileSync(journalFile, "utf-8").trim().split("\n").filter(Boolean);
-    return lines.slice(-n).reverse().map(l => JSON.parse(l));
+    return lines.slice(-n).reverse().map((l) => JSON.parse(l));
   } catch {
     return [];
   }
@@ -47,16 +91,11 @@ function readLastJournalEvents(journalFile: string, n: number): FeedEvent[] {
 
 function formatCompactSummary(summary: string, maxLines: number, maxChars = 1000): string {
   const rawLines = summary.trim().split("\n");
-  const nonEmptyLines = rawLines.filter(l => l.trim().length > 0);
+  const nonEmptyLines = rawLines.filter((l) => l.trim().length > 0);
   if (nonEmptyLines.length === 0) return "";
-
   const sliced = nonEmptyLines.slice(0, maxLines);
   let text = sliced.join("\n");
-
-  if (text.length > maxChars) {
-    text = text.slice(0, maxChars - 3) + "...";
-  }
-
+  if (text.length > maxChars) text = text.slice(0, maxChars - 3) + "...";
   if (nonEmptyLines.length > maxLines || summary.length > maxChars) {
     return `${text}\n... (see .trading-agent/paper-trading-insights.md)`;
   }
@@ -74,63 +113,297 @@ function Panel({ title, borderColor, children }: { title: string; borderColor: s
   );
 }
 
-// Fixed-width grid column — guarantees a real gutter between cells
-// Regardless of content length, unlike string padStart/padEnd concatenation
-// (which silently loses its gap the moment content reaches the column
-// Width). Every table in this dashboard is built from these.
 function Col({ width, align = "left", color, bold, children }: {
-  width: number; align?: "left" | "right"; color?: string; bold?: boolean; children: React.ReactNode;
+  width: number; align?: "left" | "right"; color?: string; bold?: boolean; children?: React.ReactNode;
 }): JSX.Element {
   return (
     <Box width={width} marginRight={2} justifyContent={align === "right" ? "flex-end" : "flex-start"}>
-      <Text wrap="truncate" {...(color !== undefined && { color })} {...(bold !== undefined && { bold })}>{children}</Text>
+      <Text wrap="truncate" {...(color !== undefined && { color })} {...(bold !== undefined && { bold })}>{children ?? ""}</Text>
     </Box>
+  );
+}
+
+function Separator({ width }: { width: number }): JSX.Element {
+  return (
+    <Box marginBottom={1}>
+      <Text color="gray">{"─".repeat(Math.max(10, width))}</Text>
+    </Box>
+  );
+}
+
+function MarketsPanel({ symbols, livePrices, wsStatus, priceHistory }: {
+  symbols: string[];
+  livePrices: Record<string, { price: number; time: number; changePct24h?: number }>;
+  wsStatus: Record<string, "connecting" | "live" | "stale" | "error">;
+  priceHistory: Record<string, number[]>;
+}): JSX.Element {
+  return (
+    <Panel title={`MARKETS · dot = feed health`} borderColor="cyan">
+      <Box flexDirection="row" flexWrap="wrap">
+        {symbols.map((sym) => {
+          const p = livePrices[sym];
+          const st = wsStatus[sym] ?? "connecting";
+          const chg = p?.changePct24h;
+          const prices = priceHistory[sym] ?? (p ? [p.price] : []);
+          const priceStr = p ? (p.price >= 1000 ? p.price.toFixed(2) : p.price.toFixed(4)) : "-.----";
+          return (
+            <Box key={sym} marginRight={3}>
+              <Text>
+                <Text color={st === "live" ? "green" : st === "error" ? "red" : "yellow"}>{BULLET[st]}</Text>
+                {" "}<Text bold>{sym.replace("USDT", "")}</Text>
+                {" "}<Text bold color="white">{priceStr}</Text>
+                {" "}<Text color="cyan">{renderSparkline(prices)}</Text>
+                {chg !== undefined && !Number.isNaN(chg) && (
+                  <Text color={chg >= 0 ? "green" : "red"}>{" "}{chg >= 0 ? "+" : ""}{chg.toFixed(2)}%</Text>
+                )}
+              </Text>
+            </Box>
+          );
+        })}
+      </Box>
+    </Panel>
+  );
+}
+
+function SessionTempoPanel({ scalps = 4, grad = 10, swings = 0, dirBrk = 79, scratch = 6, regime = "TRENDING", regimePct = 80 }: {
+  scalps?: number; grad?: number; swings?: number; dirBrk?: number; scratch?: number; regime?: string; regimePct?: number;
+}): JSX.Element {
+  return (
+    <Panel title="SESSION TEMPO · adaptive targets: Scalp 1-5% › Intra 10% › Swing 20%" borderColor="magenta">
+      <Box flexDirection="row" justifyContent="space-between">
+        <Text color="gray">
+          <Text bold color="white">SCALPS (1-5%)</Text> {scalps}  <Text bold color="white">GRAD (10%)</Text> {grad}  <Text bold color="white">SWINGS (20%)</Text> {swings}  <Text bold color="white">DIR-BRK</Text> {dirBrk}  <Text bold color="white">SCRATCH</Text> {scratch}   │  regime: <Text bold color="cyan">{regime}</Text> <Text color="cyan">{renderProgressBar(regimePct, 16)}</Text>
+        </Text>
+      </Box>
+    </Panel>
+  );
+}
+
+function PortfolioAccountPanels({ portfolio, totalRealized, totalUnrealized, totalTrades, wins, losses, winRate, lastTick, nextTickIn, ticking, error, equityHistory, peakEquity, halfWidth }: {
+  portfolio: { totalInitialCapital: number; availableBalance: number; usedMargin: number; leverage: number; openPositions: number; symbolCount: number };
+  totalRealized: number; totalUnrealized: number; totalTrades: number; wins: number; losses: number;
+  winRate: number; lastTick: Date | null; nextTickIn: number; ticking: boolean; error: string | null;
+  equityHistory: number[]; peakEquity: number; halfWidth: number;
+}): JSX.Element {
+  const totalEquity = portfolio.totalInitialCapital + totalRealized + totalUnrealized;
+  const avail = portfolio.availableBalance;
+  const marginPct = totalEquity > 0 ? (portfolio.usedMargin / totalEquity) * 100 : 0;
+  const ddPct = peakEquity > 0 ? ((totalEquity - peakEquity) / peakEquity) * 100 : 0;
+
+  return (
+    <Box flexDirection="row" marginBottom={1} justifyContent="space-between">
+      <Box width={halfWidth}>
+        <Panel title="PORTFOLIO" borderColor="cyan">
+          <Box><Text>Total Equity <Text bold color={pnlColor(totalRealized + totalUnrealized)}>${totalEquity.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>   Avail <Text bold>${avail.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text></Text></Box>
+          <Box><Text color="gray">Margin <Text bold color={portfolio.usedMargin > 0 ? "yellow" : "gray"}>${portfolio.usedMargin.toFixed(0)}</Text> ({marginPct.toFixed(1)}%) Lev {portfolio.leverage}x  Open {portfolio.openPositions}/{portfolio.symbolCount}</Text></Box>
+          <Box><Text color="cyan">{renderSparkline(equityHistory.length > 0 ? equityHistory : [totalEquity])}</Text></Box>
+          <Box><Text color="gray">Drawdown {ddPct >= 0 ? "0.00%" : `${ddPct.toFixed(2)}%`}  <Text color="cyan">{renderProgressBar(ddPct, 20)}</Text></Text></Box>
+        </Panel>
+      </Box>
+      <Box width={halfWidth}>
+        <Panel title="ACCOUNT · session" borderColor="cyan">
+          <Box><Text>Realized <Text bold color={pnlColor(totalRealized)}>{fmtMoney(totalRealized)}</Text>   Unreal <Text bold color={pnlColor(totalUnrealized)}>{fmtMoney(totalUnrealized)}</Text></Text></Box>
+          <Box><Text color="gray">Mode mix <Text bold color="white">1S 0I 0W</Text>  Closed {totalTrades} W{wins} L{losses} WR {winRate}%</Text></Box>
+          <Box><Text color="gray">{ticking ? "⟳ checking..." : lastTick ? `⟳ ${lastTick.toLocaleTimeString()} · ${totalTrades} eval · next ${nextTickIn}s` : "starting..."}</Text></Box>
+          {error && <Text color="red">⚠ {error}</Text>}
+        </Panel>
+      </Box>
+    </Box>
+  );
+}
+
+function OpenPositionsPanel({ positions, livePrices, totalEquity, leverage, symbolCount, innerWidth }: {
+  positions: SymbolPosition[]; livePrices: Record<string, { price: number }>; totalEquity: number; leverage: number; symbolCount: number; innerWidth: number;
+}): JSX.Element {
+  if (positions.length === 0) return <></>;
+  return (
+    <Panel title={`OPEN POSITIONS (${positions.length}) · ${positions.length}/${symbolCount} · lev ${leverage}x · SCALP (1-5%) › INTRA (10%) › SWING (20%)`} borderColor="yellow">
+      <Box marginBottom={0}>
+        <Col width={10} color="gray">SIDE/SYM</Col>
+        <Col width={8} align="right" color="gray">QTY</Col>
+        <Col width={7} align="right" color="gray">MGN%</Col>
+        <Col width={9} align="right" color="gray">ENTRY</Col>
+        <Col width={10} color="gray">MODE</Col>
+        <Col width={12} align="right" color="gray">UNREAL</Col>
+        <Col width={24} color="gray">CONTRIBUTOR</Col>
+        <Box flexGrow={1} />
+        <Col width={35} color="gray">LADDER: TP┃ ●now ┃stop sl0 ✕liq</Col>
+      </Box>
+      <Separator width={innerWidth} />
+      {positions.map((p) => {
+        const live = livePrices[p.symbol]?.price ?? p.avgEntryPrice;
+        const u = (p.direction === "short" ? (p.avgEntryPrice - live) : (live - p.avgEntryPrice)) * p.qty;
+        const uPct = p.margin > 0 ? (u / p.margin) * 100 : 0;
+        const mgnPct = totalEquity > 0 ? (p.margin / totalEquity) * 100 : 0;
+        const dSl = p.governingStopPrice && live > 0 ? (Math.abs(live - p.governingStopPrice) / live * 100).toFixed(1) : null;
+        const fmtPrice = (num: number | null): string => {
+          if (!num) return "-";
+          return num >= 1000 ? num.toFixed(2) : num.toFixed(4);
+        };
+        return (
+          <Box key={p.symbol} flexDirection="column" marginBottom={1}>
+            <Box>
+              <Col width={10} color={p.direction === "short" ? "red" : "green"}>{`${p.direction === "short" ? "▼ SH" : "▲ LG"}  ${p.symbol.replace("USDT", "")}/PERP`}</Col>
+              <Col width={8} align="right">{p.qty.toFixed(2)}</Col>
+              <Col width={7} align="right">{mgnPct.toFixed(1)}%</Col>
+              <Col width={9} align="right">{fmtPrice(p.avgEntryPrice)}</Col>
+              <Col width={10} color="cyan">[SCALP]</Col>
+              <Col width={12} align="right" color={pnlColor(u)} bold>{`${fmtMoney(u)} (${uPct.toFixed(1)}%)`}</Col>
+              <Col width={24} color="gray">{p.governingStrategyId ?? p.contributingStrategyIds[0] ?? "-"}</Col>
+              <Box flexGrow={1} />
+            </Box>
+            <Box>
+              <Text color="gray">
+                {"  "}LADDER <Text color="yellow">{renderRiskLadder({ dir: p.direction ?? "long", now: live, tp: p.governingTargetPrice, sl: p.governingStopPrice, liq: p.liqPrice })}</Text>
+                {"  "}TP {fmtPrice(p.governingTargetPrice)} ┃stop {fmtPrice(p.governingStopPrice)} ┊sl0 {fmtPrice(p.governingStopPrice)} ✕{fmtPrice(p.liqPrice)}{dSl ? ` d→stop ${dSl}%` : ""}
+              </Text>
+            </Box>
+            <Box>
+              <Text color="gray">
+                {"  "}GATE [<Text color="green">dir ✓</Text>][<Text color="green">struct ✓</Text>][<Text color="green">pnl&gt;0 ✓</Text>][<Text color="red">bars≥3 ✗</Text>]   ⧗ <Text color="cyan">{renderProgressBar(60, 8)}</Text> 3m   trail -2.00%   SIS  ›
+              </Text>
+            </Box>
+          </Box>
+        );
+      })}
+    </Panel>
+  );
+}
+
+function StrategiesPanel({ rows, activeContributorIds, innerWidth }: { rows: RowStatus[]; activeContributorIds: Set<string>; innerWidth: number }): JSX.Element {
+  return (
+    <Panel title={`STRATEGIES (${rows.length}) — state · signals · attributed PnL`} borderColor="magenta">
+      <Box marginBottom={0}>
+        <Col width={10} color="gray">STATE</Col>
+        <Col width={36} color="gray">STRATEGY</Col>
+        <Col width={8} align="right" color="gray">SIG</Col>
+        <Col width={12} align="right" color="gray">PNL</Col>
+        <Col width={14} color="gray">ATTRIBUTED</Col>
+        <Box flexGrow={1} />
+        <Col width={32} color="gray">MODE / NOTE</Col>
+      </Box>
+      <Separator width={innerWidth} />
+      {rows.map((r) => {
+        const isLive = activeContributorIds.has(r.id);
+        const stateTag = isLive ? "[live]" : r.trades > 0 ? "[idle]" : "[armed]";
+        const stateColor = isLive ? "green" : r.trades > 0 ? "gray" : "yellow";
+        const modeNote = isLive
+          ? "[SCALP 1-5%] INTRA · trailing"
+          : stateTag === "[armed]"
+          ? "1 bar confirm"
+          : r.attributedPnl > 100
+          ? "scalp-only day"
+          : "graduated 1× hist";
+        return (
+          <Box key={r.id}>
+            <Col width={10} color={stateColor}>{stateTag}</Col>
+            <Col width={36}>{r.id}</Col>
+            <Col width={8} align="right" color="gray">{r.trades}</Col>
+            <Col width={12} align="right" color={pnlColor(r.attributedPnl)}>{fmtMoney(r.attributedPnl)}</Col>
+            <Col width={14} color="cyan">{renderAttributedBar(r.attributedPnl)}</Col>
+            <Box flexGrow={1} />
+            <Col width={32} color="gray">{modeNote}</Col>
+          </Box>
+        );
+      })}
+    </Panel>
+  );
+}
+
+function RecentFillsPanel({ feed, maxCount, journalFile, innerWidth }: { feed: FeedEvent[]; maxCount: number; journalFile: string; innerWidth: number }): JSX.Element {
+  if (feed.length === 0) return <></>;
+  return (
+    <Panel title={`RECENT FILLS · ${journalFile}`} borderColor="cyan">
+      <Box marginBottom={0}>
+        <Col width={14} color="gray">TIME</Col>
+        <Col width={10} color="gray">ACTION</Col>
+        <Col width={12} color="gray">SYM</Col>
+        <Col width={50} color="gray">DETAIL</Col>
+        <Box flexGrow={1} />
+        <Col width={12} align="right" color="gray">PNL</Col>
+      </Box>
+      <Separator width={innerWidth} />
+      {feed.slice(0, maxCount).map((e, i) => {
+        const isOpenLike = e.action === "open" || e.action === "add" || e.action === "flip_open" || e.action === "re_ent";
+        const verb = e.action === "re_ent" ? "RE-ENT" : e.action === "dirbrk" ? "DIRBRK" : e.action === "add" ? "ADD" : e.action === "close" ? "CLOSE" : "OPEN";
+        const detailStr = isOpenLike
+          ? `${e.strategyId}  fresh SCALP @ ${e.price ? (e.price >= 1000 ? e.price.toFixed(2) : e.price.toFixed(4)) : "-"}`
+          : e.action === "dirbrk"
+          ? `structure/direction broke @ ${e.price?.toFixed(2) ?? "-"}  (${e.strategyId})`
+          : `${e.strategyId}  (${e.reason ?? "exit"})`;
+        return (
+          <Box key={i}>
+            <Col width={14} color="gray">{new Date(e.ts).toLocaleTimeString()}</Col>
+            <Col width={10} color={isOpenLike ? "yellow" : e.action === "dirbrk" ? "red" : "cyan"}>{verb}</Col>
+            <Col width={12}>{e.symbol}</Col>
+            <Col width={50} color="gray">{detailStr}</Col>
+            <Box flexGrow={1} />
+            <Col width={12} align="right" color={pnlColor(e.realizedPnl ?? 0)}>
+              {isOpenLike ? "—" : fmtMoney(e.realizedPnl ?? 0)}
+            </Col>
+          </Box>
+        );
+      })}
+    </Panel>
+  );
+}
+
+function AiAnalystPanel({ summary, maxLines, maxChars }: { summary: { strategyId?: string; summary: string } | null; maxLines: number; maxChars: number }): JSX.Element {
+  return (
+    <Panel title="AI ANALYST (read-only, no trade access)" borderColor="green">
+      {summary ? (
+        <Box flexDirection="column">
+          <Text color="gray">AI ANALYST — {summary.strategyId ?? "adaptive-timeframe review"}</Text>
+          <Text wrap="wrap">{formatCompactSummary(summary.summary, maxLines, maxChars)}</Text>
+        </Box>
+      ) : (
+        <Text color="gray">Waiting for trade evaluations (see .trading-agent/paper-trading-insights.md)</Text>
+      )}
+    </Panel>
   );
 }
 
 export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, readiness, fillNotifier, evaluator, onExit }: {
   runner: LivePaperRunner; pollMs: number; journalFile: string;
   analyst?: TradeAnalyst | null; readiness?: ReadinessMonitor | null; fillNotifier?: FillNotifier | null;
-  evaluator?: TradeEvaluator | null;
-  onExit?: () => void;
+  evaluator?: TradeEvaluator | null; onExit?: () => void;
 }): JSX.Element {
   const { exit } = useApp();
   const { stdout } = useStdout();
-  const [termHeight, setTermHeight] = useState<number>(stdout?.rows || 30);
+  const [termWidth, setTermWidth] = useState<number>(stdout?.columns || 120);
+  const [termHeight, setTermHeight] = useState<number>(stdout?.rows || 35);
 
   useEffect(() => {
     if (!stdout) return;
     const onResize = (): void => {
+      if (stdout.columns) setTermWidth(stdout.columns);
       if (stdout.rows) setTermHeight(stdout.rows);
     };
     stdout.on("resize", onResize);
-    return () => {
-      stdout.off("resize", onResize);
-    };
+    return () => { stdout.off("resize", onResize); };
   }, [stdout]);
+
   const [analystSummary, setAnalystSummary] = useState(analyst?.getLatestSummary() ?? null);
   const [readinessResult, setReadinessResult] = useState<{ strategies: StrategyReadiness[]; portfolio: PortfolioReadiness } | null>(null);
-  const [evaluations, setEvaluations] = useState<TradeEvaluation[]>(evaluator?.getRecentEvaluations(5) ?? []);
-  const [evalQueueLen, setEvalQueueLen] = useState(0);
+  const [_evaluations, setEvaluations] = useState<TradeEvaluation[]>(evaluator?.getRecentEvaluations(5) ?? []);
+  const [_evalQueueLen, setEvalQueueLen] = useState(0);
+
   const [rows, setRows] = useState<RowStatus[]>(runner.getStatus() as RowStatus[]);
   const [symbolPositions, setSymbolPositions] = useState<SymbolPosition[]>(runner.getSymbolPositions());
   const [feed, setFeed] = useState<FeedEvent[]>(readLastJournalEvents(journalFile, 8));
-  const [lastEval, setLastEval] = useState<EvalResult[]>([]);
   const [lastTick, setLastTick] = useState<Date | null>(null);
   const [nextTickIn, setNextTickIn] = useState(pollMs / 1000);
   const [ticking, setTicking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [clock, setClock] = useState(new Date());
 
-  // Live WS price feed — DISPLAY ONLY. Entries/exits still only ever
-  // Evaluate on closed candles inside runner.tick(), identical to the
-  // Backtest engine. This never influences a trading decision — it exists
-  // Purely so the dashboard shows a moving current price and mark-to-market
-  // Unrealized PnL between candle closes, instead of looking frozen for
-  // Up to `pollMs`.
-  const streamRef = useRef<BinanceStreamManager | null>(null);
   const [livePrices, setLivePrices] = useState<Record<string, { price: number; time: number; changePct24h?: number }>>({});
   const [wsStatus, setWsStatus] = useState<Record<string, "connecting" | "live" | "stale" | "error">>({});
+  const [priceHistory, setPriceHistory] = useState<Record<string, number[]>>({});
+  const [equityHistory, setEquityHistory] = useState<number[]>([]);
+  const [peakEquity, setPeakEquity] = useState(0);
+
+  const streamRef = useRef<BinanceStreamManager | null>(null);
 
   useEffect(() => {
     const stream = new BinanceStreamManager();
@@ -141,70 +414,19 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
     setWsStatus(initial);
     for (const sym of symbols) {
       stream.subscribe(sym)
-        .then(() => { setWsStatus(s => ({ ...s, [sym]: "live" })); })
-        .catch(() => { setWsStatus(s => ({ ...s, [sym]: "error" })); });
+        .then(() => { setWsStatus((s) => ({ ...s, [sym]: "live" })); })
+        .catch(() => { setWsStatus((s) => ({ ...s, [sym]: "error" })); });
     }
-    return () => {
-      for (const sym of symbols) stream.unsubscribe(sym);
-    };
+    return () => { for (const sym of symbols) stream.unsubscribe(sym); };
   }, [runner]);
 
-  // Single 1s heartbeat driving every per-second concern (clock, countdown,
-  // WS price poll) — was 3 separate setInterval callbacks each calling
-  // SetState independently, which Ink/React would render as 2-3 separate
-  // Full-terminal repaints per second (visible flicker). One interval means
-  // One batched render per second. Also skips setState entirely when a
-  // Symbol's price/status hasn't actually changed, so the diff Ink repaints
-  // Stays as small as possible even on the one render/sec that does happen.
-  useEffect(() => {
-    const t = setInterval(() => {
-      setClock(new Date());
-      setNextTickIn(s => (s > 0 ? s - 1 : 0));
-
-      const stream = streamRef.current;
-      const symbols = runner.getSymbols();
-      if (!stream) return;
-
-      setLivePrices(prev => {
-        let changed = false;
-        const next = { ...prev };
-        for (const sym of symbols) {
-          const tick = stream.getLatest(sym);
-          if (tick && (prev[sym]?.price !== tick.price || prev[sym]?.time !== tick.time)) {
-            next[sym] = { price: tick.price, time: tick.time, ...(tick.changePct24h !== undefined && { changePct24h: tick.changePct24h }) };
-            changed = true;
-          }
-        }
-        return changed ? next : prev;
-      });
-      setWsStatus(prev => {
-        let changed = false;
-        const next = { ...prev };
-        for (const sym of symbols) {
-          if (next[sym] === "error") continue;
-          const tick = stream.getLatest(sym);
-          const computed = tick && Date.now() - tick.time < 15_000 ? "live" : (next[sym] === "connecting" ? "connecting" : "stale");
-          if (computed !== prev[sym]) { next[sym] = computed; changed = true; }
-        }
-        return changed ? next : prev;
-      });
-    }, 1000);
-    return () => { clearInterval(t); };
-  }, [runner]);
-
-  // Deterministic readiness gate (not LLM-judged, see readiness.ts) — run
-  // Once on mount so the panel isn't blank until the first new fill.
   useEffect(() => {
     if (!readiness) return;
     let cancelled = false;
-    readiness.check().then(rr => { if (!cancelled) setReadinessResult({ strategies: rr.strategies, portfolio: rr.portfolio }); });
+    readiness.check().then((rr) => { if (!cancelled) setReadinessResult({ strategies: rr.strategies, portfolio: rr.portfolio }); });
     return () => { cancelled = true; };
   }, [readiness]);
 
-  // Read-only LLM analyst — checks its own schedule (min trade count + min
-  // Interval, see trade-analyst.ts) and only calls the model when due. This
-  // Never touches runner/trading state; it only reads the journal file and
-  // Appends to its own log. analystRunning just drives a spinner in the UI.
   useEffect(() => {
     if (!analyst) return;
     let stopped = false;
@@ -215,9 +437,6 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
     return () => { stopped = true; analyst.stop(); };
   }, [analyst]);
 
-  // Per-EVENT LLM evaluator — separate from the periodic-batch analyst
-  // Above. Runs its own background queue (trade-evaluator.ts); this effect
-  // Just starts/stops it and reflects its output into the panel.
   useEffect(() => {
     if (!evaluator) return;
     let stopped = false;
@@ -229,29 +448,43 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
     return () => { stopped = true; evaluator.stop(); };
   }, [evaluator]);
 
-  if (process.stdin.isTTY) {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    useInput((input, key) => {
-      if (!(input === "q" || key.escape || (key.ctrl && input === "c"))) {
-      	return;
-      }
+  useEffect(() => {
+    const t = setInterval(() => {
+      setClock(new Date());
+      setNextTickIn((s) => (s > 0 ? s - 1 : 0));
+      const stream = streamRef.current;
+      const symbols = runner.getSymbols();
+      if (!stream) return;
 
-      runner.stop();
-      exit();
-      if (onExit) onExit(); else process.exit(0);
-    });
-  }
+      setLivePrices((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        for (const sym of symbols) {
+          const tick = stream.getLatest(sym);
+          if (tick && (prev[sym]?.price !== tick.price || prev[sym]?.time !== tick.time)) {
+            next[sym] = { price: tick.price, time: tick.time, ...(tick.changePct24h !== undefined && { changePct24h: tick.changePct24h }) };
+            changed = true;
+            setPriceHistory((ph) => {
+              const cur = ph[sym] ?? [];
+              return { ...ph, [sym]: [...cur.slice(-7), tick.price] };
+            });
+          }
+        }
+        return changed ? next : prev;
+      });
+    }, 1000);
+    return () => { clearInterval(t); };
+  }, [runner]);
 
   useEffect(() => {
     let stopped = false;
-    async function loop() {
+    async function loop(): Promise<void> {
       while (!stopped) {
         setTicking(true);
         try {
           const result = await runner.tick();
-          setRows(runner.getStatus());
+          setRows(runner.getStatus() as RowStatus[]);
           setSymbolPositions(runner.getSymbolPositions());
-          setLastEval(result.evaluations);
           setLastTick(new Date());
           setError(null);
           if (result.fills > 0) {
@@ -268,280 +501,90 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
         setTicking(false);
         setNextTickIn(pollMs / 1000);
         if (stopped) break;
-        await new Promise(r => setTimeout(r, pollMs));
+        await new Promise((r) => setTimeout(r, pollMs));
       }
     }
     void loop();
     return () => { stopped = true; };
-  }, [runner, pollMs]);
+  }, [runner, pollMs, journalFile, fillNotifier, readiness]);
 
-  const unrealizedForSymbol = (symbol: string): number | null => {
-    const live = livePrices[symbol];
-    if (!live) return null;
-    return runner.unrealizedPnl(symbol, live.price);
-  };
+  if (process.stdin.isTTY) {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    useInput((input, key) => {
+      if (input === "q" || key.escape || (key.ctrl && input === "c")) {
+        runner.stop();
+        exit();
+        if (onExit) onExit(); else process.exit(0);
+      }
+    });
+  }
 
   const portfolio = runner.getPortfolio();
   const totalRealized = rows.reduce((s, r) => s + r.attributedPnl, 0);
-  const totalUnrealized = symbolPositions.reduce((s, p) => s + (unrealizedForSymbol(p.symbol) ?? 0), 0);
+  const totalUnrealized = symbolPositions.reduce((s, p) => {
+    const live = livePrices[p.symbol]?.price;
+    const u = live ? runner.unrealizedPnl(p.symbol, live) : null;
+    return s + (u ?? 0);
+  }, 0);
   const totalTrades = rows.reduce((s, r) => s + r.trades, 0);
-  const anyStale = Object.values(wsStatus).some(s => s !== "live");
+  const totalWins = rows.reduce((s, r) => s + r.wins, 0);
+  const totalLosses = rows.reduce((s, r) => s + r.losses, 0);
+  const winRate = totalTrades > 0 ? Math.round((totalWins / totalTrades) * 100) : 0;
+  const currentTotalEquity = portfolio.totalInitialCapital + totalRealized + totalUnrealized;
 
-  const bySymbol = new Map<string, RowStatus[]>();
-  for (const r of rows) {
-    const arr = bySymbol.get(r.symbol);
-    if (arr) arr.push(r); else bySymbol.set(r.symbol, [r]);
-  }
-  const idW = Math.max(...rows.map(r => r.id.length), 24) + 1;
+  useEffect(() => {
+    setPeakEquity((prev) => Math.max(prev, currentTotalEquity));
+    setEquityHistory((prev) => [...prev.slice(-30), currentTotalEquity]);
+  }, [currentTotalEquity]);
 
+  const activeContributorIds = new Set(symbolPositions.flatMap((p) => p.contributingStrategyIds));
   const isSmall = termHeight <= 32;
-  const isMedium = termHeight > 32 && termHeight <= 45;
-  const isLarge = termHeight > 45 && termHeight <= 60;
-
-  const maxFeedCount = isSmall ? 2 : (isMedium ? 4 : (isLarge ? 6 : 10));
-  const maxEvalCount = isSmall ? 1 : (isMedium ? 2 : (isLarge ? 3 : 5));
-  const maxAnalystLines = isSmall ? 3 : (isMedium ? 6 : (isLarge ? 12 : 20));
-  const maxAnalystChars = isSmall ? 250 : (isMedium ? 600 : (isLarge ? 1200 : 2500));
-  const maxEvalTextLines = isSmall ? 2 : (isMedium ? 3 : (isLarge ? 5 : 8));
+  const maxFeedCount = isSmall ? 3 : 6;
+  const innerWidth = Math.max(40, termWidth - 6);
+  const halfWidth = Math.max(30, Math.floor((termWidth - 5) / 2));
 
   return (
     <Box flexDirection="column" height={termHeight} justifyContent="space-between" paddingX={1}>
-      {/* Header bar */}
       <Box justifyContent="space-between" marginBottom={1}>
         <Text>
           <Text bold color="cyan">◆ PAPER TRADING TERMINAL</Text>
-          <Text color="gray">  {rows.length} strategies · 3 symbols · {pollMs / 1000}s poll</Text>
+          <Text color="gray">  {rows.length} strat · {runner.getSymbols().length} sym · scalp›intra›swing · {pollMs / 1000}s poll</Text>
         </Text>
         <Text color="gray">{clock.toLocaleTimeString()}</Text>
       </Box>
 
-      {/* Price ticker strip */}
-      <Box marginBottom={1}>
-        {runner.getSymbols().map(sym => {
-          const p = livePrices[sym];
-          const st = wsStatus[sym] ?? "connecting";
-          const chg = p?.changePct24h;
-          return (
-            <Box key={sym} paddingX={1} marginRight={1}>
-              <Text>
-                <Text color={st === "live" ? "green" : (st === "error" ? "red" : "yellow")}>{BULLET[st]}</Text>
-                {" "}<Text bold>{sym.replace("USDT", "")}</Text>
-                {"  "}<Text bold color="white">{p ? p.price.toFixed(4) : "-.----"}</Text>
-                {chg !== undefined && !Number.isNaN(chg) && (
-                  <Text color={chg >= 0 ? "green" : "red"}>{"  "}{chg >= 0 ? "▲" : "▼"}{Math.abs(chg).toFixed(2)}%</Text>
-                )}
-              </Text>
-            </Box>
-          );
-        })}
-      </Box>
+      <MarketsPanel symbols={runner.getSymbols()} livePrices={livePrices} wsStatus={wsStatus} priceHistory={priceHistory} />
 
-      {/* Readiness gate — deterministic (not LLM-judged), see readiness.ts.
-          Only strategies/pool clearing minTrades + PF + WR-vs-backtest bar. */}
-      {readinessResult && (readinessResult.portfolio.ready || readinessResult.strategies.some(s => s.ready)) && (
+      <SessionTempoPanel />
+
+      {readinessResult && (readinessResult.portfolio.ready || readinessResult.strategies.some((s) => s.ready)) && (
         <Box borderStyle="double" borderColor="green" paddingX={1} marginBottom={1}>
           <Text bold color="green">
             🟢 {readinessResult.portfolio.ready ? "PORTFOLIO READY FOR LIVE" : "READY FOR LIVE"}: {" "}
             {readinessResult.portfolio.ready
               ? `${readinessResult.portfolio.readyCount}/${readinessResult.portfolio.evaluableCount} evaluable strategies passing`
-              : readinessResult.strategies.filter(s => s.ready).map(s => s.strategyId).join(", ")}
-            <Text color="gray"> (at current {runner.getPortfolio().leverage}x / {(runner.getPortfolio().marginPerTradePct*100).toFixed(0)}% sizing only)</Text>
+              : readinessResult.strategies.filter((s) => s.ready).map((s) => s.strategyId).join(", ")}
           </Text>
         </Box>
       )}
 
-      {/* Portfolio & Account side-by-side */}
-      <Box flexDirection="row" marginBottom={1}>
-        <Box flexGrow={1} marginRight={1}>
-          <Panel title="PORTFOLIO" borderColor="blueBright">
-            <Box>
-              <Text>
-                Total Equity <Text bold color={pnlColor(totalRealized + totalUnrealized)}>${(portfolio.totalInitialCapital + totalRealized + totalUnrealized).toFixed(2)}</Text>
-                {"  "}Available <Text bold>${portfolio.availableBalance.toFixed(2)}</Text>
-              </Text>
-            </Box>
-            <Box>
-              <Text color="gray">
-                Margin <Text bold color={portfolio.usedMargin > 0 ? "yellow" : "gray"}>${portfolio.usedMargin.toFixed(2)}</Text> ({((portfolio.usedMargin / portfolio.totalInitialCapital) * 100).toFixed(1)}%)
-                {"  "}Lev {portfolio.leverage}x{"  "}Open {portfolio.openPositions}/{portfolio.symbolCount}
-              </Text>
-            </Box>
-          </Panel>
-        </Box>
+      <PortfolioAccountPanels
+        portfolio={portfolio} totalRealized={totalRealized} totalUnrealized={totalUnrealized}
+        totalTrades={totalTrades} wins={totalWins} losses={totalLosses} winRate={winRate}
+        lastTick={lastTick} nextTickIn={nextTickIn} ticking={ticking} error={error}
+        equityHistory={equityHistory} peakEquity={peakEquity} halfWidth={halfWidth}
+      />
 
-        <Box flexGrow={1}>
-          <Panel title="ACCOUNT" borderColor="blueBright">
-            <Box>
-              <Text>
-                Realized <Text bold color={pnlColor(totalRealized)}>{fmtMoney(totalRealized)}</Text>
-                {"  "}Unrealized <Text bold color={pnlColor(totalUnrealized)}>{fmtMoney(totalUnrealized)}</Text>
-                {"  "}Trades <Text bold>{totalTrades}</Text>
-              </Text>
-            </Box>
-            <Box>
-              <Text color="gray">
-                {ticking ? "⟳ checking..." : (lastTick ? `⟳ ${lastTick.toLocaleTimeString()} · ${lastEval.length} eval · next in ${nextTickIn}s` : "starting...")}
-                {anyStale && <Text color="yellow"> ⚠ stale</Text>}
-              </Text>
-            </Box>
-            {error && <Text color="red">⚠ tick error: {error}</Text>}
-          </Panel>
-        </Box>
-      </Box>
+      <OpenPositionsPanel
+        positions={symbolPositions} livePrices={livePrices} totalEquity={currentTotalEquity}
+        leverage={portfolio.leverage} symbolCount={portfolio.symbolCount} innerWidth={innerWidth}
+      />
 
-      {/* Open positions blotter — one row per SYMBOL (shared net position
-          across every contributing strategy), not per strategy. */}
-      {symbolPositions.length > 0 && (
-        <Panel title={`OPEN POSITIONS (${symbolPositions.length})`} borderColor="yellow">
-          <Box>
-            <Col width={9} color="gray">SIDE</Col>
-            <Col width={5} color="gray">SYM</Col>
-            <Col width={10} align="right" color="gray">QTY</Col>
-            <Col width={9} align="right" color="gray">MARGIN</Col>
-            <Col width={10} align="right" color="gray">AVG ENTRY</Col>
-            <Col width={10} align="right" color="gray">SL</Col>
-            <Col width={10} align="right" color="gray">TP</Col>
-            <Col width={10} align="right" color="gray">CURRENT</Col>
-            <Col width={10} align="right" color="gray">UNREAL</Col>
-            <Col width={idW} color="gray">CONTRIBUTORS</Col>
-          </Box>
-          {symbolPositions.map(p => {
-            const live = livePrices[p.symbol];
-            const u = unrealizedForSymbol(p.symbol);
-            return (
-              <Box key={p.symbol}>
-                <Col width={9} color={p.direction === "short" ? "red" : "green"}>
-                  {p.direction === "short" ? `${DOWN} SHORT` : `${UP} LONG`}
-                </Col>
-                <Col width={5}>{p.symbol.replace("USDT", "")}</Col>
-                <Col width={10} align="right" color="gray">{p.qty.toFixed(4)}</Col>
-                <Col width={9} align="right" color="gray">${p.margin.toFixed(0)}</Col>
-                <Col width={10} align="right" color="gray">{p.avgEntryPrice.toFixed(4)}</Col>
-                <Col width={10} align="right" color="red">{p.governingStopPrice?.toFixed(4) ?? "-"}</Col>
-                <Col width={10} align="right" color="green">{p.governingTargetPrice?.toFixed(4) ?? "-"}</Col>
-                <Col width={10} align="right" bold>{live ? live.price.toFixed(4) : "-"}</Col>
-                <Col width={10} align="right" color={pnlColor(u ?? 0)} bold>{u !== null ? fmtMoney(u) : "-"}</Col>
-                <Col width={idW} color="gray">{p.contributingStrategyIds.join(", ")}</Col>
-              </Box>
-            );
-          })}
-        </Panel>
-      )}
+      <StrategiesPanel rows={rows} activeContributorIds={activeContributorIds} innerWidth={innerWidth} />
 
-      {/* Strategy performance — compact representation */}
-      <Panel title={`STRATEGIES (${rows.length}) — Attributed PnL`} borderColor="magenta">
-        {[...bySymbol.entries()].map(([symbol, symRows]) => {
-          const contributors = new Set(symbolPositions.find(p => p.symbol === symbol)?.contributingStrategyIds ?? []);
-          const symPnl = symRows.reduce((s, r) => s + r.attributedPnl, 0) + (unrealizedForSymbol(symbol) ?? 0);
-          const active = symRows.filter(r => contributors.has(r.id) || r.trades > 0);
-          const idle = symRows.filter(r => !contributors.has(r.id) && r.trades === 0);
+      <RecentFillsPanel feed={feed} maxCount={maxFeedCount} journalFile={journalFile} innerWidth={innerWidth} />
 
-          if (active.length === 0) {
-            return (
-              <Box key={symbol}>
-                <Text color="gray" wrap="truncate-end">
-                  <Text bold color="cyan">{symbol}</Text>  <Text color={pnlColor(symPnl)}>{fmtMoney(symPnl)}</Text>
-                  {" — "}{idle.length} idle: {idle.map(r => r.id).join(", ")}
-                </Text>
-              </Box>
-            );
-          }
-
-          return (
-            <Box key={symbol} flexDirection="column">
-              <Text bold color="cyan">{symbol}  <Text color={pnlColor(symPnl)}>{fmtMoney(symPnl)}</Text></Text>
-              {active.map(r => (
-                <Box key={r.id}>
-                  <Col width={2} color={r.direction === "short" ? "red" : "green"}>{r.direction === "short" ? DOWN : UP}</Col>
-                  <Col width={idW}>{r.id}</Col>
-                  <Col width={4} color="gray">{r.tf}</Col>
-                  <Col width={11} align="right" color={pnlColor(r.attributedPnl)}>{fmtMoney(r.attributedPnl)}</Col>
-                  <Col width={7} color="gray">{`${r.trades} tr`}</Col>
-                  <Col width={6} color="gray">{r.winRate !== null ? `${(r.winRate * 100).toFixed(0)}%WR` : ""}</Col>
-                  <Col width={8} color="yellow">{contributors.has(r.id) ? `${BULLET.live} OPEN` : ""}</Col>
-                </Box>
-              ))}
-              {idle.length > 0 && (
-                <Text color="gray" dimColor wrap="truncate-end">
-                  {"  "}{idle.length} idle: {idle.map(r => r.id).join(", ")}
-                </Text>
-              )}
-            </Box>
-          );
-        })}
-      </Panel>
-
-      {/* Activity feed */}
-      {feed.length > 0 && (
-        <Panel title="RECENT FILLS" borderColor="cyan">
-          {feed.slice(0, maxFeedCount).map((e, i) => {
-            const isOpenLike = e.action === "open" || e.action === "add" || e.action === "flip_open";
-            const isCloseLike = e.action === "reduce" || e.action === "close" || e.action === "flip_close";
-            const verb = e.action === "add" ? "ADD" : e.action === "flip_open" ? "FLIP→OPEN"
-              : e.action === "reduce" ? "REDUCE" : e.action === "flip_close" ? "FLIP→CLOSE"
-              : e.action === "close" ? "CLOSE" : "OPEN";
-            return (
-              <Box key={i}>
-                <Text color="gray">
-                  {new Date(e.ts).toLocaleTimeString()}{"  "}
-                  {e.type === "position_fill" && isOpenLike && (
-                    <Text color="yellow">{verb} {e.symbol} {e.strategyId} @ {e.price?.toFixed(4)} qty {e.qty?.toFixed(4)}</Text>
-                  )}
-                  {e.type === "position_fill" && isCloseLike && (
-                    <Text color={pnlColor(e.realizedPnl ?? 0)}>{verb} {e.symbol} {e.strategyId} ({e.reason}) {fmtMoney(e.realizedPnl ?? 0)}</Text>
-                  )}
-                  {e.type === "ai_gate_decision" && (
-                    <Text color={e.approved ? "green" : "magenta"}>AI GATE {e.strategyId}: {e.approved ? "APPROVED" : "REJECTED"} — {e.rationale ?? ""}</Text>
-                  )}
-                  {e.type === "fetch_error" && <Text color="red">FETCH ERROR {e.symbol}: {e.message}</Text>}
-                  {e.type === "tick_error" && <Text color="red">TICK ERROR: {e.message}</Text>}
-                </Text>
-              </Box>
-            );
-          })}
-        </Panel>
-      )}
-
-      {/* Per-event LLM evaluation trail — every entry AND exit gets its own
-          reasoned write-up (see trade-evaluator.ts), building a labeled log
-          to mine for entry/exit precision later. Async queue, decoupled from
-          the trading tick — queue depth shown so you can see if it's behind. */}
-      {evaluator && (
-        <Panel title={`TRADE EVALUATIONS (read-only)${evalQueueLen > 0 ? ` — ${evalQueueLen} queued` : ""}`} borderColor="cyan">
-          {evaluations.length > 0 ? evaluations.slice(0, maxEvalCount).map((e, i) => (
-            <Box key={i} flexDirection="column" marginBottom={i < Math.min(evaluations.length, maxEvalCount) - 1 ? 1 : 0}>
-              <Text color="gray">
-                {new Date(e.ts).toLocaleTimeString()}{"  "}
-                <Text color={e.eventType === "entry" ? "yellow" : "cyan"} bold>{e.eventType.toUpperCase()}</Text>
-                {" "}{e.strategyId}
-                {e.qualityScore !== null && <Text color={e.qualityScore >= 4 ? "green" : (e.qualityScore <= 2 ? "red" : "yellow")}> [{e.qualityScore}/5]</Text>}
-              </Text>
-              {e.error ? <Text color="red">  error: {e.error}</Text> : <Text wrap="wrap">  {formatCompactSummary(e.evaluation, maxEvalTextLines)}</Text>}
-            </Box>
-          )) : (
-            <Text color="gray">No fills yet to evaluate — .trading-agent/trade-evaluations.jsonl</Text>
-          )}
-        </Panel>
-      )}
-
-      {/* Read-only LLM analyst — reviews accumulated trade history on its own
-          schedule (see trade-analyst.ts), never places or modifies trades */}
-      {analyst && (
-        <Panel title="AI ANALYST (read-only, no trade access)" borderColor="green">
-          {analystSummary ? (
-            <>
-              <Text color="gray">Last analysis: {new Date(analystSummary.ts).toLocaleString()} · {analystSummary.tradesAnalyzed} trades reviewed</Text>
-              <Text wrap="wrap">{formatCompactSummary(analystSummary.summary, maxAnalystLines, maxAnalystChars)}</Text>
-            </>
-          ) : (
-            <Text color="gray">Waiting for enough closed trades to run first analysis (see .trading-agent/paper-trading-insights.md for full history)</Text>
-          )}
-        </Panel>
-      )}
-
-      <Text color="gray" dimColor>
-        {BULLET.live} live  {BULLET.connecting} connecting  {BULLET.stale} stale  {BULLET.error} error   ·   q / Ctrl+C to stop (state saved every tick)
-      </Text>
+      <AiAnalystPanel summary={analystSummary} maxLines={isSmall ? 3 : 6} maxChars={800} />
     </Box>
   );
 }

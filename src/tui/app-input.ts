@@ -125,6 +125,7 @@ function useBracketedPaste(refs: InputRefs, setPrompt: Dispatch<SetStateAction<s
     };
     process.stdin.prependListener("data", handler);
     return () => {
+      refs.pasting.current = false;
       process.stdin.off("data", handler);
     };
   }, [refs, setPrompt]);
@@ -152,9 +153,7 @@ function handleStdinData(data: Buffer, refs: InputRefs, setPrompt: Dispatch<SetS
   refs.pasteBuf.current = "";
   setPrompt((p) => refs.appendPasted(p, pasted));
   refs.buf.current = parts.slice(1).join(PASTE_END_MARKER);
-  setTimeout(() => {
-    refs.pasting.current = false;
-  }, 0);
+  refs.pasting.current = false;
 }
 
 function useInputRefs(session: InputSession): InputRefs {

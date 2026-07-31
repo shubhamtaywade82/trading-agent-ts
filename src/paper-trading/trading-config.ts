@@ -12,10 +12,22 @@ export const DEFAULT_TRADING_CONFIG: TradingConfig = {
   initialCapital: 10_000,
   riskPercentageOfCapital: 0.015,
   stopLossPct: 0.02,
-  takeProfitPct: 0.04,
+  takeProfitPct: 0.04, // Initial 1-5% scalp target range default
   commissionRatePct: 0.0005,
   maxMarginUtilizationPct: 0.5,
   leverage: 10,
+};
+
+export interface AdaptiveTargetMilestones {
+  scalpTargetPct: number;    // 0.01 - 0.05 (1% to 5%)
+  intradayTargetPct: number; // 0.10 (10%)
+  swingTargetPct: number;    // 0.20 (20%)
+}
+
+export const DEFAULT_ADAPTIVE_TARGETS: AdaptiveTargetMilestones = {
+  scalpTargetPct: 0.03,    // 3% default scalp target (1-5% range)
+  intradayTargetPct: 0.10, // 10% intraday target
+  swingTargetPct: 0.20,    // 20% swing target
 };
 
 export function validateTradingConfig(config: Partial<TradingConfig>): TradingConfig {

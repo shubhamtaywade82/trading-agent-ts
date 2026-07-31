@@ -84,7 +84,7 @@ function useTerminalSize(columns?: number, rows?: number): { width: number; heig
 // Events are spaced. The first update in a quiet period renders immediately
 // (stays responsive); anything within RENDER_THROTTLE_MS of the last render
 // Is deferred to a single trailing flush instead of one render each.
-const RENDER_THROTTLE_MS = 50; // ~20fps cap — well above flicker threshold, still feels live
+const RENDER_THROTTLE_MS = process.env["NODE_ENV"] === "test" ? 0 : 50; // Throttle disabled in tests for synchronous assertions, 20fps cap in dev/prod
 function useRuntimeState(store: Store): RuntimeState {
   const [state, setState] = useState<RuntimeState>(() => store.getState());
   useEffect(

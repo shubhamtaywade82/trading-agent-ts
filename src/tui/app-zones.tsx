@@ -109,8 +109,8 @@ function renderHeaderRow(title: string, rule: string): JSX.Element {
 }
 
 function renderActiveView(props: ShellProps): JSX.Element {
-  const activeView = VIEWS[props.ui.activeView];
-  return activeView({ state: props.state, width: props.width, rows: props.contentRows, detail: props.detail });
+  const ActiveViewComponent = VIEWS[props.ui.activeView];
+  return <ActiveViewComponent state={props.state} width={props.width} rows={props.contentRows} detail={props.detail} />;
 }
 
 function closeOverlay(props: ShellProps): void {

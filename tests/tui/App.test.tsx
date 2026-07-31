@@ -68,7 +68,7 @@ let mockTime = 100_000;
 // Human never sends two keystrokes within 20ms, but a same-tick 0ms test
 // Helper would, and App would (correctly) mistake that for a paste burst.
 const tick = async () => {
-  mockTime += 30; // Shift mock time by 30ms (which is > FAST_INPUT_MS = 20)
+  mockTime += 60; // Shift mock time by 60ms (which is > RENDER_THROTTLE_MS = 50ms)
   // Real wait, not mocked: must clear App.tsx's RENDER_THROTTLE_MS (50ms) so a
   // Deferred store-driven render has actually flushed before assertions run.
   await new Promise((resolve) => setTimeout(resolve, 60));
