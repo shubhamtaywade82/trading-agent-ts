@@ -1260,10 +1260,10 @@ export class BinanceSignalFusionTool extends Tool {
           const baseMargin = Math.min(capital * marginPerTradePct, capital * 0.5);
           const notional = baseMargin * leverage;
           const qty = notional / ep;
-          const dir = t.dir;
+          const dir = t.dir as "long" | "short";
           const sp = dir === "long" ? ep * (1 - t.strat.stopPct) : ep * (1 + t.strat.stopPct);
           const tp = dir === "long" ? ep * (1 + t.strat.targetPct) : ep * (1 - t.strat.targetPct);
-          const liq = dir === "long" ? ep * (1 - 1 / leverage + 0.005) : ep * (1 + 1 / leverage - 0.005);
+          const liq = computeLiqPrice(dir, ep, leverage);
 
           positions[sym] = { direction: dir, entryPrice: ep, entryIdx: i, margin: baseMargin, notional, qty, stopPrice: sp, targetPrice: tp, liqPrice: liq, baseMargin, confluences: [], entryStrat: t.strat.id || t.strat.label };
           stratCounts[t.strat.id || t.strat.label] = (stratCounts[t.strat.id || t.strat.label] || 0) + 1;
@@ -1305,7 +1305,10 @@ export class BinanceSignalFusionTool extends Tool {
           else if (hitStop) { xp = pos.stopPrice; reason = "stop"; }
           else if (hitTarget) { xp = pos.targetPrice; reason = "target"; }
           else { xp = bar.close; reason = "timeout"; }
-          const pnl = (xp - pos.entryPrice) * (dir === "long" ? 1 : -1) * pos.qty - pos.notional * feeFrac;
+          const entryNotional = pos.qty * pos.entryPrice;
+          const exitNotional = pos.qty * xp;
+          const totalFee = (entryNotional + exitNotional) * feeFrac;
+          const pnl = (xp - pos.entryPrice) * (dir === "long" ? 1 : -1) * pos.qty - totalFee;
           capital += pnl; if (capital < 0) capital = 0;
           tradeLog.push({ type: "exit", sym, time: new Date(bar.openTime).toISOString(), dir, price: xp, reason, pnl: Math.round(pnl * 100) / 100, entryStrat: pos.entryStrat, confluences: pos.confluences.length });
           positions[sym] = null;
@@ -1317,7 +1320,10 @@ export class BinanceSignalFusionTool extends Tool {
       if (!pos) continue;
       const candles = symbolData[sym];
       const xp = candles[candles.length - 1].close;
-      const pnl = (xp - pos.entryPrice) * (pos.direction === "long" ? 1 : -1) * pos.qty - pos.notional * feeFrac;
+      const entryNotional = pos.qty * pos.entryPrice;
+      const exitNotional = pos.qty * xp;
+      const totalFee = (entryNotional + exitNotional) * feeFrac;
+      const pnl = (xp - pos.entryPrice) * (pos.direction === "long" ? 1 : -1) * pos.qty - totalFee;
       capital += pnl; if (capital < 0) capital = 0;
       positions[sym] = null;
     }

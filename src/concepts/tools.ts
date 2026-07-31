@@ -1,6 +1,7 @@
 import { Tool } from '../tools/tool.js';
 import { ConceptsEngine, adaptConceptsCandles } from './adapter.js';
 import { Candle } from '../backtest/types.js';
+import { computeLiqPrice } from '../paper-trading/symbol-position.js';
 import {
   calculateVolumeProfile,
   calculateVWAP,
@@ -96,7 +97,7 @@ function futuresBacktest(
     const qty = notional / entryPrice;
     const stopPrice = direction === 'long' ? entryPrice * (1 - stopPct) : entryPrice * (1 + stopPct);
     const targetPrice = direction === 'long' ? entryPrice * (1 + targetPct) : entryPrice * (1 - targetPct);
-    const liqPrice = direction === 'long' ? entryPrice * (1 - 1 / leverage + 0.005) : entryPrice * (1 + 1 / leverage - 0.005);
+    const liqPrice = computeLiqPrice(direction, entryPrice, leverage);
 
     let exitIdx = candles.length - 1;
     let exitPrice = candles[exitIdx].close;
@@ -107,7 +108,10 @@ function futuresBacktest(
       if (direction === 'long' ? b.high >= targetPrice : b.low <= targetPrice) { exitIdx = j; exitPrice = targetPrice; break; }
       if (j === i + maxHoldBars) { exitIdx = j; exitPrice = direction === 'long' ? b.close * (1 - slipFrac) : b.close * (1 + slipFrac); }
     }
-    const pnl = (exitPrice - entryPrice) * (direction === 'long' ? 1 : -1) * qty - notional * feeFrac;
+    const entryNotional = qty * entryPrice;
+    const exitNotional = qty * exitPrice;
+    const totalFee = (entryNotional + exitNotional) * feeFrac;
+    const pnl = (exitPrice - entryPrice) * (direction === 'long' ? 1 : -1) * qty - totalFee;
     capital += pnl; eq.push(capital);
     const ret = pnl / margin;
     returns.push(ret);
