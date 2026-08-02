@@ -11,7 +11,7 @@ import { AiEntryGate, DEFAULT_AI_GATE_CONFIG } from "./ai-gate.js";
 import { logCoinDcxBasis } from "./coindcx-shadow.js";
 import type { SymbolPosition, PositionFill, StrategyIntent} from "./symbol-position.js";
 import {
-  SymbolPositionManager, flatPosition,
+  SymbolPositionManager, flatPosition, assertStopsClearLiquidation,
 } from "./symbol-position.js";
 import { reconstructClosedTrades } from "./trade-analyst.js";
 import type { TrailingConfig} from "./trailing.js";
@@ -301,6 +301,7 @@ export class LivePaperRunner {
         : (process.env["TRADINGAGENT_AI_MODE"] === "no-ai" ? "no-ai"
         : pool.aiModeOverride ?? DEFAULT_RUNNER_CONFIG.aiMode)),
     };
+    assertStopsClearLiquidation(this.strategies, this.cfg.leverage);
     this.positionManager = new SymbolPositionManager(this.cfg.leverage, this.cfg.feeBps);
     if (this.cfg.aiMode === "ai") this.aiGate = new AiEntryGate(this.cfg.aiGate);
     this.loadState();
