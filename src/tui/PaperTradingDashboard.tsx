@@ -11,6 +11,8 @@ import type { SymbolPosition } from "../paper-trading/symbol-position.js";
 import type { TradeAnalyst } from "../paper-trading/trade-analyst.js";
 import type { TradeEvaluator, TradeEvaluation } from "../paper-trading/trade-evaluator.js";
 
+import { sparkline } from "./lib/spark.js";
+
 interface RowStatus {
   id: string; symbol: string; tf: string; direction: "long" | "short";
   attributedPnl: number; trades: number; wins: number; losses: number;
@@ -39,20 +41,6 @@ function fmtMoney(n: number): string {
 
 function pnlColor(n: number): string {
   return n > 0 ? "green" : n < 0 ? "red" : "gray";
-}
-
-function renderSparkline(prices: number[]): string {
-  if (prices.length === 0) return "─";
-  const min = Math.min(...prices);
-  const max = Math.max(...prices);
-  const chars = ["▂", "▃", "▅", "▆", "█", "▁"];
-  if (min === max) return "▅".repeat(prices.length);
-  return prices
-    .map((p) => {
-      const idx = Math.min(chars.length - 1, Math.floor(((p - min) / (max - min || 1)) * chars.length));
-      return chars[idx] ?? "▅";
-    })
-    .join("");
 }
 
 function renderProgressBar(pct: number, width = 20): string {
@@ -152,7 +140,7 @@ function MarketsPanel({ symbols, livePrices, wsStatus, priceHistory }: {
                 <Text color={st === "live" ? "green" : st === "error" ? "red" : "yellow"}>{BULLET[st]}</Text>
                 {" "}<Text bold>{sym.replace("USDT", "")}</Text>
                 {" "}<Text bold color="white">{priceStr}</Text>
-                {" "}<Text color="cyan">{renderSparkline(prices)}</Text>
+                {" "}<Text color="cyan">{sparkline(prices, 8)}</Text>
                 {chg !== undefined && !Number.isNaN(chg) && (
                   <Text color={chg >= 0 ? "green" : "red"}>{" "}{chg >= 0 ? "+" : ""}{chg.toFixed(2)}%</Text>
                 )}
@@ -196,7 +184,7 @@ function PortfolioAccountPanels({ portfolio, totalRealized, totalUnrealized, tot
         <Panel title="PORTFOLIO" borderColor="cyan">
           <Box><Text>Total Equity <Text bold color={pnlColor(totalRealized + totalUnrealized)}>${totalEquity.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>   Avail <Text bold>${avail.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text></Text></Box>
           <Box><Text color="gray">Margin <Text bold color={portfolio.usedMargin > 0 ? "yellow" : "gray"}>${portfolio.usedMargin.toFixed(0)}</Text> ({marginPct.toFixed(1)}%) Lev {portfolio.leverage}x  Open {portfolio.openPositions}/{portfolio.symbolCount}</Text></Box>
-          <Box><Text color="cyan">{renderSparkline(equityHistory.length > 0 ? equityHistory : [totalEquity])}</Text></Box>
+          <Box><Text color="cyan">{sparkline(equityHistory.length > 0 ? equityHistory : [totalEquity], 20)}</Text></Box>
           <Box><Text color="gray">Drawdown {ddPct >= 0 ? "0.00%" : `${ddPct.toFixed(2)}%`}  <Text color="cyan">{renderProgressBar(ddPct, 20)}</Text></Text></Box>
         </Panel>
       </Box>
@@ -544,7 +532,7 @@ export function PaperTradingDashboard({ runner, pollMs, journalFile, analyst, re
   const halfWidth = Math.max(30, Math.floor((termWidth - 5) / 2));
 
   return (
-    <Box flexDirection="column" height={termHeight} justifyContent="space-between" paddingX={1}>
+    <Box flexDirection="column" height={termHeight} paddingX={1}>
       <Box justifyContent="space-between" marginBottom={1}>
         <Text>
           <Text bold color="cyan">◆ PAPER TRADING TERMINAL</Text>
