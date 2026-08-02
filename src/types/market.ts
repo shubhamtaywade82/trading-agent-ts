@@ -1,10 +1,10 @@
 import type { Candle } from "../backtest/types.js";
 
 // Canonical types for the Binance pipeline (src/exchange/binance,
-// src/market-state, and later phases per
-// docs/superpowers/specs/2026-08-02-binance-pipeline-architecture-design.md).
+// Src/market-state, and later phases per
+// Docs/superpowers/specs/2026-08-02-binance-pipeline-architecture-design.md).
 // Candle stays the one OHLCV shape everywhere -- this file extends it, never
-// redefines it.
+// Redefines it.
 
 export type Timeframe = "1m" | "3m" | "5m" | "15m" | "30m" | "1h" | "4h" | "1d" | "1w";
 
@@ -63,7 +63,7 @@ export interface FundingRateEntry {
 
 export interface PositionRisk {
   symbol: string;
-  positionAmt: number; // signed: + long, - short
+  positionAmt: number; // Signed: + long, - short
   entryPrice: number;
   markPrice: number;
   unrealizedProfit: number;

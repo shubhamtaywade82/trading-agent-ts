@@ -72,7 +72,7 @@
     "ora": "^5.4.1",
     "playwright": "^1.61.1",
     "react": "^19.2.0",
-    "trading-concepts-ts": "file:../../trading-workspace/libraries/trading-concepts-ts",
+    "trading-concepts-ts": "github:shubhamtaywade82/trading-concepts-ts#27e38600d35ba0026c99f7880e7ca02cb7d6fb58",
     "vscode-languageserver-protocol": "^3.18.2",
     "vscode-languageserver-types": "^3.18.0",
     "vscode-uri": "^3.1.0",

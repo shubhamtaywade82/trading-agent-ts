@@ -4,9 +4,9 @@ import type { FuturesCandle, FuturesTicker, OpenInterest, Timeframe } from "../t
 import { CandleStore } from "./candle-store.js";
 
 // Read-side facade over CandleStore + latest mark price / open interest per
-// symbol. Phases 2-4 (features, events, snapshot builder) read from this
-// instead of each independently hitting REST -- see
-// docs/superpowers/specs/2026-08-02-binance-pipeline-architecture-design.md.
+// Symbol. Phases 2-4 (features, events, snapshot builder) read from this
+// Instead of each independently hitting REST -- see
+// Docs/superpowers/specs/2026-08-02-binance-pipeline-architecture-design.md.
 
 function key(symbol: string, tf: Timeframe): string {
   return `${symbol.toUpperCase()}:${tf}`;

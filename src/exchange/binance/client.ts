@@ -12,20 +12,20 @@ import type {
 } from "../../types/market.js";
 
 // Authenticated Binance USDⓈ-M Futures access, via the shubhamtaywade82/
-// binance-client-js library (not on npm -- installed as a pinned git
-// dependency, see package.json). Deliberately separate from
-// src/tools/binance-client.ts, which is GET-only and never takes API keys
+// Binance-client-js library (not on npm -- installed as a pinned git
+// Dependency, see package.json). Deliberately separate from
+// Src/tools/binance-client.ts, which is GET-only and never takes API keys
 // (AGENTS.md architecture decision #2) -- this adapter is the new,
-// explicitly opt-in, authenticated code path.
+// Explicitly opt-in, authenticated code path.
 //
 // Defaults to Binance's testnet. Reaching production requires passing
-// testnet: false explicitly at construction -- never an env-var default
-// flip -- matching binance-client-js's own "Testnet First" guidance and
-// this repo's fail-closed convention (see ai-gate.ts).
+// Testnet: false explicitly at construction -- never an env-var default
+// Flip -- matching binance-client-js's own "Testnet First" guidance and
+// This repo's fail-closed convention (see ai-gate.ts).
 //
 // Wraps only the subset of the library's 80+ methods this repo needs today;
 // `.raw` escapes to the untyped client for everything else rather than
-// speculatively wrapping the whole surface.
+// Speculatively wrapping the whole surface.
 
 export interface BinanceFuturesAdapterConfig {
   apiKey: string;
@@ -180,9 +180,27 @@ export class BinanceFuturesAdapter {
   subscribeKlines(symbol: string, interval: Timeframe, onClose: (candle: FuturesCandle) => void): void {
     this.client.wsSubscribeCandles(symbol, interval);
     this.client.on("ws:candlestick", (normalized: unknown) => {
-      const c = normalized as { symbol: string; raw: { k: { x: boolean } }; open: number; high: number; low: number; close: number; volume: number; openTime: number; closeTime: number };
+      const c = normalized as {
+        symbol: string;
+        raw: { k: { x: boolean } };
+        open: number;
+        high: number;
+        low: number;
+        close: number;
+        volume: number;
+        openTime: number;
+        closeTime: number;
+      };
       if (c.symbol !== symbol.toUpperCase() || !c.raw.k.x) return;
-      onClose({ openTime: c.openTime, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume, closeTime: c.closeTime });
+      onClose({
+        openTime: c.openTime,
+        open: c.open,
+        high: c.high,
+        low: c.low,
+        close: c.close,
+        volume: c.volume,
+        closeTime: c.closeTime,
+      });
     });
   }
 
@@ -212,6 +230,6 @@ export function binanceFuturesAdapterFromEnv(): BinanceFuturesAdapter | null {
   const apiKey = process.env["BINANCE_API_KEY"];
   const apiSecret = process.env["BINANCE_API_SECRET"];
   if (!apiKey || !apiSecret) return null;
-  const testnet = process.env["BINANCE_TESTNET"] !== "false"; // opt OUT of testnet explicitly
+  const testnet = process.env["BINANCE_TESTNET"] !== "false"; // Opt OUT of testnet explicitly
   return new BinanceFuturesAdapter({ apiKey, apiSecret, testnet });
 }

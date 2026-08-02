@@ -13,13 +13,31 @@ without `apiKey`/`apiSecret` throws. This is a separate, opt-in path from the ex
 GET-only `src/tools/binance-client.ts` (`AGENTS.md` architecture decision #2) — nothing
 here modifies that file.
 
-**Known environment limitation:** this sandbox has no `node_modules` (the repo's
-`trading-concepts-ts` `file:` dependency points at a sibling directory that doesn't
-exist here), so `npm install`/`tsc`/`jest` could not be run to verify this change in
-this session. The new files were written to match `tsconfig.json`'s strict settings
-and existing code patterns by inspection; **run `npm install && npx tsc -p
-tsconfig.json --noEmit && npm test` in an environment with the full workspace before
-trusting this compiles clean.**
+**Dependency fix (resolved):** `trading-concepts-ts` was a `file:../../trading-workspace/...`
+dependency pointing at a sibling directory that doesn't exist outside the original
+author's machine — this is why `npm install` couldn't run at all in a fresh checkout.
+Switched to `github:shubhamtaywade82/trading-concepts-ts#<sha>`, same pattern as
+`binance-client-js`. That alone wasn't enough: the target repo's `dist/` is gitignored
+and only built via `tsup` at publish time, and its `prepare` script (`"husky"`) didn't
+build it — a git-dependency install got only `LICENSE`/`README`/`package.json`, no
+`dist/`. Fixed upstream in
+[shubhamtaywade82/trading-concepts-ts#18](https://github.com/shubhamtaywade82/trading-concepts-ts/pull/18)
+(`prepare` now runs `npm run build`; also reverted three separate dependabot major-version
+bumps — `@typescript-eslint/parser`, `@vitest/coverage-v8`, `typescript` — that had broken
+the build in isolation without any of them being caught, since nothing exercised a full
+install+build after they merged). Pinned to that branch's tip
+(`27e38600d35ba0026c99f7880e7ca02cb7d6fb58`) pending merge.
+
+**Verified in this session:** `npm install` completes cleanly, `require.resolve('trading-concepts-ts')`
+resolves, `npx tsc -p tsconfig.json --noEmit` passes with zero errors (covers all of
+Phase 1's new files plus the rest of the repo, including `ConceptsEngine`'s existing
+dependency on `trading-concepts-ts`), `npx eslint`/`npx prettier --check` pass on the
+new files, and `npm test` passes 610/638 tests — the 28 failures are all pre-existing
+real-network tests (`tests/exchange/binance-stream.test.ts`, `tests/tools/backtest-tools.test.ts`,
+`tests/tools/binance-tools.test.ts`, `tests/browser/manager.test.ts`,
+`tests/exchange/paper-trading.test.ts`, `tests/paper-trading/shadow-signal-tracker.test.ts`)
+that need live Binance/browser network access this sandbox doesn't have; none touch
+Phase 1's new files.
 
 ---
 
