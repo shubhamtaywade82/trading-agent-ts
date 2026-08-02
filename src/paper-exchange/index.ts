@@ -1,3 +1,4 @@
+export { createInstrumentResolver, toInstrumentMetadata, toNormalizedTick } from "./dhan-adapter.js";
 export { DhanFeeModel } from "./dhan-fee-model.js";
 export type { InstrumentResolver } from "./order-matcher.js";
 export { PaperOrderMatcher } from "./order-matcher.js";

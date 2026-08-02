@@ -94,4 +94,23 @@ describe("VirtualPortfolio", () => {
     const portfolio = new VirtualPortfolio(100_000);
     expect(portfolio.getPosition(NIFTY_CE, "NSE_FNO")).toBeUndefined();
   });
+
+  test("getTrades returns fills newest-first", () => {
+    const portfolio = new VirtualPortfolio(100_000);
+    portfolio.applyFill(fill({ orderId: "order_1", fillPrice: 150 }));
+    portfolio.applyFill(fill({ orderId: "order_2", fillPrice: 155 }));
+
+    const trades = portfolio.getTrades();
+
+    expect(trades.map((t) => t.orderId)).toStrictEqual(["order_2", "order_1"]);
+  });
+
+  test("getTrades respects the limit", () => {
+    const portfolio = new VirtualPortfolio(100_000);
+    portfolio.applyFill(fill({ orderId: "order_1" }));
+    portfolio.applyFill(fill({ orderId: "order_2" }));
+    portfolio.applyFill(fill({ orderId: "order_3" }));
+
+    expect(portfolio.getTrades(2).map((t) => t.orderId)).toStrictEqual(["order_3", "order_2"]);
+  });
 });

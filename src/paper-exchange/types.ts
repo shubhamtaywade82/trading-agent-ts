@@ -44,6 +44,7 @@ export interface PaperOrder extends OrderIntent {
   filledQty: number;
   avgFillPrice: number;
   createdAt: number;
+  rejectReason?: string;
 }
 
 export interface FeeBreakdown {

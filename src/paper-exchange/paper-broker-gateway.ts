@@ -42,8 +42,16 @@ export class PaperBrokerGateway {
     return this.matcher.cancelOrder(orderId);
   }
 
+  getOrder(orderId: string): PaperOrder | undefined {
+    return this.matcher.getOrder(orderId);
+  }
+
   getPendingOrders(): PaperOrder[] {
     return this.matcher.getPendingOrders();
+  }
+
+  getTrades(limit?: number): FillEvent[] {
+    return this.portfolio.getTrades(limit);
   }
 
   onTick(tick: NormalizedTick): FillEvent[] {

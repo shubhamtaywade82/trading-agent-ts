@@ -26,12 +26,15 @@ export class VirtualPortfolio {
   private totalFeesPaid = 0;
   private readonly positions = new Map<string, PortfolioPosition>();
   private readonly lastPrices = new Map<string, number>();
+  private readonly trades: FillEvent[] = [];
 
   constructor(initialCapital: number) {
     this.cash = initialCapital;
   }
 
   applyFill(fill: FillEvent): void {
+    this.trades.push(fill);
+
     const notional = fill.fillPrice * fill.fillQty;
     this.cash += (fill.transactionType === "BUY" ? -1 : 1) * notional - fill.fees.total;
     this.totalFeesPaid += fill.fees.total;
@@ -106,6 +109,12 @@ export class VirtualPortfolio {
   getPosition(securityId: string, exchangeSegment: string): PortfolioPosition | undefined {
     const pos = this.positions.get(positionKey(securityId, exchangeSegment));
     return pos ? { ...pos } : undefined;
+  }
+
+  // Most recent trades first; pass `limit` to cap how many are returned.
+  getTrades(limit?: number): FillEvent[] {
+    const slice = limit === undefined ? this.trades : this.trades.slice(-limit);
+    return [...slice].reverse();
   }
 }
 

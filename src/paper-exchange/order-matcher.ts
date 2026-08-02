@@ -1,7 +1,8 @@
 import { DhanFeeModel } from "./dhan-fee-model.js";
-import type { FillEvent, InstrumentMetadata, NormalizedTick, OrderIntent, PaperOrder } from "./types.js";
+import type { FillEvent, InstrumentMetadata, NormalizedTick, OrderIntent, OrderStatus, PaperOrder } from "./types.js";
 
 const DEFAULT_TICK_SIZE = 0.05;
+const OPEN_STATUSES: ReadonlySet<OrderStatus> = new Set(["PENDING", "TRIGGER_PENDING"]);
 
 export type InstrumentResolver = (securityId: string, exchangeSegment: string) => InstrumentMetadata | undefined;
 
@@ -9,7 +10,10 @@ export type InstrumentResolver = (securityId: string, exchangeSegment: string) =
 // Broker: strategies only ever see OrderIntent in, FillEvent out, so the
 // Same call sites work unchanged once a live DhanLiveGateway replaces this.
 export class PaperOrderMatcher {
-  private readonly pendingOrders = new Map<string, PaperOrder>();
+  // Full order log, keyed by orderId — includes terminal orders (TRADED,
+  // CANCELLED, REJECTED) so callers can look up order history, not just
+  // What's currently open.
+  private readonly orders = new Map<string, PaperOrder>();
   private readonly feeModel: DhanFeeModel;
   private readonly slippageTicks: number;
   private readonly resolveInstrument: InstrumentResolver | undefined;
@@ -21,34 +25,61 @@ export class PaperOrderMatcher {
   }
 
   submitOrder(intent: OrderIntent): PaperOrder {
+    const rejectReason = this.validateIntent(intent);
     const isTriggerOrder = intent.orderType === "SL" || intent.orderType === "SL-M";
+
+    let status: OrderStatus;
+    if (rejectReason) {
+      status = "REJECTED";
+    } else if (isTriggerOrder) {
+      status = "TRIGGER_PENDING";
+    } else {
+      status = "PENDING";
+    }
+
     const order: PaperOrder = {
       ...intent,
       orderId: `paper_${String(Date.now())}_${Math.random().toString(36).slice(2, 8)}`,
-      status: isTriggerOrder ? "TRIGGER_PENDING" : "PENDING",
+      status,
       filledQty: 0,
       avgFillPrice: 0,
       createdAt: Date.now(),
+      ...(rejectReason ? { rejectReason } : {}),
     };
-    this.pendingOrders.set(order.orderId, order);
+    this.orders.set(order.orderId, order);
     return order;
   }
 
+  // Only validates what the matcher itself needs to simulate correctly
+  // (a known instrument and a lot-size-aligned quantity). Margin, exposure,
+  // And kill-switch checks belong to a separate risk engine upstream.
+  private validateIntent(intent: OrderIntent): string | undefined {
+    if (!this.resolveInstrument) return undefined;
+    const instrument = this.resolveInstrument(intent.securityId, intent.exchangeSegment);
+    if (!instrument) return "unknown_instrument";
+    if (intent.quantity <= 0 || intent.quantity % instrument.lotSize !== 0) return "invalid_lot_size";
+    return undefined;
+  }
+
   cancelOrder(orderId: string): boolean {
-    const order = this.pendingOrders.get(orderId);
-    if (!order || order.status === "TRADED") return false;
+    const order = this.orders.get(orderId);
+    if (!order || !OPEN_STATUSES.has(order.status)) return false;
     order.status = "CANCELLED";
-    this.pendingOrders.delete(orderId);
     return true;
   }
 
+  getOrder(orderId: string): PaperOrder | undefined {
+    return this.orders.get(orderId);
+  }
+
   getPendingOrders(): PaperOrder[] {
-    return [...this.pendingOrders.values()];
+    return [...this.orders.values()].filter((order) => OPEN_STATUSES.has(order.status));
   }
 
   onTick(tick: NormalizedTick): FillEvent[] {
     const fills: FillEvent[] = [];
-    for (const order of this.pendingOrders.values()) {
+    for (const order of this.orders.values()) {
+      if (!OPEN_STATUSES.has(order.status)) continue;
       const fill = this.tryFillOrder(order, tick);
       if (fill) fills.push(fill);
     }
@@ -80,7 +111,6 @@ export class PaperOrderMatcher {
     order.filledQty += order.quantity;
     order.avgFillPrice = fillPrice;
     order.status = "TRADED";
-    this.pendingOrders.delete(order.orderId);
 
     return {
       orderId: order.orderId,

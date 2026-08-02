@@ -59,6 +59,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@shubhamtaywade82/dhanhq-ts": "^0.4.0",
     "better-sqlite3": "^12.11.1",
     "boxen": "^5.1.2",
     "chalk": "^4.1.2",

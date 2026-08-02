@@ -1,5 +1,9 @@
 import { PaperBrokerGateway } from "../../src/paper-exchange/paper-broker-gateway.js";
-import type { NormalizedTick, OrderIntent } from "../../src/paper-exchange/types.js";
+import type { InstrumentMetadata, NormalizedTick, OrderIntent } from "../../src/paper-exchange/types.js";
+
+function noInstrument(): InstrumentMetadata | undefined {
+  return undefined;
+}
 
 function tick(overrides: Partial<NormalizedTick> = {}): NormalizedTick {
   return {
@@ -62,5 +66,38 @@ describe("PaperBrokerGateway", () => {
 
     expect(fills).toHaveLength(0);
     expect(gateway.getPendingOrders()).toHaveLength(0);
+  });
+
+  test("getOrder looks up an order by id after it has traded", () => {
+    const gateway = new PaperBrokerGateway({ initialCapital: 100_000 });
+    const order = gateway.submitOrder(intent());
+    gateway.onTick(tick());
+
+    expect(gateway.getOrder(order.orderId)?.status).toBe("TRADED");
+    expect(gateway.getOrder("missing")).toBeUndefined();
+  });
+
+  test("getTrades surfaces fills through the gateway", () => {
+    const gateway = new PaperBrokerGateway({ initialCapital: 100_000 });
+    gateway.submitOrder(intent());
+    const [fill] = gateway.onTick(tick());
+
+    const trades = gateway.getTrades();
+    expect(trades).toHaveLength(1);
+    expect(trades[0]?.orderId).toBe(fill?.orderId);
+  });
+
+  test("rejects orders that fail instrument validation and never fills them", () => {
+    const gateway = new PaperBrokerGateway({
+      initialCapital: 100_000,
+      resolveInstrument: noInstrument,
+    });
+
+    const order = gateway.submitOrder(intent());
+    expect(order.status).toBe("REJECTED");
+
+    const fills = gateway.onTick(tick());
+    expect(fills).toHaveLength(0);
+    expect(gateway.getSnapshot().positions).toHaveLength(0);
   });
 });
