@@ -1,4 +1,4 @@
-const BLOCKS = [" ", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
+const BLOCKS = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
 const BRAILLE = ["⠀", "⠁", "⠃", "⠅", "⠆", "⠇", "⠿"];
 
 export function sparkline(values: number[], width = 6, braille = false): string {

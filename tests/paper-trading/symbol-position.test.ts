@@ -1,5 +1,5 @@
 import type { StrategyIntent, SymbolPosition } from "../../src/paper-trading/symbol-position.js";
-import { SymbolPositionManager, flatPosition } from "../../src/paper-trading/symbol-position.js";
+import { SymbolPositionManager, flatPosition, assertStopsClearLiquidation, liquidationDistancePct } from "../../src/paper-trading/symbol-position.js";
 
 function intent(overrides: Partial<StrategyIntent>): StrategyIntent {
   return {
@@ -172,5 +172,35 @@ describe("SymbolPositionManager", () => {
 
       expect(pos.trailingConfig).toStrictEqual(trailingCfg); // Still A's config, not B's
     });
+  });
+});
+
+describe("assertStopsClearLiquidation", () => {
+  // 10x, mmr=0.005 default -> long liq distance ~9.55%, short ~9.45%
+  it("passes when stops sit well inside the liquidation boundary", () => {
+    expect(() => assertStopsClearLiquidation(
+      [{ id: "a", direction: "long", stopPct: 0.02 }, { id: "b", direction: "short", stopPct: 0.03 }],
+      10,
+    )).not.toThrow();
+  });
+
+  it("throws naming every strategy whose stop clears less than the safety buffer", () => {
+    const longDist = liquidationDistancePct("long", 10);
+    expect(() => assertStopsClearLiquidation(
+      [{ id: "too-wide", direction: "long", stopPct: longDist * 0.9 }],
+      10,
+    )).toThrow(/too-wide/);
+  });
+
+  it("is silent at the exact 80%-of-distance boundary and trips just past it", () => {
+    const longDist = liquidationDistancePct("long", 10);
+    expect(() => assertStopsClearLiquidation(
+      [{ id: "boundary", direction: "long", stopPct: longDist * 0.8 }],
+      10,
+    )).not.toThrow();
+    expect(() => assertStopsClearLiquidation(
+      [{ id: "boundary", direction: "long", stopPct: longDist * 0.8 + 1e-9 }],
+      10,
+    )).toThrow(/boundary/);
   });
 });

@@ -123,6 +123,42 @@ export function computeLiqPrice(direction: Direction, entryPrice: number, levera
     : (entryPrice * (1 + 1 / leverage)) / (1 + mmr);
 }
 
+// Fraction of entry price between entry and liquidation at a given
+// Leverage — i.e. computeLiqPrice's distance expressed as a % of entry,
+// Independent of the actual entry price. Used to sanity-check a strategy's
+// StopPct against its liquidation boundary (see assertStopsClearLiquidation).
+export function liquidationDistancePct(direction: Direction, leverage: number, mmr = 0.005): number {
+  const liq = computeLiqPrice(direction, 1, leverage, mmr);
+  return direction === "long" ? 1 - liq : liq - 1;
+}
+
+// Deterministic pre-flight check: at a given leverage, a strategy's stop
+// Must fire comfortably before the exchange would liquidate the position,
+// Or the configured stop is dead code — the real exit becomes liquidation,
+// Which is worse-priced and untracked as a "stop" in PnL attribution. Called
+// Once at pool load (LivePaperRunner constructor), not per-trade — leverage
+// Is portfolio-wide and stopPct is fixed per strategy, so this is a static
+// Invariant, not something that needs re-checking on every entry.
+export function assertStopsClearLiquidation(
+  strategies: Array<{ id: string; direction: Direction; stopPct: number }>,
+  leverage: number,
+  mmr = 0.005,
+  safetyBufferPct = 0.2, // stop must sit at or inside 80% of the liquidation distance
+): void {
+  const violations = strategies.filter((s) => {
+    const liqDist = liquidationDistancePct(s.direction, leverage, mmr);
+    return s.stopPct > liqDist * (1 - safetyBufferPct);
+  });
+  if (violations.length === 0) return;
+  const detail = violations
+    .map((s) => `${s.id} (stopPct=${s.stopPct}, liqDistance=${liquidationDistancePct(s.direction, leverage, mmr).toFixed(4)})`)
+    .join(", ");
+  throw new Error(
+    `Stop-loss too close to liquidation at ${leverage}x leverage for: ${detail}. ` +
+    `Lower leverage, widen the safety buffer, or tighten stopPct.`,
+  );
+}
+
 // Splits a reduce/close's total realized PnL/fee/notional/margin across the
 // FIFO lots being consumed, purely for per-strategy attribution display —
 // The trading economics (the four totals) are computed once by the caller
