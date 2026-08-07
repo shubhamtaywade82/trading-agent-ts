@@ -59,6 +59,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@shubhamtaywade82/dhanhq-ts": "^0.4.0",
     "better-sqlite3": "^12.11.1",
     "binance-client-js": "github:shubhamtaywade82/binance-client-js#c26c8602fbfc609a92af6c2ac59575fe05734b16",
     "boxen": "^5.1.2",
